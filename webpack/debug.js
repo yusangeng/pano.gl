@@ -1,4 +1,5 @@
 var path = require('path')
+var BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin
 
 var config = {
   entry: path.resolve(__dirname, '../src/index.js'),
@@ -20,11 +21,21 @@ var config = {
           'babel-loader'
         ],
         exclude: /node_modules/
+      },
+      {
+        test: /\.glsl$/,
+        loader: 'webpack-glsl-loader'
       }
     ]
   },
 
-  plugins: []
+  plugins: [
+    new BundleAnalyzerPlugin({
+      analyzerMode: 'static',
+      reportFilename: 'BundleSizeDebug.html',
+      logLevel: 'info'
+    })
+  ]
 }
 
 module.exports = config

@@ -5,21 +5,26 @@
   "main": "lib/index.js",
   "jsnext:main": "src/index.js",
   "scripts": {
+    "start": "webpack-dev-server --progress --colors --inline --hot --config=./demo/webpack.config.js",
     "test": "babel-node node_modules/.bin/isparta cover node_modules/.bin/_mocha",
     "build-debug": "webpack --color --config ./webpack/debug.js",
     "build-release": "webpack --color --config ./webpack/release.js",
-    "prebuild": "npm test",
+    "_prebuild": "npm test",
     "build": "npm run build-debug && npm run build-release",
     "es5": "babel ./src -d ./lib --source-maps inline",
     "doc": "jsdoc -r ./src -d ./doc -R ./README.md -t ./node_modules/ink-docstrap/template",
-    "prepublish": "npm test && npm run es5 && npm run doc"
+    "_prepublish": "npm test && npm run es5",
+    "prepublish": "npm run es5"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/yusangeng/pano.gl.git"
   },
   "keywords": [
-    "panorama", "equirectangular", "video-player", "webgl"
+    "panorama",
+    "equirectangular",
+    "video-player",
+    "webgl"
   ],
   "author": {
     "name": "yusangeng",
@@ -40,13 +45,19 @@
     "istanbul": "0.4.4",
     "mocha": "^3.5.0",
     "uglifyjs-webpack-plugin": "^1.1.6",
-    "webpack": "^3.10.0"
+    "webpack": "^3.10.0",
+    "webpack-bundle-analyzer": "^2.9.2",
+    "webpack-dev-server": "^2.11.0",
+    "webpack-glsl-loader": "^1.0.1"
   },
   "dependencies": {
     "chivy": "^0.1.7",
-    "dodele": "^1.0.2",
+    "dodele": "^1.0.5",
     "konph": "^0.1.6",
-    "litchy": "^1.2.1",
-    "polygala": "^0.1.0"
+    "litchy": "^1.2.2",
+    "lodash": "^4.17.4",
+    "param-check": "^1.1.9",
+    "polygala": "^0.1.0",
+    "shortid": "^2.2.8"
   }
 }

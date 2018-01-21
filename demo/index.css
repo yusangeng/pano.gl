@@ -1,0 +1,37 @@
+* {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #393939;
+  color: #eee;
+  padding-top: 10px;
+}
+
+.view-wrap {
+  width: 100%;
+  margin: auto;
+  padding-top: 100px;
+  padding-bottom: 100px;
+}
+
+h1 {
+  margin-left: 60px;
+  font-size: 60px;
+}
+
+.view {
+  width: 100%;
+  height: 600px;
+}
+
+.view-buttons {
+  text-align: center;
+  margin: auto;
+  margin-top: 20px;
+}
+
+.j-2048, .j-audio {
+  margin-right: 5px;
+}

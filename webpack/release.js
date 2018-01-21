@@ -1,6 +1,7 @@
 var webpack = require('webpack')
 var path = require('path')
 var UglifyJSPlugin = webpack.optimize.UglifyJsPlugin
+var BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin
 
 var config = {
   entry: path.resolve(__dirname, '../src/index.js'),
@@ -22,6 +23,10 @@ var config = {
           'babel-loader'
         ],
         exclude: /node_modules/
+      },
+      {
+        test: /\.glsl$/,
+        loader: 'webpack-glsl-loader'
       }
     ]
   },
@@ -33,6 +38,12 @@ var config = {
         except: ['$super', '$', 'exports', 'require']
       },
       sourceMap: true
+    }),
+
+    new BundleAnalyzerPlugin({
+      analyzerMode: 'static',
+      reportFilename: 'BundleSizeRelease.html',
+      logLevel: 'info'
     })
   ]
 }

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>pano.gl demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" type="text/css" media="screen" href="./libs/groundwork.css" />
+  <link rel="stylesheet" type="text/css" media="screen" href="./index.css" />
+</head>
+<body>
+  <div>
+    <div class="image-view-wrap view-wrap">
+      <h1>图片查看</h1>
+      <div id="image-view" class="view"></div>
+      <div class="image-view-buttons view-buttons">
+        <a class="blue button j-8192" href="javascript:;">8192</a>
+        <a class="blue button j-4096" href="javascript:;">4096</a>
+        <a class="blue button j-2048" href="javascript:;">2048</a>
+        <a class="blue button j-perspective" href="javascript:;">摄影</a>
+        <a class="blue button j-ortho" href="javascript:;">正交</a>
+        <a class="blue button j-cylindrical" href="javascript:;">圆柱</a>
+        <a class="blue button j-planet" href="javascript:;">行星</a>
+      </div>
+    </div>
+    <div class="video-view-wrap view-wrap">
+      <h1>视频播放</h1>
+      <div id="video-view" class="view"></div>
+      <div class="video-view-buttons view-buttons">
+        <a class="blue button j-start" href="javascript:;">开始</a>
+        <a class="blue button j-pause" href="javascript:;">暂停</a>
+        <a class="blue button j-audio" href="javascript:;">声音</a>
+        <a class="blue button j-video-perspective" href="javascript:;">摄影</a>
+        <a class="blue button j-video-ortho" href="javascript:;">正交</a>
+        <a class="blue button j-video-cylindrical" href="javascript:;">圆柱</a>
+        <a class="blue button j-video-planet" href="javascript:;">行星</a>
+      </div>
+    </div>
+  </div>
+  <script src="./libs/jquery-1.10.2.min.js"></script>
+  <script src="./libs/modernizr-2.6.2.min.js"></script>
+  <script src="./libs/groundwork.all.js"></script>
+  <script src="./bundle.js"></script>
+</body>
+</html>
