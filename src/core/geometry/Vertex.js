@@ -23,7 +23,7 @@ export default class Vertex {
 
   // 复制
   clone () {
-    const {x, y, z} = this
+    const { x, y, z } = this
     return new Vertex(x, y, z)
   }
 }
