@@ -6,7 +6,7 @@ node_js:
 before_script:
   - npm install
 
-script: npm run es5 && npm run build
+script: npm run build
 
 notifications:
   email: 
