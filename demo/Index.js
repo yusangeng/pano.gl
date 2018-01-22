@@ -63,6 +63,13 @@ class ImageViewerWrap extends Eventable {
       type: 'planet'
     }
   }
+
+  @callback('click', '.j-panini')
+  onPanini() {
+    this.viewer.cameraOptions = {
+      type: 'panini'
+    }
+  }
 }
 
 @delegate
@@ -71,7 +78,7 @@ class VideoViewerWrap extends Eventable {
     super()
 
     const video = this.video = document.createElement('video')
-    video.setAttribute('src', './video/2048x1024.mp4')
+    video.setAttribute('src', './video/city.mp4')
     video.setAttribute('loop', true)
     video.setAttribute('muted', true)
 
@@ -126,6 +133,13 @@ class VideoViewerWrap extends Eventable {
   onPlanet() {
     this.viewer.cameraOptions = {
       type: 'planet'
+    }
+  }
+
+  @callback('click', '.j-video-panini')
+  onPanini() {
+    this.viewer.cameraOptions = {
+      type: 'panini'
     }
   }
 }

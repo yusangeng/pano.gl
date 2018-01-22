@@ -1,5 +1,5 @@
 /**
- * 圆柱广角摄像机
+ * Panini广角摄像机
  *
  * @author Y3G
  */
@@ -14,19 +14,18 @@ import projectionType from './projectionType'
 const CAMERA_WITH = 4
 const CAMERA_HEGHT = 4
 
-const w = CAMERA_WITH
-const h = CAMERA_HEGHT
-const z = w / 2
-const y = h / 2
+const geoVertexes = (function () {
+  var z2 = CAMERA_WITH / 2
+  var y2 = CAMERA_HEGHT / 2
+  return (new Polygon([
+    [1, y2, z2],
+    [1, y2, -z2],
+    [1, -y2, -z2],
+    [1, -y2, z2]
+  ])).mesh()
+})()
 
-const geoVertexes = (new Polygon([
-  [1, y, z],
-  [1, y, -z],
-  [1, -y, -z],
-  [1, -y, z]
-])).mesh()
-
-export default class CylindricalCamera extends Camera {
+export default class PlanetCamera extends Camera {
   // 配合使用的顶点集
   @undisposed
   get geoVertexes () {
@@ -58,12 +57,12 @@ export default class CylindricalCamera extends Camera {
   }
 
   constructor ({ povLatitude = 0, povLongitude = 0, debug = false }) {
-    super(projectionType.PROJECTION_CYNLINDRICAL, debug)
+    super(projectionType.PROJECTION_TYPE_PANINI, debug)
 
     check(povLatitude, 'povLatitude').isNumber()
     check(povLongitude, 'povLongitude').isNumber()
 
-    const m = Math.max(y, z)
+    const m = Math.max(CAMERA_WITH / 2, CAMERA_HEGHT / 2)
 
     this.ortho_ = new OrthoCamera({
       left: -m,
@@ -89,7 +88,7 @@ export default class CylindricalCamera extends Camera {
 
   @undisposed
   zoom (delta) {
-    //return this.ortho_.zoom(delta)
+    // return this.ortho_.zoom(delta)
   }
 
   @undisposed

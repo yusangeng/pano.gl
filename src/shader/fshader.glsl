@@ -4,13 +4,11 @@ precision mediump float;
 #define TWO_PI   6.283185307179586476925286766559
 #define HALF_PI  1.5707963267948966192313216916398
 
-#define CAMERA_PROJECTION_TYPE_NONE          0
 #define CAMERA_PROJECTION_TYPE_LINEAR        1
 #define CAMERA_PROJECTION_TYPE_CYNLINDRICAL  2
 #define CAMERA_PROJECTION_TYPE_PLANET        3
-#define CAMERA_PROJECTION_TYPE_FISHEYE       4
+#define CAMERA_PROJECTION_TYPE_PANINI        4
 
-#define TEXTURE_PROJECTION_TYPE_NONE              0
 #define TEXTURE_PROJECTION_TYPE_EQUIPRECTANGLULAR 1
 #define TEXTURE_PROJECTION_TYPE_FISHEYE           2
 
@@ -31,7 +29,7 @@ float theta = 0.0;
 float phi = 0.0;
 
 void cam_proj_linear(float x, float y, float z) {
-	theta = atan(z/x);
+	theta = atan(z / x);
 
 	if (x<0.0) {
 		theta = PI + theta;
@@ -66,7 +64,21 @@ void cam_proj_planet(float x, float y, float z) {
 
 	theta -= u_CamPOVLongitude / 2.0;
 
-	phi = (atan(R / sqrt(P * P + Q * Q)) + HALF_PI) - u_CamPOVLatitude / 2.0;
+	phi = atan(R / sqrt(P * P + Q * Q)) + HALF_PI - u_CamPOVLatitude / 2.0;
+}
+
+void cam_proj_panini(float x, float y, float z) {
+	theta = 2.0 * atan(z * 0.5 / x);
+
+	if (x<0.0) {
+		theta = PI + theta;
+	} else if (x>0.0 && z<0.0) {
+		theta = TWO_PI + theta;
+	}
+
+	theta -= u_CamPOVLongitude / 2.0;
+
+	phi = atan(y / sqrt(x * x + z * z)) + HALF_PI - u_CamPOVLatitude / 2.0;
 }
 
 void cam_proj(float x, float y, float z) {
@@ -74,6 +86,8 @@ void cam_proj(float x, float y, float z) {
 		cam_proj_cylindrical(x, y, z);
 	} else if (u_CamProjType == CAMERA_PROJECTION_TYPE_PLANET) {
 		cam_proj_planet(x, y, z);
+	} else if (u_CamProjType == CAMERA_PROJECTION_TYPE_PANINI) {
+    cam_proj_panini(x, y, z);
 	} else {
 		cam_proj_linear(x, y, z);
 	}

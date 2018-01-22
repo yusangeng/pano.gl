@@ -9,12 +9,14 @@ import PerspectiveCamera from './core/camera/PerspectiveCamera'
 import OrthoCamera from './core/camera/OrthoCamera'
 import CylindricalCamera from './core/camera/CylindricalCamera'
 import PlanetCamera from './core/camera/PlanetCamera'
+import PaniniCamera from './core/camera/PaniniCamera'
 
 const cameraMap = {
   perspective: PerspectiveCamera,
   ortho: OrthoCamera,
   cylindrical: CylindricalCamera,
-  planet: PlanetCamera
+  planet: PlanetCamera,
+  panini: PaniniCamera
 }
 
 const defaultDataMap = {
@@ -31,7 +33,8 @@ const defaultDataMap = {
   },
 
   cylindrical: {},
-  planet: {}
+  planet: {},
+  panini: {}
 }
 
 function create ({ type, data }) {

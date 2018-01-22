@@ -11,12 +11,12 @@ import OrthoCamera from './OrthoCamera'
 import Polygon from '../geometry/Polygon'
 import projectionType from './projectionType'
 
-const PLANET_CAMERA_WITH = 4
-const PLANET_CAMERA_HEGHT = 4
+const CAMERA_WIDTH = 4
+const CAMERA_HEIGHT = 4
 
 const geoVertexes = (function () {
-  var z2 = PLANET_CAMERA_WITH / 2
-  var y2 = PLANET_CAMERA_HEGHT / 2
+  var z2 = CAMERA_WIDTH / 2
+  var y2 = CAMERA_HEIGHT / 2
   return (new Polygon([
     [1, y2, z2],
     [1, y2, -z2],
@@ -62,7 +62,7 @@ export default class PlanetCamera extends Camera {
     check(povLatitude, 'povLatitude').isNumber()
     check(povLongitude, 'povLongitude').isNumber()
 
-    const m = Math.max(PLANET_CAMERA_WITH / 2, PLANET_CAMERA_HEGHT / 2)
+    const m = Math.max(CAMERA_WIDTH / 2, CAMERA_HEIGHT / 2)
 
     this.ortho_ = new OrthoCamera({
       left: -m,
@@ -102,12 +102,12 @@ export default class PlanetCamera extends Camera {
 
     ret.CamGeoWidth = {
       type: 'uniform1f',
-      value: PLANET_CAMERA_WITH
+      value: CAMERA_WIDTH
     }
 
     ret.CamGeoHeight = {
       type: 'uniform1f',
-      value: PLANET_CAMERA_HEGHT
+      value: CAMERA_HEIGHT
     }
 
     ret.CamPOVLongitude = {
