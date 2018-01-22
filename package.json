@@ -1,6 +1,6 @@
 {
   "name": "pano.gl",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Web viewer for equirectangular video or image.",
   "main": "lib/index.js",
   "jsnext:main": "src/index.js",
