@@ -42,3 +42,4 @@ jspm_packages
 packinfo.js
 lib
 doc
+wasm
