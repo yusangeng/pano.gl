@@ -82,7 +82,7 @@ export default superclass => class OrthoTrans extends superclass {
     check(delta, 'delta').isNumber()
 
     const aspect = (this.right - this.left) / (this.bottom - this.top)
-    const xd = delta / 50 // 分母调节缩放速度
+    const xd = delta / 5 // 分母调节缩放速度
     const yd = xd / aspect
 
     this.left -= xd

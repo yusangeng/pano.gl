@@ -4,19 +4,33 @@
  * @author Y3G
  */
 
+import Logger from 'chivy'
 import check from 'param-check'
 import undisposed from 'litchy/lib/decorator/undisposed'
-import Sphere from '../geometry/Sphere'
+// import Sphere from '../geometry/Sphere'
+import Cube from '../geometry/Cube'
 import clamp from '../../utils/clamp'
 import { Matrix4 } from '../../../vendor/cuon'
 
 const { sin, cos } = Math
 const { assign } = Object
 
-const SPHERE_READIUS = 1
+const log = new Logger('pano.gl/core/LinearProjection')
+
+/*
+const SPHERE_READIUS = 30
 const DEBUG_CAMERA_DISTANCE = 10
 
+const time = (new Date()).getTime()
+log.info(`Sphere generating...`)
 const geoVertexes = (new Sphere(SPHERE_READIUS, 0, 0, 0)).mesh()
+log.info(`Sphere generated, time: ${(new Date()).getTime() - time} ms.`)
+*/
+
+const SPHERE_READIUS = 100
+const DEBUG_CAMERA_DISTANCE = 10
+
+const geoVertexes = (new Cube(SPHERE_READIUS, 0, 0, 0)).mesh()
 
 export default superclass => class LinearProjection extends superclass {
   // 配合使用的顶点集

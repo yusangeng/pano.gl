@@ -26,10 +26,10 @@ const defaultDataMap = {
   },
 
   ortho: {
-    left: -1,
-    right: 1,
-    top: 1,
-    bottom: -1
+    left: -50,
+    right: 50,
+    top: 50,
+    bottom: -50
   },
 
   cylindrical: {},
