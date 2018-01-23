@@ -15,8 +15,8 @@ function genVerexes (sideLen, center) {
   var len = sideLen / 2
 
   var vertexes = [
-      [-len, -len, len], [len, -len, len], [len, len, len], [-len, len, len],
-      [-len, -len, -len], [len, -len, -len], [len, len, -len], [-len, len, -len]
+    [-len, -len, len], [len, -len, len], [len, len, len], [-len, len, len],
+    [-len, -len, -len], [len, -len, -len], [len, len, -len], [-len, len, -len]
   ].map(vertex => {
     return [vertex[0] + center.x, vertex[1] + center.y, vertex[2] + center.z]
   })
