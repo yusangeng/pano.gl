@@ -28,11 +28,15 @@
 }
 
 h1 {
-  font-size: 100px;
+  font-size: 8em;
+  margin: 0;
+  margin-top: 1em;
   text-shadow: rgba(0, 0, 0, 0.5) 3px 3px 10px;
+  font-family: "Source Sans Pro", "Helvetica Neue", Arial, sans-serif;
 }
 
 h3 {
-  font-size: 30px;
+  font-size: 1.5em;
   text-shadow: rgba(0, 0, 0, 0.5) 3px 3px 10px;
+  font-family: "Source Sans Pro", "Helvetica Neue", Arial, sans-serif;
 }
