@@ -1,63 +1,16 @@
 {
-  "name": "pano.gl",
-  "version": "0.1.2",
-  "description": "Web viewer for equirectangular video or image.",
-  "main": "lib/index.js",
-  "jsnext:main": "src/index.js",
-  "scripts": {
-    "start": "webpack-dev-server --progress --colors --inline --hot --config=./demo/webpack.config.js",
-    "test": "babel-node node_modules/.bin/isparta cover node_modules/.bin/_mocha",
-    "build-debug": "webpack --color --config ./webpack/debug.js",
-    "build-release": "webpack --color --config ./webpack/release.js",
-    "_prebuild": "npm test",
-    "build": "npm run build-debug && npm run build-release",
-    "es5": "babel ./src -d ./lib --source-maps inline",
-    "doc": "jsdoc -r ./src -d ./doc -R ./README.md -t ./node_modules/ink-docstrap/template",
-    "_prepublish": "npm test && npm run es5",
-    "prepublish": "npm run es5"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yusangeng/pano.gl.git"
-  },
-  "keywords": [
-    "panorama",
-    "equirectangular",
-    "video-player",
-    "webgl"
-  ],
-  "author": {
-    "name": "yusangeng",
-    "email": "yusangeng@outlook.com"
-  },
-  "license": "MIT",
-  "devDependencies": {
-    "babel-cli": "^6.24.1",
-    "babel-core": "^6.24.1",
-    "babel-loader": "^7.1.2",
-    "babel-plugin-transform-class-properties": "^6.24.1",
-    "babel-plugin-transform-decorators-legacy": "^1.3.4",
-    "babel-plugin-transform-runtime": "^6.23.0",
-    "babel-preset-env": "^1.6.1",
-    "babel-preset-es2015": "^6.24.1",
-    "chai": "^4.1.0",
-    "isparta": "^4.0.0",
-    "istanbul": "0.4.4",
-    "mocha": "^3.5.0",
-    "uglifyjs-webpack-plugin": "^1.1.6",
-    "webpack": "^3.10.0",
-    "webpack-bundle-analyzer": "^2.9.2",
-    "webpack-dev-server": "^2.11.0",
-    "webpack-glsl-loader": "^1.0.1"
-  },
+  "name": "pano-gl-home",
+  "version": "0.1.0",
+  "private": true,
   "dependencies": {
-    "chivy": "^0.1.7",
-    "dodele": "^1.0.5",
-    "konph": "^0.1.6",
-    "litchy": "^1.2.2",
-    "lodash": "^4.17.4",
-    "param-check": "^1.1.9",
-    "polygala": "^0.1.0",
-    "shortid": "^2.2.8"
+    "react": "^16.2.0",
+    "react-dom": "^16.2.0",
+    "react-scripts": "1.1.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --env=jsdom",
+    "eject": "react-scripts eject"
   }
 }

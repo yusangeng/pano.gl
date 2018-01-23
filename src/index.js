@@ -1,6 +1,8 @@
-import FramelessImageViewer from './FramelessImageViewer'
-import FramelessVideoViewer from './FramelessVideoViewer'
+import React from 'react';
+import ReactDOM from 'react-dom';
+import './index.css';
+import App from './App';
+import registerServiceWorker from './registerServiceWorker';
 
-export {
-  FramelessImageViewer, FramelessVideoViewer
-}
+ReactDOM.render(<App />, document.getElementById('root'));
+registerServiceWorker();
