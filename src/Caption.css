@@ -1,0 +1,27 @@
+.caption {
+  width: 100%;
+  z-index: 1000;
+  color: #eee;
+  text-align: center;
+  margin-top: 8rem;
+  position: absolute;
+  top: 0;
+  user-select: none;
+}
+
+.caption h1 {
+  font-size: 8em;
+  margin: 0;
+  text-shadow: rgba(0, 0, 0, 0.5) 3px 3px 10px;
+}
+
+.caption h3 {
+  font-size: 1.5em;
+  text-shadow: rgba(0, 0, 0, 0.5) 3px 3px 10px;
+}
+
+@media (max-width: 768px) {
+  .caption h1 {
+    font-size: 5em;
+  }
+}
