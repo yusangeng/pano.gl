@@ -19,14 +19,19 @@ const ViewerBase = mix(Eventable).with(Delegate, RenderFlow)
 
 export default class Viewer extends ViewerBase {
   @undisposed
-  get ptz() {
+  get PTZ() {
     return this.ptz_
+  }
+
+  @undisposed
+  set PTZ(value) {
+    this.ptz_ = !!value
   }
 
   constructor (el) {
     super()
 
-    this.ptz_ = true
+    this.PTZ = true
 
     const realEl = selectorToElement(el)
     check(realEl, 'realEl').isElement()
@@ -45,7 +50,7 @@ export default class Viewer extends ViewerBase {
 
   @callback('zoom', '.renderer-canvas')
   onZoom(evt) {
-    if (!this.ptz) {
+    if (!this.PTZ) {
       return
     }
 
