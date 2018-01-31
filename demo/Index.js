@@ -43,12 +43,14 @@ class ImageViewerWrap extends Eventable {
     }
   }
 
+  /*
   @callback('click', '.j-ortho')
   onOrtho() {
     this.viewer.cameraOptions = {
       type: 'ortho'
     }
   }
+  */
 
   @callback('click', '.j-cylindrical')
   onCylindrical() {
@@ -115,12 +117,14 @@ class VideoViewerWrap extends Eventable {
     }
   }
 
+  /*
   @callback('click', '.j-video-ortho')
   onOrtho() {
     this.viewer.cameraOptions = {
       type: 'ortho'
     }
   }
+  */
 
   @callback('click', '.j-video-cylindrical')
   onCylindrical() {

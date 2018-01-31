@@ -13,7 +13,7 @@ import PaniniCamera from './core/camera/PaniniCamera'
 
 const cameraMap = {
   perspective: PerspectiveCamera,
-  ortho: OrthoCamera,
+  // ortho: OrthoCamera,
   cylindrical: CylindricalCamera,
   planet: PlanetCamera,
   panini: PaniniCamera
@@ -25,12 +25,14 @@ const defaultDataMap = {
     aspect: 1
   },
 
+  /*
   ortho: {
     left: -50,
     right: 50,
     top: 50,
     bottom: -50
   },
+  */
 
   cylindrical: {},
   planet: {},
