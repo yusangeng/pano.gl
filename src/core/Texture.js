@@ -52,9 +52,9 @@ export default class Texture {
 
     if (prj === 'equiprectangular') {
       prj = PROJECTION_EQUIPRECTANGLULAR
-    } else if (prj === 'fisheye') {
+    } /*else if (prj === 'fisheye') {
       prj = PROJECTION_FISHEYE
-    } else {
+    }*/ else {
       throw new Error(`Unimplemented projection type(${prj}).`)
     }
 
