@@ -63,7 +63,7 @@ export default class Viewer extends ViewerBase {
 
   @callback('pan', '.renderer-canvas')
   onPan(evt) {
-    if (!this.ptz) {
+    if (!this.PTZ) {
       return
     }
 
