@@ -129,13 +129,13 @@ export default class ZoomPlugin {
   }
 
   onTouchEnd (evt) {
-    this.statu.zooming = false
+    this.status.zooming = false
     this.status.target = null
     evt.preventDefault()
   }
 
   onTouchCancel (evt) {
-    this.statu.zooming = false
+    this.status.zooming = false
     this.status.target = null
     evt.preventDefault()
   }
