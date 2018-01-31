@@ -14,9 +14,14 @@ import CameraFactory from './CameraFactory'
 
 export default class FramelessVideoViewer extends mix(Viewer).with(CameraFactory) {
   @undisposed
-  set cameraOptions(options) {
+  set cameraOptions (options) {
     const camera = this.createCamera(options)
     this.setCamera(camera)
+  }
+
+  @undisposed
+  get video () {
+    return this.texture.provider.media
   }
 
   constructor ({ el, src, video, projection = 'equiprectangular', frameSize, camera: cameraOptions }) {
