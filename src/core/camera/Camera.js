@@ -51,7 +51,7 @@ export default class Camera {
   status () {
     if (this.dirty) {
       this.updateStatus()
-      this.dirty_ = false
+      this.dirty = false
     }
 
     return {
@@ -61,6 +61,8 @@ export default class Camera {
       }
     }
   }
+
+  // private
 
   updateStatus () {
   }

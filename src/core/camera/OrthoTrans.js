@@ -112,6 +112,6 @@ export default superclass => class OrthoTrans extends superclass {
     this.top_ = top
     this.bottom_ = bottom
 
-    this.dirty_ = true
+    this.dirty = true
   }
 }
