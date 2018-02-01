@@ -12,6 +12,8 @@ import Texture from './core/Texture'
 import Provider from './core/provider/ImageProvider'
 import CameraFactory from './CameraFactory'
 
+const { assign } = Object
+
 export default class FramelessImageView extends mix(Viewer).with(CameraFactory) {
   @undisposed
   get src() {
@@ -42,7 +44,7 @@ export default class FramelessImageView extends mix(Viewer).with(CameraFactory) 
     const provider = new Provider(src)
     const texture = new Texture({ projection, frameSize, provider })
 
-    provider.on('*', evt => this.trigger(evt))
+    texture.on('*', evt => this.trigger(assign({ target: this }, evt)))
     this.setTexture(texture)
   }
 

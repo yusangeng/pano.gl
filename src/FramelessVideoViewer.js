@@ -36,7 +36,7 @@ export default class FramelessVideoViewer extends mix(Viewer).with(CameraFactory
     const provider = new Provider(src || video)
     const texture = new Texture({ projection, frameSize, provider })
 
-    provider.on('*', evt => this.trigger(evt))
+    texture.on('*', evt => this.trigger(assign({ target: this }, evt)))
     this.setTexture(texture)
   }
 
