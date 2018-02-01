@@ -1,5 +1,5 @@
 /**
- * Panini广角摄像机
+ * pannini广角摄像机
  *
  * @author Y3G
  */
@@ -10,6 +10,7 @@ import Camera from './Camera'
 import OrthoCamera from './OrthoCamera'
 import Polygon from '../geometry/Polygon'
 import projectionType from './projectionType'
+import clamp from '../../utils/clamp'
 
 const CAMERA_WITH = 4
 const CAMERA_HEGHT = 4
@@ -56,11 +57,23 @@ export default class PlanetCamera extends Camera {
     this.povLongitude_ = long
   }
 
-  constructor ({ povLatitude = 0, povLongitude = 0, debug = false }) {
-    super(projectionType.PROJECTION_TYPE_PANINI, debug)
+  // 放大系数
+  @undisposed
+  get zoomValue() {
+    return this.zoomValue_
+  }
+
+  @undisposed
+  set zoomValue(value) {
+    this.zoomValue_ = clamp(value, 0.1, 2)
+  }
+
+  constructor ({ povLatitude = 0, povLongitude = 0, zoom = 1, debug = false }) {
+    super(projectionType.PROJECTION_TYPE_pannini, debug)
 
     check(povLatitude, 'povLatitude').isNumber()
     check(povLongitude, 'povLongitude').isNumber()
+    check(zoom, 'zoom').isNumber()
 
     const m = Math.max(CAMERA_WITH / 2, CAMERA_HEGHT / 2)
 
@@ -75,20 +88,21 @@ export default class PlanetCamera extends Camera {
 
     this.povLatitude = povLatitude
     this.povLongitude = povLongitude
+    this.zoomValue = 1
   }
 
   @undisposed
-  rotate (angleX) {
+  rotate (angleX, angleY) {
     check(angleX, 'angleX').isNumber()
-    // check(angleY, 'angleY').isNumber()
+    check(angleY, 'angleY').isNumber()
 
     this.povLongitude += angleX
-    // this.povLatitude += angleY
+    this.povLatitude += angleY
   }
 
   @undisposed
   zoom (delta) {
-    // return this.ortho_.zoom(delta)
+    this.zoomValue += delta / 20
   }
 
   @undisposed
@@ -118,6 +132,11 @@ export default class PlanetCamera extends Camera {
     ret.CamPOVLatitude = {
       type: 'uniform1f',
       value: this.povLatitude
+    }
+
+    ret.CamZoom = {
+      type: 'uniform1f',
+      value: this.zoomValue
     }
 
     return ret
