@@ -55,7 +55,6 @@ export default class CylindricalCamera extends Camera {
   @undisposed
   set povLongitude (long) {
     check(long, 'long').isNumber()
-    console.log(long)
     this.povLongitude_ = long % 25
   }
 
