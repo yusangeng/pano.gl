@@ -79,6 +79,7 @@ export default class ZoomPlugin {
     this.status.y1 = touches[1].clientY
 
     this.status.target = evt.target
+    evt.preventDefault()
   }
 
   onTouchMove (evt) {
@@ -119,13 +120,18 @@ export default class ZoomPlugin {
       bubbles: true
     })
 
-    newEvt.delta = distance - lastDistance
+    newEvt.distance = distance
+    newEvt.lastDistance = lastDistance
+    newEvt.delta = -(distance - lastDistance) * 50
     target.dispatchEvent(newEvt)
 
     this.status.x0 = x0
     this.status.y0 = y0
     this.status.x1 = x1
     this.status.y1 = y1
+
+    console.log(newEvt.delta, newEvt)
+    evt.preventDefault()
   }
 
   onTouchEnd (evt) {

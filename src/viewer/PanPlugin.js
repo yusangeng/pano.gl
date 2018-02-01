@@ -55,6 +55,7 @@ export default class ZoomPlugin {
 
   onMouseDown (evt) {
     this.start(evt, evt.target)
+    evt.preventDefault()
   }
 
   onMouseMove (evt) {
@@ -69,6 +70,7 @@ export default class ZoomPlugin {
     }
 
     this.move(evt, target)
+    evt.preventDefault()
   }
 
   onMouseUp (evt) {
@@ -85,6 +87,7 @@ export default class ZoomPlugin {
     }
 
     this.start(touches[0], target)
+    evt.preventDefault()
   }
 
   onTouchMove (evt) {
@@ -99,6 +102,7 @@ export default class ZoomPlugin {
     }
 
     this.move(touches[0], target)
+    evt.preventDefault()
   }
 
   onTouchEnd (evt) {
