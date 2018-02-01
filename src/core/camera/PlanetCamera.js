@@ -10,6 +10,7 @@ import Camera from './Camera'
 import OrthoCamera from './OrthoCamera'
 import Polygon from '../geometry/Polygon'
 import projectionType from './projectionType'
+import clamp from '../../utils/clamp'
 
 const CAMERA_WIDTH = 4
 const CAMERA_HEIGHT = 4
@@ -56,11 +57,24 @@ export default class PlanetCamera extends Camera {
     this.povLongitude_ = long
   }
 
-  constructor ({ povLatitude = 0, povLongitude = 0, debug = false }) {
+  // 放大系数
+  @undisposed
+  get zoomValue() {
+    return this.zoomValue_
+  }
+
+  @undisposed
+  set zoomValue(value) {
+    check(value, 'value').isNumber()
+    this.zoomValue_ = clamp(value, 0.1, 1)
+  }
+
+  constructor ({ povLatitude = 0, povLongitude = 0, zoom = 1, debug = false }) {
     super(projectionType.PROJECTION_PLANET, debug)
 
     check(povLatitude, 'povLatitude').isNumber()
     check(povLongitude, 'povLongitude').isNumber()
+    check(zoom, 'zoom').isNumber()
 
     const m = Math.max(CAMERA_WIDTH / 2, CAMERA_HEIGHT / 2)
 
@@ -75,6 +89,7 @@ export default class PlanetCamera extends Camera {
 
     this.povLatitude = povLatitude
     this.povLongitude = povLongitude
+    this.zoomValue = zoom
   }
 
   @undisposed
@@ -88,7 +103,7 @@ export default class PlanetCamera extends Camera {
 
   @undisposed
   zoom (delta) {
-    return this.ortho_.zoom(delta)
+    this.zoomValue += delta / 20
   }
 
   @undisposed
@@ -118,6 +133,11 @@ export default class PlanetCamera extends Camera {
     ret.CamPOVLatitude = {
       type: 'uniform1f',
       value: this.povLatitude
+    }
+
+    ret.CamZoom = {
+      type: 'uniform1f',
+      value: this.zoomValue
     }
 
     return ret
