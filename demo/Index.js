@@ -66,10 +66,10 @@ class ImageViewerWrap extends Eventable {
     }
   }
 
-  @callback('click', '.j-panini')
-  onPanini() {
+  @callback('click', '.j-pannini')
+  onpannini() {
     this.viewer.cameraOptions = {
-      type: 'panini'
+      type: 'pannini'
     }
   }
 }
@@ -140,10 +140,10 @@ class VideoViewerWrap extends Eventable {
     }
   }
 
-  @callback('click', '.j-video-panini')
-  onPanini() {
+  @callback('click', '.j-video-pannini')
+  onpannini() {
     this.viewer.cameraOptions = {
-      type: 'panini'
+      type: 'pannini'
     }
   }
 }
