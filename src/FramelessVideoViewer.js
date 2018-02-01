@@ -11,6 +11,7 @@ import Viewer from './viewer'
 import Texture from './core/Texture'
 import Provider from './core/provider/VideoProvider'
 import CameraFactory from './CameraFactory'
+import selectorToElement from './utils/selectorToElement';
 
 const { assign } = Object
 
@@ -29,13 +30,14 @@ export default class FramelessVideoViewer extends mix(Viewer).with(CameraFactory
   constructor ({ el, src, video, projection = 'equiprectangular', frameSize, camera: cameraOptions }) {
     super(el)
 
-    check(src || video, 'src || video').isElement()
+    const videoSource = selectorToElement(video || src)
+    check(videoSource, 'videoSource').isElement()
     check(projection, 'projection').among('equiprectangular', 'fisheye')
 
     const camera = this.createCamera(cameraOptions)
     this.setCamera(camera)
 
-    const provider = new Provider(src || video)
+    const provider = new Provider(videoSource)
     const texture = new Texture({ projection, frameSize, provider })
 
     texture.on('*', evt => this.trigger(assign({ target: this }, evt)))
