@@ -49,7 +49,7 @@ const viewer = new FramelessImageViewer({
 ``` js
 import FramelessVideoViewer 'pano.gl/lib/FramelessVideoViewer'
 
-const viewer = new FramelessImageViewer({
+const viewer = new FramelessVideoViewer({
   el: '#video-viewer-wrap', // container DOM element.
   src: '#video', // <video /> DOM element as texture data source.
   camera: {
