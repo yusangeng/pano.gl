@@ -9,7 +9,7 @@ Equirectangular video/image viewer based on WebGL.
 ## Features
 
 * Pure javascript.
-* Multiple camera models: perspective/ortho/cylindrical/planet/panini.
+* Multiple camera models: perspective/ortho/cylindrical/planet/pannini.
 
 ## Install
 
