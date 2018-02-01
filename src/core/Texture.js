@@ -78,6 +78,7 @@ export default class Texture {
       this.direct_ = true
     }
 
+    provider.on('*', evt => this.trigger(assign({ target: this }, evt)))
     this.provider_ = provider
   }
 
