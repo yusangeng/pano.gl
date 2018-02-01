@@ -25,7 +25,7 @@ class App extends Component {
       el: '#viewer',
       src: './2048x1024.jpg',
       camera: {
-        type: 'planet'
+        type: 'pannini'
       }
     })
   }
