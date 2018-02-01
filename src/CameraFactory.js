@@ -6,17 +6,17 @@
 
 import merge from 'lodash/merge'
 import PerspectiveCamera from './core/camera/PerspectiveCamera'
-import OrthoCamera from './core/camera/OrthoCamera'
+// import OrthoCamera from './core/camera/OrthoCamera'
 import CylindricalCamera from './core/camera/CylindricalCamera'
 import PlanetCamera from './core/camera/PlanetCamera'
-import PaniniCamera from './core/camera/PaniniCamera'
+import PanniniCamera from './core/camera/PanniniCamera'
 
 const cameraMap = {
   perspective: PerspectiveCamera,
   // ortho: OrthoCamera,
   cylindrical: CylindricalCamera,
   planet: PlanetCamera,
-  panini: PaniniCamera
+  pannini: PanniniCamera
 }
 
 const defaultDataMap = {
@@ -36,7 +36,7 @@ const defaultDataMap = {
 
   cylindrical: {},
   planet: {},
-  panini: {}
+  pannini: {}
 }
 
 function create ({ type, data }) {
