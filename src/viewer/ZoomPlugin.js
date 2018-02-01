@@ -130,7 +130,6 @@ export default class ZoomPlugin {
     this.status.x1 = x1
     this.status.y1 = y1
 
-    console.log(newEvt.delta, newEvt)
     evt.preventDefault()
   }
 
