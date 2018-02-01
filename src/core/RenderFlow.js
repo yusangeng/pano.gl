@@ -5,12 +5,15 @@
  */
 
 import check from 'param-check'
+import Logger from 'chivy'
 import undisposed from 'litchy/lib/decorator/undisposed'
 import Camera from './camera/Camera'
 import Texture from './Texture'
 import Renderer from './Renderer'
 import FrameDriver from './FrameDriver'
 import selectorToElement from '../utils/selectorToElement'
+
+const log = new Logger('pano.gl/core/RenderFlow')
 
 export default superclass => class RenderFlow extends superclass {
   @undisposed
@@ -115,8 +118,11 @@ export default superclass => class RenderFlow extends superclass {
 
   @undisposed
   rotate(lat, lng) {
-    if (this.camera_) {
-      this.camera_.rotate(lat, lng)
+    const { camera } = this
+    if (camera) {
+      camera.rotate(lat, lng)
+      this.trigger({ type: 'rotate', lat, lng })
+      log.debug(`rotate, camera.povLatitude = ${camera.povLatitude}, camera.povLongitude = ${camera.povLongitude}.`)
     }
 
     return this
@@ -126,6 +132,7 @@ export default superclass => class RenderFlow extends superclass {
   zoom(delta) {
     if (this.camera_) {
       this.camera_.zoom(delta)
+      this.trigger({ type: 'zoom', delta })
     }
 
     return this
