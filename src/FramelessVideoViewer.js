@@ -12,6 +12,8 @@ import Texture from './core/Texture'
 import Provider from './core/provider/VideoProvider'
 import CameraFactory from './CameraFactory'
 
+const { assign } = Object
+
 export default class FramelessVideoViewer extends mix(Viewer).with(CameraFactory) {
   @undisposed
   set cameraOptions (options) {

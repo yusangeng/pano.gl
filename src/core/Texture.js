@@ -9,6 +9,8 @@ import merge from 'lodash/merge'
 import eventable from 'litchy/lib/decorator/eventable'
 import undisposed from 'litchy/lib/decorator/undisposed'
 
+const { assign } = Object
+
 const PROJECTION_EQUIPRECTANGLULAR = 1
 const PROJECTION_FISHEYE = 2
 
