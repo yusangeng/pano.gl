@@ -29,6 +29,8 @@ varying vec4 v_Pos;
 float theta = 0.0;
 float phi = 0.0;
 
+float lng = u_CamPOVLongitude / 2.0;
+
 void cam_proj_linear(float x, float y, float z) {
 	theta = atan(z / x);
 
@@ -45,7 +47,7 @@ void cam_proj_cylindrical(float x, float y, float z) {
 	y = y * u_CamZoom;
 	z = z * u_CamZoom;
 
-	theta = z * TWO_PI - u_CamPOVLongitude / 2.0;
+	theta = z * TWO_PI - lng / 2.0;
 	phi = atan(y) + HALF_PI;
 }
 
@@ -69,7 +71,7 @@ void cam_proj_planet(float x, float y, float z) {
 		theta = TWO_PI + theta;
 	}
 
-	theta -= u_CamPOVLongitude / 2.0;
+	theta -= lng / 2.0;
 	phi = atan(R / sqrt(P * P + Q * Q)) + HALF_PI;
 }
 
@@ -85,7 +87,7 @@ void cam_proj_pannini(float x, float y, float z) {
 		theta = TWO_PI + theta;
 	}
 
-	theta -= u_CamPOVLongitude / 2.0;
+	theta -= lng / 2.0;
 
 	phi = atan(y / sqrt(x * x + z * z)) + HALF_PI;
 }

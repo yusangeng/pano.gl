@@ -33,7 +33,7 @@ export default class PlanetCamera extends Camera {
     return geoVertexes
   }
 
-  // point of view 纬度，单位为度
+  // point of view 纬度
   @undisposed
   get povLatitude () {
     return this.povLatitude_
@@ -45,7 +45,7 @@ export default class PlanetCamera extends Camera {
     this.povLatitude_ = lat
   }
 
-  // point of view 经度，单位为度
+  // point of view 经度
   @undisposed
   get povLongitude () {
     return this.povLongitude_
@@ -54,7 +54,7 @@ export default class PlanetCamera extends Camera {
   @undisposed
   set povLongitude (long) {
     check(long, 'long').isNumber()
-    this.povLongitude_ = long
+    this.povLongitude_ = long % 25
   }
 
   // 放大系数

@@ -34,7 +34,7 @@ export default class CylindricalCamera extends Camera {
     return geoVertexes
   }
 
-  // point of view 纬度，单位为度
+  // point of view 纬度
   @undisposed
   get povLatitude () {
     return this.povLatitude_
@@ -46,7 +46,7 @@ export default class CylindricalCamera extends Camera {
     this.povLatitude_ = lat
   }
 
-  // point of view 经度，单位为度
+  // point of view 经度
   @undisposed
   get povLongitude () {
     return this.povLongitude_
@@ -55,7 +55,8 @@ export default class CylindricalCamera extends Camera {
   @undisposed
   set povLongitude (long) {
     check(long, 'long').isNumber()
-    this.povLongitude_ = long
+    console.log(long)
+    this.povLongitude_ = long % 25
   }
 
   // 放大系数
