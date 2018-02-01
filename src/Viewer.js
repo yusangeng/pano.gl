@@ -14,7 +14,7 @@ class App extends Component {
       el: '#viewer',
       src: video,
       camera: {
-        type: 'panini'
+        type: 'pannini'
       }
     })
   }
