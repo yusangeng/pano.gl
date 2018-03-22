@@ -117,7 +117,7 @@ export default superclass => class RenderFlow extends superclass {
   }
 
   @undisposed
-  rotate(lat, lng) {
+  rotate (lat, lng) {
     const { camera } = this
     if (camera) {
       camera.rotate(lat, lng)
@@ -129,7 +129,7 @@ export default superclass => class RenderFlow extends superclass {
   }
 
   @undisposed
-  zoom(delta) {
+  zoom (delta) {
     if (this.camera_) {
       this.camera_.zoom(delta)
       this.trigger({ type: 'zoom', delta })

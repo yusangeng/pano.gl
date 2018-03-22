@@ -36,7 +36,7 @@ export default class Renderer {
   }
 
   @undisposed
-  get frameId() {
+  get frameId () {
     return this.canvas_.getAttribute('id')
   }
 
@@ -93,7 +93,7 @@ export default class Renderer {
   @undisposed
   render (camera, texture) {
     if (!this.renderThrottle_.shouldRun) {
-			// 限制帧率
+      // 限制帧率
       return
     }
 
@@ -105,7 +105,7 @@ export default class Renderer {
 
     gl.useProgram(program)
 
-		// 不同的摄像机输出不同的状态信息，这些信息都通过全局变量传到 shader 中
+    // 不同的摄像机输出不同的状态信息，这些信息都通过全局变量传到 shader 中
     const status = camera.status()
 
     keys(status).forEach(name => {
@@ -124,13 +124,13 @@ export default class Renderer {
       gl[conf.type](uniform, conf.value || 0)
     })
 
-		// 纹理采用的投影方式
+    // 纹理采用的投影方式
     const uniformTexProjType = gl.getUniformLocation(program, 'u_TexProjType')
     if (uniformTexProjType) {
       gl.uniform1i(uniformTexProjType, texture.projection)
     }
 
-		// 内部使用
+    // 内部使用
     const uniformSampler = gl.getUniformLocation(program, 'u_Sampler')
     if (uniformSampler) {
       gl.uniform1i(uniformSampler, 0)

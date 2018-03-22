@@ -1,6 +1,6 @@
 /**
  * 图片纹理数据
- * 
+ *
  * @author Y3G
  */
 
@@ -18,12 +18,12 @@ export default class ImageProvider {
   @undisposed
   set src (value) {
     check(value, 'value').isString()
-    
+
     if (this.media_) {
       this.media_.onload = this.media_.onerror = null
     }
 
-    const img = this.media_ = new Image()
+    const img = this.media_ = new window.Image()
     img.crossOrigin = 'anonymous'
 
     img.onload = evt => {
@@ -51,7 +51,7 @@ export default class ImageProvider {
     return this.media_
   }
 
-  constructor(src) {
+  constructor (src) {
     this.src = src
   }
 

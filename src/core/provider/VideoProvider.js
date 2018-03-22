@@ -1,6 +1,6 @@
 /**
  * 视频纹理数据
- * 
+ *
  * @author Y3G
  */
 
@@ -53,7 +53,7 @@ export default class VideoProvider {
     this.updateThrottle_ = new Throttle(MAX_UPDATE_RATE)
     this.media_ = video
 
-		// 绑定 video 事件
+    // 绑定 video 事件
     this.mediaEventOffs_ = mediaEventTypes.map(type => {
       const callback = evt => this.trigger({
         type: `media-${type}`,
@@ -80,7 +80,7 @@ export default class VideoProvider {
     }
 
     if (!this.updateThrottle_.shouldRun) {
-			// 限制帧率
+      // 限制帧率
       return false
     }
 

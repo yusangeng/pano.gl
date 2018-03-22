@@ -11,7 +11,7 @@ import Viewer from './viewer'
 import Texture from './core/Texture'
 import Provider from './core/provider/VideoProvider'
 import CameraFactory from './CameraFactory'
-import selectorToElement from './utils/selectorToElement';
+import selectorToElement from './utils/selectorToElement'
 
 const { assign } = Object
 

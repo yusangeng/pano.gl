@@ -1,6 +1,6 @@
 /**
  * 查看器(包含渲染和PTZ)
- * 
+ *
  * @author Y3G
  */
 
@@ -19,12 +19,12 @@ const ViewerBase = mix(Eventable).with(Delegate, RenderFlow)
 
 export default class Viewer extends ViewerBase {
   @undisposed
-  get PTZ() {
+  get PTZ () {
     return this.ptz_
   }
 
   @undisposed
-  set PTZ(value) {
+  set PTZ (value) {
     this.ptz_ = !!value
   }
 
@@ -49,7 +49,7 @@ export default class Viewer extends ViewerBase {
   }
 
   @callback('zoom', '.renderer-canvas')
-  onZoom(evt) {
+  onZoom (evt) {
     if (!this.PTZ) {
       return
     }
@@ -62,13 +62,13 @@ export default class Viewer extends ViewerBase {
   }
 
   @callback('pan', '.renderer-canvas')
-  onPan(evt) {
+  onPan (evt) {
     if (!this.PTZ) {
       return
     }
 
     this.rotate(evt.deltaX * 90 / this.frameWidth,
-			evt.deltaY * 90 / this.frameHeight)
+      evt.deltaY * 90 / this.frameHeight)
   }
 
 }

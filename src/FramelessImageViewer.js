@@ -16,18 +16,18 @@ const { assign } = Object
 
 export default class FramelessImageView extends mix(Viewer).with(CameraFactory) {
   @undisposed
-  get src() {
+  get src () {
     return this.texture.provider.src
   }
 
   @undisposed
-  set src(url) {
+  set src (url) {
     check(url, 'url').isString()
     this.texture.provider.src = url
   }
 
   @undisposed
-  set cameraOptions(options) {
+  set cameraOptions (options) {
     const camera = this.createCamera(options)
     this.setCamera(camera)
   }

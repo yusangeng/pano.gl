@@ -12,7 +12,7 @@ import undisposed from 'litchy/lib/decorator/undisposed'
 const { assign } = Object
 
 const PROJECTION_EQUIPRECTANGLULAR = 1
-const PROJECTION_FISHEYE = 2
+// const PROJECTION_FISHEYE = 2
 
 @eventable
 export default class Texture {
@@ -54,9 +54,7 @@ export default class Texture {
 
     if (prj === 'equiprectangular') {
       prj = PROJECTION_EQUIPRECTANGLULAR
-    } /*else if (prj === 'fisheye') {
-      prj = PROJECTION_FISHEYE
-    }*/ else {
+    } else {
       throw new Error(`Unimplemented projection type(${prj}).`)
     }
 

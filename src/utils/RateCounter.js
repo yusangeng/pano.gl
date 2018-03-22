@@ -12,7 +12,7 @@ const RATE_CHECK_INTERVAL = 1000
 @disposable
 export default class RateCounter {
   @undisposed
-  get rate() {
+  get rate () {
     return this.rateValue_
   }
 
