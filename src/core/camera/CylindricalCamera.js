@@ -1,11 +1,11 @@
 /**
  * 圆柱广角摄像机
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import validate from 'io-validate'
+import undisposed from 'refra/lib/decorator/undisposed'
 import Camera from './Camera'
 import OrthoCamera from './OrthoCamera'
 import Polygon from '../geometry/Polygon'
@@ -30,31 +30,31 @@ const geoVertexes = (new Polygon([
 export default class CylindricalCamera extends Camera {
   // 配合使用的顶点集
   @undisposed
-  get geoVertexes () {
+  get geoVertexes() {
     return geoVertexes
   }
 
   // point of view 纬度
   @undisposed
-  get povLatitude () {
+  get povLatitude() {
     return this.povLatitude_
   }
 
   @undisposed
-  set povLatitude (lat) {
-    check(lat, 'lat').isNumber()
+  set povLatitude(lat) {
+    validate(lat, 'lat').isNumber()
     this.povLatitude_ = lat
   }
 
   // point of view 经度
   @undisposed
-  get povLongitude () {
+  get povLongitude() {
     return this.povLongitude_
   }
 
   @undisposed
-  set povLongitude (long) {
-    check(long, 'long').isNumber()
+  set povLongitude(long) {
+    validate(long, 'long').isNumber()
     this.povLongitude_ = long % 25
   }
 
@@ -69,12 +69,12 @@ export default class CylindricalCamera extends Camera {
     this.zoomValue_ = clamp(value, 0.1, 1)
   }
 
-  constructor ({ povLatitude = 0, povLongitude = 0, zoom = 1, debug = false }) {
+  constructor({ povLatitude = 0, povLongitude = 0, zoom = 1, debug = false }) {
     super(projectionType.PROJECTION_CYNLINDRICAL, debug)
 
-    check(povLatitude, 'povLatitude').isNumber()
-    check(povLongitude, 'povLongitude').isNumber()
-    check(zoom, 'zoom').isNumber()
+    validate(povLatitude, 'povLatitude').isNumber()
+    validate(povLongitude, 'povLongitude').isNumber()
+    validate(zoom, 'zoom').isNumber()
 
     const m = Math.max(y, z)
 
@@ -93,21 +93,21 @@ export default class CylindricalCamera extends Camera {
   }
 
   @undisposed
-  rotate (angleX, angleY) {
-    check(angleX, 'angleX').isNumber()
-    check(angleY, 'angleY').isNumber()
+  rotate(angleX, angleY) {
+    validate(angleX, 'angleX').isNumber()
+    validate(angleY, 'angleY').isNumber()
 
     this.povLongitude += angleX
     this.povLatitude += angleY
   }
 
   @undisposed
-  zoom (delta) {
+  zoom(delta) {
     this.zoomValue += delta / 20
   }
 
   @undisposed
-  status () {
+  status() {
     const ret = this.ortho_.status()
 
     ret.CamProjType = {

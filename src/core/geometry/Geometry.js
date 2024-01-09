@@ -1,26 +1,26 @@
 /**
  * 几何形状
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
+import validate from 'io-validate'
 import isArray from 'lodash/isArray'
 import Vertex from './Vertex'
 
 export default superclass => class extends superclass {
-  get vertexes () {
+  get vertexes() {
     return this.vertexes_
   }
 
-  constructor (...params) {
+  constructor(...params) {
     super(...params)
     this.vertexes_ = []
   }
 
-  initGeometry (vertexes) {
+  initGeometry(vertexes) {
     // 至少三个点
-    check(vertexes, 'vertexes').isArray().length().gt(2)
+    validate(vertexes, 'vertexes').isArray().length().gt(2)
 
     const vts = vertexes
 
@@ -29,13 +29,13 @@ export default superclass => class extends superclass {
         return new Vertex(el)
       }
 
-      check(el, 'vertex').instanceOf(Vertex)
+      validate(el, 'vertex').instanceOf(Vertex)
       return el.clone()
     })
   }
 
   // 获取顶点坐标数组
-  flatten () {
+  flatten() {
     return this.vertexes_.map(el => el.xyz).reduce((prev, el) => {
       return prev.concat(el)
     }, [])

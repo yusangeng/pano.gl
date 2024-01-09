@@ -1,7 +1,7 @@
 /**
  * WebGL 辅助函数
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
 import shortid from 'shortid'
@@ -9,26 +9,26 @@ import Logger from 'chivy'
 
 const log = new Logger('pano.gl/utils/gl')
 
-export function createContext (canvas, options) {
+export function createContext(canvas, options) {
   let gl = null
 
-  ;['webgl', 'experimental-webgl', 'webkit-3d', 'moz-webgl'].some(name => {
-    try {
-      gl = canvas.getContext(name, options)
-      gl.enable(gl.DEPTH_TEST)
-      gl.depthFunc(gl.LEQUAL)
+    ;['webgl', 'experimental-webgl', 'webkit-3d', 'moz-webgl'].some(name => {
+      try {
+        gl = canvas.getContext(name, options)
+        gl.enable(gl.DEPTH_TEST)
+        gl.depthFunc(gl.LEQUAL)
 
-      return true
-    } catch (e) {
-      log.debug(`${name} is NOT supported.`)
-      return false
-    }
-  })
+        return true
+      } catch (e) {
+        log.debug(`${name} is NOT supported.`)
+        return false
+      }
+    })
 
   return gl
 }
 
-export function createShader (gl, type, source) {
+export function createShader(gl, type, source) {
   type = (type.indexOf('v') === 0) ? gl.VERTEX_SHADER : gl.FRAGMENT_SHADER
 
   const shader = gl.createShader(type)
@@ -53,7 +53,7 @@ export function createShader (gl, type, source) {
   return shader
 }
 
-export function createProgram (gl, vshader, fshader) {
+export function createProgram(gl, vshader, fshader) {
   const program = gl.createProgram()
 
   if (!program) {
@@ -80,7 +80,7 @@ export function createProgram (gl, vshader, fshader) {
   return program
 }
 
-export function initVertexBuffer (gl, program, vertexes = []) {
+export function initVertexBuffer(gl, program, vertexes = []) {
   const geometry = new Float32Array(vertexes)
   const buf = gl.createBuffer()
 
@@ -97,7 +97,7 @@ export function initVertexBuffer (gl, program, vertexes = []) {
   return vertexes.length / 3
 }
 
-export function createTextureObject (gl) {
+export function createTextureObject(gl) {
   const textureObject = gl.createTexture()
 
   gl.bindTexture(gl.TEXTURE_2D, textureObject)
@@ -110,6 +110,6 @@ export function createTextureObject (gl) {
   return textureObject
 }
 
-export function updateTextureObject (gl, frame) {
+export function updateTextureObject(gl, frame) {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, frame)
 }

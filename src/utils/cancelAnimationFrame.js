@@ -1,7 +1,7 @@
 /**
  * cancelAnimationFrame
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
 const cancelAnimationFrame = window.cancelRequestAnimationFrame ||

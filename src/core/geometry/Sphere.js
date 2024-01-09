@@ -1,12 +1,12 @@
 /**
  * 球壳
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
 import isArray from 'lodash/isArray'
-import check from 'param-check'
-import mix from 'litchy/lib/mix'
+import validate from 'io-validate'
+import { mix } from 'mix-with'
 import Polygon from './Polygon'
 import Geometry from './Geometry'
 import Vertex from './Vertex'
@@ -18,7 +18,7 @@ const HALF_PI = 1.5707963267948966192313216916398
 
 const { sin, cos } = Math
 
-function genVerexes (radius, center) {
+function genVerexes(radius, center) {
   const thetaCount = MESH_COUNT // 水平分割数
   const phiCount = MESH_COUNT  // 垂直分割数，包含上下两顶点
 
@@ -59,13 +59,13 @@ function genVerexes (radius, center) {
   return vertexes
 }
 
-function genPlanes (vertexes) {
+function genPlanes(vertexes) {
   const thetaCount = MESH_COUNT // 水平分割数
   const phiCount = MESH_COUNT  // 垂直分割数，包含上下两顶点
   const vts = vertexes
   const planes = []
 
-  function computeLayerOffset (layer) {
+  function computeLayerOffset(layer) {
     if (layer === 0) return 0
     return (layer - 1) * thetaCount + 1
   }
@@ -101,12 +101,12 @@ function genPlanes (vertexes) {
 
     for (let j = 0; j < thetaCount; ++j) {
       planes.push(new Polygon([vts[layerOffset + j], vts[layerOffset + j + 1],
-        vts[nextLayerOffset + j + 1], vts[nextLayerOffset + j]
+      vts[nextLayerOffset + j + 1], vts[nextLayerOffset + j]
       ]))
     }
 
     planes.push(new Polygon([vts[layerOffset + thetaCount - 1], vts[layerOffset],
-      vts[nextLayerOffset], vts[nextLayerOffset + +thetaCount - 1]
+    vts[nextLayerOffset], vts[nextLayerOffset + +thetaCount - 1]
     ]))
   }
 
@@ -114,7 +114,7 @@ function genPlanes (vertexes) {
 }
 
 const Mesher = superclass => class Mesher extends superclass {
-  mesh () {
+  mesh() {
     const flattens = genPlanes(this.vertexes).map(el => el.mesh())
 
     // FIXME: 性能太差
@@ -126,18 +126,18 @@ const Mesher = superclass => class Mesher extends superclass {
 }
 
 export default class Sphere extends mix().with(Geometry, Mesher) {
-  get center () {
+  get center() {
     return this.center_
   }
 
-  get radius () {
+  get radius() {
     return this.radius_
   }
 
-  constructor (radius, centerX, centerY, centerZ) {
+  constructor(radius, centerX, centerY, centerZ) {
     super()
 
-    check(radius, 'radius').gt(0)
+    validate(radius, 'radius').gt(0)
 
     let center
 

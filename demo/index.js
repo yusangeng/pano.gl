@@ -1,13 +1,14 @@
 
-import Eventable from 'litchy/lib/Eventable'
+import { mix } from 'mix-with'
+import Eventable from 'refra/lib/mixin/Eventable'
 import delegate from 'dodele/lib/decorator/delegate'
 import callback from 'dodele/lib/decorator/callback'
 import ImageViewer from '../src/FramelessImageViewer'
 import VideoViewer from '../src/FramelessVideoViewer'
 
 @delegate
-class ImageViewerWrap extends Eventable {
-  constructor () {
+class ImageViewerWrap extends mix().with(Eventable) {
+  constructor() {
     super()
 
     this.viewer = new ImageViewer({
@@ -75,8 +76,8 @@ class ImageViewerWrap extends Eventable {
 }
 
 @delegate
-class VideoViewerWrap extends Eventable {
-  constructor () {
+class VideoViewerWrap extends mix().with(Eventable) {
+  constructor() {
     super()
 
     const video = this.video = document.createElement('video')

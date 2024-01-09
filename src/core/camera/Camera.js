@@ -1,54 +1,57 @@
 /**
  * 摄像机基类
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import disposable from 'litchy/lib/decorator/disposable'
-import undisposed from 'litchy/lib/decorator/undisposed'
-import hasid from 'litchy/lib/decorator/hasid'
+import { mix } from 'mix-with'
+import Disposable from 'refra/lib/mixin/Disposable'
+import undisposed from 'refra/lib/decorator/undisposed'
+import HasId from '../../utils/HasId'
 
-@hasid
-@disposable
-export default class Camera {
+export default class Camera extends mix().with(Disposable, HasId) {
   @undisposed
-  get debug () {
+  get debug() {
     return this.debug_
   }
 
   @undisposed
-  set debug (value) {
+  set debug(value) {
     this.debug_ = !!value
   }
 
   @undisposed
-  get dirty () {
+  get dirty() {
     return this.dirty_
   }
 
   @undisposed
-  set dirty (value) {
+  set dirty(value) {
     this.dirty_ = !!value
   }
 
   @undisposed
-  get projection () {
+  get projection() {
     return this.projection_
   }
 
   @undisposed
-  get geoVertexes () {
+  get geoVertexes() {
     return []
   }
 
-  constructor (projection, debug = false) {
+  constructor(projection, debug = false) {
+    super()
+
+    this.initId()
+
     this.debug = debug
     this.dirty = true
     this.projection_ = projection
   }
 
   @undisposed
-  status () {
+  status() {
     if (this.dirty) {
       this.updateStatus()
       this.dirty = false
@@ -64,6 +67,6 @@ export default class Camera {
 
   // private
 
-  updateStatus () {
+  updateStatus() {
   }
 }

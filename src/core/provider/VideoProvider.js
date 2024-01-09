@@ -1,12 +1,13 @@
 /**
  * 视频纹理数据
  * 
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
-import eventable from 'litchy/lib/decorator/eventable'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import { mix } from 'mix-with'
+import validate from 'io-validate'
+import Eventable from 'refra/lib/mixin/Eventable'
+import undisposed from 'refra/lib/decorator/undisposed'
 import Throttle from '../../utils//Throttle'
 
 const MAX_UPDATE_RATE = 30
@@ -37,15 +38,16 @@ const mediaEventTypes = [
   'waiting'
 ]
 
-@eventable
-export default class VideoProvider {
+export default class VideoProvider extends mix().with(Eventable) {
   @undisposed
-  get media () {
+  get media() {
     return this.media_
   }
 
-  constructor (video) {
-    check(video, 'video').isElement().got('tagName').among('video', 'VIDEO')
+  constructor(video) {
+    super()
+
+    validate(video, 'video').isElement().got('tagName').among('video', 'VIDEO')
 
     video.setAttribute('webkit-playsinline', 'true') // iOS 10-
     video.setAttribute('playsinline', 'true') // iOS 10+
@@ -53,7 +55,7 @@ export default class VideoProvider {
     this.updateThrottle_ = new Throttle(MAX_UPDATE_RATE)
     this.media_ = video
 
-		// 绑定 video 事件
+    // 绑定 video 事件
     this.mediaEventOffs_ = mediaEventTypes.map(type => {
       const callback = evt => this.trigger({
         type: `media-${type}`,
@@ -65,14 +67,14 @@ export default class VideoProvider {
     })
   }
 
-  dispose () {
+  dispose() {
     this.detachMedia()
     this.updateThrottle_ = null
     super.dispose()
   }
 
   @undisposed
-  updateTexture (texture) {
+  updateTexture(texture) {
     const video = this.media_
 
     if (video.readyState !== video.HAVE_ENOUGH_DATA) {
@@ -80,7 +82,7 @@ export default class VideoProvider {
     }
 
     if (!this.updateThrottle_.shouldRun) {
-			// 限制帧率
+      // 限制帧率
       return false
     }
 
@@ -96,7 +98,7 @@ export default class VideoProvider {
 
   // private
 
-  detachMedia () {
+  detachMedia() {
     this.mediaEventOffs_.forEach(fn => fn())
     this.media_ = null
   }

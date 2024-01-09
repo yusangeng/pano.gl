@@ -1,23 +1,23 @@
 /**
  * 纹理
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
+import { mix } from 'mix-with'
+import validate from 'io-validate'
 import merge from 'lodash/merge'
-import eventable from 'litchy/lib/decorator/eventable'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import Eventable from 'refra/lib/mixin/Eventable'
+import undisposed from 'refra/lib/decorator/undisposed'
 
 const { assign } = Object
 
 const PROJECTION_EQUIPRECTANGLULAR = 1
 const PROJECTION_FISHEYE = 2
 
-@eventable
-export default class Texture {
+export default class Texture extends mix().with(Eventable) {
   @undisposed
-  get frame () {
+  get frame() {
     if (this.direct_) {
       return this.provider_.media
     }
@@ -27,28 +27,30 @@ export default class Texture {
   }
 
   @undisposed
-  get projection () {
+  get projection() {
     return this.projection_
   }
 
   @undisposed
-  get frameCanvas () {
+  get frameCanvas() {
     return this.frameCanvas_
   }
 
   @undisposed
-  get direct () {
+  get direct() {
     return this.direct_
   }
 
   @undisposed
-  get provider () {
+  get provider() {
     return this.provider_
   }
 
-  constructor ({ projection = 'equiprectangular', frameSize, provider }) {
-    check(projection, 'projection').among('equiprectangular', 'fisheye')
-    check(provider, 'provider').isObject()
+  constructor({ projection = 'equiprectangular', frameSize, provider }) {
+    super()
+
+    validate(projection, 'projection').among('equiprectangular', 'fisheye')
+    validate(provider, 'provider').isObject()
 
     let prj = projection.toLowerCase()
 
@@ -84,7 +86,7 @@ export default class Texture {
     this.provider_ = provider
   }
 
-  dispose () {
+  dispose() {
     this.provider_.dispose()
     this.provider_ = null
     this.frameCanvas_ = null
@@ -93,7 +95,7 @@ export default class Texture {
   }
 
   @undisposed
-  update () {
+  update() {
     return this.provider_.updateTexture(this)
   }
 }

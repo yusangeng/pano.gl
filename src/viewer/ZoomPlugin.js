@@ -1,36 +1,36 @@
 /**
  * zoom插件
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
 /* global Event */
 
 export default class ZoomPlugin {
-  get eventType () {
+  get eventType() {
     return 'zoom'
   }
 
-  get delegate () {
+  get delegate() {
     return this.delegate_
   }
 
-  get selector () {
+  get selector() {
     return this.selector_
   }
 
-  get status () {
+  get status() {
     return this.status_
   }
 
-  constructor (delegate, selector) {
+  constructor(delegate, selector) {
     this.delegate_ = delegate
     this.selector_ = selector
     this.offs_ = []
     this.status_ = {}
   }
 
-  recognize () {
+  recognize() {
     const { delegate, selector } = this
 
     this.offs_.push(delegate.on$('mousewheel', selector, this.onMouseWheel.bind(this)))
@@ -43,7 +43,7 @@ export default class ZoomPlugin {
     this.status.target = null
   }
 
-  unrecognize () {
+  unrecognize() {
     this.status.zooming = false
     this.status.target = null
 
@@ -51,7 +51,7 @@ export default class ZoomPlugin {
     this.offs_ = []
   }
 
-  onMouseWheel (evt) {
+  onMouseWheel(evt) {
     const newEvt = new Event('zoom', {
       bubbles: true
     })
@@ -63,7 +63,7 @@ export default class ZoomPlugin {
     evt.preventDefault()
   }
 
-  onTouchStart (evt) {
+  onTouchStart(evt) {
     const touches = evt.targetTouches
 
     if (touches.length !== 2) {
@@ -82,7 +82,7 @@ export default class ZoomPlugin {
     evt.preventDefault()
   }
 
-  onTouchMove (evt) {
+  onTouchMove(evt) {
     const touches = evt.targetTouches
 
     if (touches.length !== 2) {
@@ -133,13 +133,13 @@ export default class ZoomPlugin {
     evt.preventDefault()
   }
 
-  onTouchEnd (evt) {
+  onTouchEnd(evt) {
     this.status.zooming = false
     this.status.target = null
     evt.preventDefault()
   }
 
-  onTouchCancel (evt) {
+  onTouchCancel(evt) {
     this.status.zooming = false
     this.status.target = null
     evt.preventDefault()

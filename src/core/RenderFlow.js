@@ -1,12 +1,12 @@
 /**
  * 渲染流程
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
+import validate from 'io-validate'
 import Logger from 'chivy'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import undisposed from 'refra/lib/decorator/undisposed'
 import Camera from './camera/Camera'
 import Texture from './Texture'
 import Renderer from './Renderer'
@@ -17,43 +17,43 @@ const log = new Logger('pano.gl/core/RenderFlow')
 
 export default superclass => class RenderFlow extends superclass {
   @undisposed
-  get frameId () {
+  get frameId() {
     return this.renderer_.frameId
   }
 
   @undisposed
-  get frameWidth () {
+  get frameWidth() {
     return this.renderer_.frameWidth
   }
 
   @undisposed
-  get frameHeight () {
+  get frameHeight() {
     return this.renderer_.frameHeight
   }
 
   @undisposed
-  get frameRate () {
+  get frameRate() {
     return this.renderer_.frameRate
   }
 
   @undisposed
-  get updateRate () {
+  get updateRate() {
     return this.renderer_.updateRate
   }
 
   @undisposed
-  get camera () {
+  get camera() {
     return this.camera_
   }
 
   @undisposed
-  get texture () {
+  get texture() {
     return this.texture_
   }
 
-  initRenderFlow (el) {
+  initRenderFlow(el) {
     el = selectorToElement(el)
-    check(el, 'el').isElement()
+    validate(el, 'el').isElement()
 
     // 渲染器
     this.renderer_ = new Renderer(el)
@@ -75,8 +75,8 @@ export default superclass => class RenderFlow extends superclass {
     window.addEventListener('resize', cb)
   }
 
-  dispose () {
-    window.removeEventLstener('resize', this.wrapResizeCallback_)
+  dispose() {
+    window.removeEventListener('resize', this.wrapResizeCallback_)
 
     this.driver_.dispose()
     this.driver_ = null
@@ -97,15 +97,15 @@ export default superclass => class RenderFlow extends superclass {
   }
 
   @undisposed
-  setCamera (camera) {
-    check(camera, 'camera').instanceOf(Camera)
+  setCamera(camera) {
+    validate(camera, 'camera').instanceOf(Camera)
     this.camera_ = camera
     return this
   }
 
   @undisposed
-  setTexture (texture) {
-    check(texture, 'texture').instanceOf(Texture)
+  setTexture(texture) {
+    validate(texture, 'texture').instanceOf(Texture)
 
     if (this.texture_) {
       this.texture_.dispose()
@@ -140,7 +140,7 @@ export default superclass => class RenderFlow extends superclass {
 
   // private
 
-  renderFrame () {
+  renderFrame() {
     this.renderer_.render(this.camera_, this.texture_)
   }
 }

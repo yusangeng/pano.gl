@@ -1,14 +1,14 @@
 /**
  * 平面(多边形)
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import mix from 'litchy/lib/mix'
+import { mix } from 'mix-with'
 import Geometry from './Geometry'
 
 const Mesher = superclass => class Mesher extends superclass {
-  mesh () {
+  mesh() {
     const vertexes = this.vertexes
     const len = vertexes.length
 
@@ -30,7 +30,7 @@ const Mesher = superclass => class Mesher extends superclass {
 }
 
 export default class Polygon extends mix().with(Geometry, Mesher) {
-  constructor (vertexes) {
+  constructor(vertexes) {
     super()
     this.initGeometry(vertexes)
   }

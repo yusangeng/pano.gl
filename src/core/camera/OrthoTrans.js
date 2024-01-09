@@ -1,22 +1,22 @@
 /**
  * 正交变换模型
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import validate from 'io-validate'
+import undisposed from 'refra/lib/decorator/undisposed'
 import clamp from '../../utils/clamp'
 
 export default superclass => class OrthoTrans extends superclass {
   @undisposed
-  get left () {
+  get left() {
     return this.left_
   }
 
   @undisposed
-  set left (newVal) {
-    check(newVal, 'newVal').isNumber()
+  set left(newVal) {
+    validate(newVal, 'newVal').isNumber()
 
     this.updateConstitutive({
       left: newVal,
@@ -27,13 +27,13 @@ export default superclass => class OrthoTrans extends superclass {
   }
 
   @undisposed
-  get right () {
+  get right() {
     return this.right_
   }
 
   @undisposed
-  set right (newVal) {
-    check(newVal, 'newVal').isNumber()
+  set right(newVal) {
+    validate(newVal, 'newVal').isNumber()
 
     this.updateConstitutive({
       left: this.left_,
@@ -44,13 +44,13 @@ export default superclass => class OrthoTrans extends superclass {
   }
 
   @undisposed
-  get top () {
+  get top() {
     return this.top_
   }
 
   @undisposed
-  set top (newVal) {
-    check(newVal, 'newVal').isNumber()
+  set top(newVal) {
+    validate(newVal, 'newVal').isNumber()
 
     this.updateConstitutive({
       left: this.left_,
@@ -61,14 +61,14 @@ export default superclass => class OrthoTrans extends superclass {
   }
 
   @undisposed
-  get bottom () {
+  get bottom() {
     return this.bottom_
   }
 
   @undisposed
-  set bottom (newVal) {
-    check(newVal, 'newVal').isNumber()
-    
+  set bottom(newVal) {
+    validate(newVal, 'newVal').isNumber()
+
     this.updateConstitutive({
       left: this.left_,
       right: this.right_,
@@ -78,8 +78,8 @@ export default superclass => class OrthoTrans extends superclass {
   }
 
   @undisposed
-  zoom (delta) {
-    check(delta, 'delta').isNumber()
+  zoom(delta) {
+    validate(delta, 'delta').isNumber()
 
     const aspect = (this.right - this.left) / (this.bottom - this.top)
     const xd = delta / 5 // 分母调节缩放速度
@@ -91,11 +91,11 @@ export default superclass => class OrthoTrans extends superclass {
     this.bottom += yd
   }
 
-  updateConstitutive ({ left, right, top, bottom }) {
-    check(left, 'left').isNumber()
-    check(right, 'right').isNumber()
-    check(top, 'top').isNumber()
-    check(bottom, 'bottom').isNumber()
+  updateConstitutive({ left, right, top, bottom }) {
+    validate(left, 'left').isNumber()
+    validate(right, 'right').isNumber()
+    validate(top, 'top').isNumber()
+    validate(bottom, 'bottom').isNumber()
 
     const minMagic = 0.1
     const maxMagic = 1000

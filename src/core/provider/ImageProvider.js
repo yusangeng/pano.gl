@@ -1,24 +1,24 @@
 /**
  * 图片纹理数据
  * 
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
-import eventable from 'litchy/lib/decorator/eventable'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import { mix } from 'mix-with'
+import validate from 'io-validate'
+import Eventable from 'refra/lib/mixin/Eventable'
+import undisposed from 'refra/lib/decorator/undisposed'
 
-@eventable
-export default class ImageProvider {
+export default class ImageProvider extends mix().with(Eventable) {
   @undisposed
-  get src () {
+  get src() {
     return this.media.src
   }
 
   @undisposed
-  set src (value) {
-    check(value, 'value').isString()
-    
+  set src(value) {
+    validate(value, 'value').isString()
+
     if (this.media_) {
       this.media_.onload = this.media_.onerror = null
     }
@@ -47,15 +47,16 @@ export default class ImageProvider {
   }
 
   @undisposed
-  get media () {
+  get media() {
     return this.media_
   }
 
   constructor(src) {
+    super()
     this.src = src
   }
 
-  updateTexture (texture) {
+  updateTexture(texture) {
     if (texture.direct) {
       const ret = this.needUpdate_
       this.needUpdate_ = false

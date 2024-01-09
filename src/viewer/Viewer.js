@@ -1,21 +1,21 @@
 /**
  * 查看器(包含渲染和PTZ)
  * 
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
+import { mix } from 'mix-with'
+import validate from 'io-validate'
 import Delegate from 'dodele/lib/Delegate'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import undisposed from 'refra/lib/decorator/undisposed'
 import callback from 'dodele/lib/decorator/callback'
-import Eventable from 'litchy/lib/Eventable'
-import mix from 'litchy/lib/mix'
+import Eventable from 'refra/lib/mixin/Eventable'
 import selectorToElement from '../utils/selectorToElement'
 import RenderFlow from '../core/RenderFlow'
 import ZoomPlugin from './ZoomPlugin'
 import PanPlugin from './PanPlugin'
 
-const ViewerBase = mix(Eventable).with(Delegate, RenderFlow)
+const ViewerBase = mix().with(Eventable, Delegate, RenderFlow)
 
 export default class Viewer extends ViewerBase {
   @undisposed
@@ -28,13 +28,13 @@ export default class Viewer extends ViewerBase {
     this.ptz_ = !!value
   }
 
-  constructor (el) {
+  constructor(el) {
     super()
 
     this.PTZ = true
 
     const realEl = selectorToElement(el)
-    check(realEl, 'realEl').isElement()
+    validate(realEl, 'realEl').isElement()
 
     this.initRenderFlow(realEl)
 
@@ -44,7 +44,7 @@ export default class Viewer extends ViewerBase {
     this.initDecoratedDelegate(realEl)
   }
 
-  dispose () {
+  dispose() {
     super.dispose()
   }
 
@@ -68,7 +68,7 @@ export default class Viewer extends ViewerBase {
     }
 
     this.rotate(evt.deltaX * 90 / this.frameWidth,
-			evt.deltaY * 90 / this.frameHeight)
+      evt.deltaY * 90 / this.frameHeight)
   }
 
 }

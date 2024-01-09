@@ -1,13 +1,14 @@
 /**
  * 渲染器
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
 import shortid from 'shortid'
-import disposable from 'litchy/lib/decorator/disposable'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import { mix } from 'mix-with'
+import validate from 'io-validate'
+import Disposable from 'refra/lib/mixin/Disposable'
+import undisposed from 'refra/lib/decorator/undisposed'
 import * as glu from '../utils/gl'
 import RateCounter from '../utils/RateCounter'
 import Throttle from '../utils/Throttle'
@@ -23,15 +24,14 @@ const fshaderSource = require('../shader/fshader.glsl')
 
 const MAX_FRAME_RATE = 60
 
-@disposable
-export default class Renderer {
+export default class Renderer extends mix().with(Disposable) {
   @undisposed
-  get frameWidth () {
+  get frameWidth() {
     return this.canvas_.width
   }
 
   @undisposed
-  get frameHeight () {
+  get frameHeight() {
     return this.canvas_.height
   }
 
@@ -41,19 +41,20 @@ export default class Renderer {
   }
 
   @undisposed
-  get frameRate () {
+  get frameRate() {
     return this.frameRate_.rate
   }
 
   @undisposed
-  get updateRate () {
+  get updateRate() {
     return this.updateRate_.rate
   }
 
-  constructor (el) {
+  constructor(el) {
+    super()
     el = selectorToElement(el)
 
-    check(el, 'el').isElement()
+    validate(el, 'el').isElement()
 
     this.prepareGL(el)
     this.adjustSize()
@@ -71,7 +72,7 @@ export default class Renderer {
     this.renderThrottle_ = new Throttle(MAX_FRAME_RATE)
   }
 
-  dispose () {
+  dispose() {
     this.renderThrottle_ = null
     this.frameRate_.dispose()
     this.frameRate_ = null
@@ -84,16 +85,16 @@ export default class Renderer {
     this.gl_.deleteTexture(this.textureObject_)
     this.textureObject_ = null
 
-    window.removeEventLstener('resize', this.wrapResizeCallback_)
+    window.removeEventListener('resize', this.wrapResizeCallback_)
     this.cleanGL()
 
     super.dispose()
   }
 
   @undisposed
-  render (camera, texture) {
+  render(camera, texture) {
     if (!this.renderThrottle_.shouldRun) {
-			// 限制帧率
+      // 限制帧率
       return
     }
 
@@ -105,7 +106,7 @@ export default class Renderer {
 
     gl.useProgram(program)
 
-		// 不同的摄像机输出不同的状态信息，这些信息都通过全局变量传到 shader 中
+    // 不同的摄像机输出不同的状态信息，这些信息都通过全局变量传到 shader 中
     const status = camera.status()
 
     keys(status).forEach(name => {
@@ -124,13 +125,13 @@ export default class Renderer {
       gl[conf.type](uniform, conf.value || 0)
     })
 
-		// 纹理采用的投影方式
+    // 纹理采用的投影方式
     const uniformTexProjType = gl.getUniformLocation(program, 'u_TexProjType')
     if (uniformTexProjType) {
       gl.uniform1i(uniformTexProjType, texture.projection)
     }
 
-		// 内部使用
+    // 内部使用
     const uniformSampler = gl.getUniformLocation(program, 'u_Sampler')
     if (uniformSampler) {
       gl.uniform1i(uniformSampler, 0)
@@ -147,9 +148,9 @@ export default class Renderer {
 
   // private
 
-  prepareGL (el) {
+  prepareGL(el) {
     el = this.el_ = el
-    check(el, 'el').isElement()
+    validate(el, 'el').isElement()
     el.innerHTML = ''
 
     const canvas = this.canvas_ = document.createElement('canvas')
@@ -165,14 +166,14 @@ export default class Renderer {
     return gl
   }
 
-  cleanGL () {
+  cleanGL() {
     this.gl_ = null
     this.canvas_ = null
     this.el_.innerHTML = ''
     this.el_ = null
   }
 
-  adjustSize () {
+  adjustSize() {
     const onWrapResize = this.wrapResizeCallback_ = _ => {
       const cvs = this.canvas_
       const el = this.el_
@@ -189,7 +190,7 @@ export default class Renderer {
     onWrapResize()
   }
 
-  getProgram (camera) {
+  getProgram(camera) {
     const programs = this.programs_
     const name = 'dummy'
     let prog = programs[name]
@@ -201,7 +202,7 @@ export default class Renderer {
     return prog
   }
 
-  createProgram () {
+  createProgram() {
     const gl = this.gl_
 
     const vsource = vshaderSource
@@ -220,7 +221,7 @@ export default class Renderer {
     return program
   }
 
-  setVertexBuffer (camera) {
+  setVertexBuffer(camera) {
     if (camera.id !== this.currentCameraId_) {
       const programs = this.programs_
       const gl = this.gl_
@@ -234,8 +235,8 @@ export default class Renderer {
     return this.triangleCount_
   }
 
-  cleanProgram () {
-    this.programs_.forEach(prog => this.gl_.deleteProgram(prog))
+  cleanProgram() {
+    Object.values(this.programs_).forEach(prog => this.gl_.deleteProgram(prog))
     this.programs_ = {}
   }
 }

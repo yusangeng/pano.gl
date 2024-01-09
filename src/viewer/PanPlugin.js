@@ -1,36 +1,36 @@
 /**
  * pan插件
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
 /* global Event */
 
 export default class ZoomPlugin {
-  get eventType () {
+  get eventType() {
     return 'pan'
   }
 
-  get delegate () {
+  get delegate() {
     return this.delegate_
   }
 
-  get selector () {
+  get selector() {
     return this.selector_
   }
 
-  get status () {
+  get status() {
     return this.status_
   }
 
-  constructor (delegate, selector) {
+  constructor(delegate, selector) {
     this.delegate_ = delegate
     this.selector_ = selector
     this.offs_ = []
     this.status_ = {}
   }
 
-  recognize () {
+  recognize() {
     const { delegate, selector } = this
 
     this.offs_.push(delegate.on$('mousedown', selector, this.onMouseDown.bind(this)))
@@ -45,7 +45,7 @@ export default class ZoomPlugin {
     this.status.target = null
   }
 
-  unrecognize () {
+  unrecognize() {
     this.status.panning = false
     this.status.target = null
 
@@ -53,12 +53,12 @@ export default class ZoomPlugin {
     this.offs_ = []
   }
 
-  onMouseDown (evt) {
+  onMouseDown(evt) {
     this.start(evt, evt.target)
     evt.preventDefault()
   }
 
-  onMouseMove (evt) {
+  onMouseMove(evt) {
     if (!this.status.panning) {
       return
     }
@@ -73,12 +73,12 @@ export default class ZoomPlugin {
     evt.preventDefault()
   }
 
-  onMouseUp (evt) {
+  onMouseUp(evt) {
     this.stop()
     evt.preventDefault()
   }
 
-  onTouchStart (evt) {
+  onTouchStart(evt) {
     const { target, touches } = evt
 
     if (touches.length !== 1) {
@@ -90,7 +90,7 @@ export default class ZoomPlugin {
     evt.preventDefault()
   }
 
-  onTouchMove (evt) {
+  onTouchMove(evt) {
     if (!this.status.panning) {
       return
     }
@@ -105,29 +105,29 @@ export default class ZoomPlugin {
     evt.preventDefault()
   }
 
-  onTouchEnd (evt) {
+  onTouchEnd(evt) {
     this.stop()
     evt.preventDefault()
   }
 
-  onTouchCancel (evt) {
+  onTouchCancel(evt) {
     this.stop()
     evt.preventDefault()
   }
 
-  start (pos, target) {
+  start(pos, target) {
     this.status.panning = true
     this.status.x = pos.clientX
     this.status.y = pos.clientY
     this.status.target = target
   }
 
-  stop () {
+  stop() {
     this.status.panning = false
     this.status.target = null
   }
 
-  move (pos, target) {
+  move(pos, target) {
     var newEvt = new Event('pan', {
       bubbles: true
     })

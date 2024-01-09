@@ -1,7 +1,7 @@
 /**
  * requestAnimationFrame
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
 const requestAnimationFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame ||

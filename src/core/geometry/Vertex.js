@@ -1,17 +1,17 @@
 /**
  * 几何顶点
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
+import validate from 'io-validate'
 import isArray from 'lodash/isArray'
 
 export default class Vertex {
-  constructor (x, y, z) {
-    check(x, 'x').is('array', 'number')
-    check(y, 'y').is('number', 'undefined')
-    check(z, 'z').is('number', 'undefined')
+  constructor(x, y, z) {
+    validate(x, 'x').is('array', 'number')
+    validate(y, 'y').is('number', 'undefined')
+    validate(z, 'z').is('number', 'undefined')
 
     var components = isArray(x) ? x.slice() : [x, y, z]
 
@@ -22,7 +22,7 @@ export default class Vertex {
   }
 
   // 复制
-  clone () {
+  clone() {
     const { x, y, z } = this
     return new Vertex(x, y, z)
   }

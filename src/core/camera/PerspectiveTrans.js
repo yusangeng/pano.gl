@@ -1,22 +1,22 @@
 /**
  * 摄影变换模型
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import validate from 'io-validate'
+import undisposed from 'refra/lib/decorator/undisposed'
 import clamp from '../../utils/clamp'
 
 export default superclass => class PerspectiveTrans extends superclass {
   @undisposed
-  get fov () {
+  get fov() {
     return this.fov_
   }
 
   @undisposed
-  set fov (newVal) {
-    check(newVal, 'newVal').isNumber()
+  set fov(newVal) {
+    validate(newVal, 'newVal').isNumber()
 
     if (newVal <= 0) {
       return
@@ -29,18 +29,18 @@ export default superclass => class PerspectiveTrans extends superclass {
   }
 
   @undisposed
-  get aspect () {
+  get aspect() {
     return this.aspect_
   }
 
   @undisposed
-  set aspect (newVal) {
-    check(newVal, 'newVal').isNumber()
+  set aspect(newVal) {
+    validate(newVal, 'newVal').isNumber()
 
     if (newVal <= 0) {
       return
     }
-    
+
     this.updateConstitutive({
       fov: this.fov,
       aspect: newVal
@@ -49,14 +49,14 @@ export default superclass => class PerspectiveTrans extends superclass {
 
   // delta单位为度
   @undisposed
-  zoom (delta) {
-    check(delta, 'delta').isNumber()
+  zoom(delta) {
+    validate(delta, 'delta').isNumber()
     this.fov += delta
   }
 
-  updateConstitutive ({ fov, aspect }) {
-    check(fov, 'fov').gt(0)
-    check(aspect, 'aspect').gt(0)
+  updateConstitutive({ fov, aspect }) {
+    validate(fov, 'fov').gt(0)
+    validate(aspect, 'aspect').gt(0)
 
     const magicMax = 179.38
     const magicMin = 1.99

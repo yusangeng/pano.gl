@@ -1,22 +1,25 @@
 /**
  * 频率计数器
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import disposable from 'litchy/lib/decorator/disposable'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import { mix } from 'mix-with'
+import Disposable from 'refra/lib/mixin/Disposable'
+import undisposed from 'refra/lib/decorator/undisposed'
+
 
 const RATE_CHECK_INTERVAL = 1000
 
-@disposable
-export default class RateCounter {
+export default class RateCounter extends mix().with(Disposable) {
   @undisposed
   get rate() {
     return this.rateValue_
   }
 
-  constructor () {
+  constructor() {
+    super()
+
     this.rateValue_ = 0
     this.counter_ = 0
 
@@ -28,13 +31,13 @@ export default class RateCounter {
     }, interval)
   }
 
-  dispose () {
+  dispose() {
     clearInterval(this.timer_)
     super.dispose()
   }
 
   @undisposed
-  increment () {
+  increment() {
     this.counter_++
   }
 }

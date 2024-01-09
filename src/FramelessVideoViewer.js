@@ -1,12 +1,12 @@
 /**
  * 视频播放器
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
-import mix from 'litchy/lib/mix'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import validate from 'io-validate'
+import { mix } from 'mix-with'
+import undisposed from 'refra/lib/decorator/undisposed'
 import Viewer from './viewer'
 import Texture from './core/Texture'
 import Provider from './core/provider/VideoProvider'
@@ -17,22 +17,22 @@ const { assign } = Object
 
 export default class FramelessVideoViewer extends mix(Viewer).with(CameraFactory) {
   @undisposed
-  set cameraOptions (options) {
+  set cameraOptions(options) {
     const camera = this.createCamera(options)
     this.setCamera(camera)
   }
 
   @undisposed
-  get video () {
+  get video() {
     return this.texture.provider.media
   }
 
-  constructor ({ el, src, video, projection = 'equiprectangular', frameSize, camera: cameraOptions }) {
+  constructor({ el, src, video, projection = 'equiprectangular', frameSize, camera: cameraOptions }) {
     super(el)
 
     const videoSource = selectorToElement(video || src)
-    check(videoSource, 'videoSource').isElement()
-    check(projection, 'projection').among('equiprectangular', 'fisheye')
+    validate(videoSource, 'videoSource').isElement()
+    validate(projection, 'projection').among('equiprectangular', 'fisheye')
 
     const camera = this.createCamera(cameraOptions)
     this.setCamera(camera)
@@ -44,7 +44,7 @@ export default class FramelessVideoViewer extends mix(Viewer).with(CameraFactory
     this.setTexture(texture)
   }
 
-  dispose () {
+  dispose() {
     super.dispose()
   }
 }

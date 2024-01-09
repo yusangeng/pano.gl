@@ -1,13 +1,13 @@
 /**
  * 线性投影模型
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
 import Logger from 'chivy'
-import check from 'param-check'
-import undisposed from 'litchy/lib/decorator/undisposed'
-// import Sphere from '../geometry/Sphere'
+import validate from 'io-validate'
+import undisposed from 'refra/lib/decorator/undisposed'
+import Sphere from '../geometry/Sphere'
 import Cube from '../geometry/Cube'
 import clamp from '../../utils/clamp'
 import { Matrix4 } from '../../../vendor/cuon'
@@ -17,7 +17,6 @@ const { assign } = Object
 
 const log = new Logger('pano.gl/core/LinearProjection')
 
-/*
 const SPHERE_READIUS = 30
 const DEBUG_CAMERA_DISTANCE = 10
 
@@ -25,29 +24,28 @@ const time = (new Date()).getTime()
 log.info(`Sphere generating...`)
 const geoVertexes = (new Sphere(SPHERE_READIUS, 0, 0, 0)).mesh()
 log.info(`Sphere generated, time: ${(new Date()).getTime() - time} ms.`)
-*/
 
-const SPHERE_READIUS = 100
-const DEBUG_CAMERA_DISTANCE = 10
+//const SPHERE_READIUS = 100
+//const DEBUG_CAMERA_DISTANCE = 10
 
-const geoVertexes = (new Cube(SPHERE_READIUS, 0, 0, 0)).mesh()
+//const geoVertexes = (new Cube(SPHERE_READIUS, 0, 0, 0)).mesh()
 
 export default superclass => class LinearProjection extends superclass {
   // 配合使用的顶点集
   @undisposed
-  get geoVertexes () {
+  get geoVertexes() {
     return geoVertexes
   }
 
   // point of view 纬度，单位为度
   @undisposed
-  get povLatitude () {
+  get povLatitude() {
     return this.povLatitude_
   }
 
   @undisposed
-  set povLatitude (lat) {
-    check(lat, 'lat').isNumber()
+  set povLatitude(lat) {
+    validate(lat, 'lat').isNumber()
 
     var phi = clamp(lat % 360, -90, 90)
 
@@ -57,14 +55,14 @@ export default superclass => class LinearProjection extends superclass {
 
   // point of view 经度，单位为度
   @undisposed
-  get povLongitude () {
+  get povLongitude() {
     return this.povLongitude_
   }
 
   @undisposed
-  set povLongitude (long) {
-    check(long, 'long').isNumber()
-    
+  set povLongitude(long) {
+    validate(long, 'long').isNumber()
+
     let theta = long % 360
 
     if (theta < 0) {
@@ -80,9 +78,9 @@ export default superclass => class LinearProjection extends superclass {
     return this.projectionMat_
   }
 
-  initModel (povLatitude = 0, povLongitude = 0) {
-    check(povLatitude, 'povLatitude').isNumber()
-    check(povLongitude, 'povLongitude').isNumber()
+  initModel(povLatitude = 0, povLongitude = 0) {
+    validate(povLatitude, 'povLatitude').isNumber()
+    validate(povLongitude, 'povLongitude').isNumber()
 
     this.transMat_ = new Matrix4() // 顶点变换矩阵
     this.projectionMat_ = new Matrix4() // 投影矩阵
@@ -94,16 +92,16 @@ export default superclass => class LinearProjection extends superclass {
 
   // 镜头旋转，angleX、angleY 分别为要旋转的经纬角度
   @undisposed
-  rotate (angleX, angleY) {
-    check(angleX, 'angleX').isNumber()
-    check(angleY, 'angleY').isNumber()
+  rotate(angleX, angleY) {
+    validate(angleX, 'angleX').isNumber()
+    validate(angleY, 'angleY').isNumber()
 
     this.povLongitude += angleX
     this.povLatitude += angleY
   }
 
   @undisposed
-  status () {
+  status() {
     return assign(super.status(), {
       CamTransMatrix: {
         type: 'uniformMatrix4fv',
@@ -113,12 +111,12 @@ export default superclass => class LinearProjection extends superclass {
     })
   }
 
-  updateStatus () {
+  updateStatus() {
     super.updateStatus()
     this.updateMatrix()
   }
 
-  updateMatrix () {
+  updateMatrix() {
     // 转换为弧度
     const theta = this.povLongitude * Math.PI / 180
     const phi = this.povLatitude * Math.PI / 180

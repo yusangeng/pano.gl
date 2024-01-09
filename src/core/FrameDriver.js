@@ -1,29 +1,30 @@
 /**
  * 渲染驱动器
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import eventable from 'litchy/lib/decorator/eventable'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import { mix } from 'mix-with'
+import Eventable from 'refra/lib/mixin/Eventable'
+import undisposed from 'refra/lib/decorator/undisposed'
 import RateCounter from '../utils/RateCounter'
 import requestAnimationFrame from '../utils/requestAnimationFrame'
 import cancelAnimationFrame from '../utils/cancelAnimationFrame'
-
-@eventable
-export default class FrameDriver {
+export default class FrameDriver extends mix().with(Eventable) {
   @undisposed
-  get frameRate () {
+  get frameRate() {
     return this.frameRateCounter_.rate
   }
 
-  constructor () {
+  constructor() {
+    super()
+
     this.pause_ = false
     this.requestId_ = null
     this.frameRateCounter_ = new RateCounter()
   }
 
-  dispose () {
+  dispose() {
     if (this.requestId_ !== null) {
       cancelAnimationFrame(this.requestId_)
       this.requestId_ = null
@@ -33,7 +34,7 @@ export default class FrameDriver {
   }
 
   @undisposed
-  start () {
+  start() {
     if (this.requestId_ !== null) {
       return this
     }
@@ -55,7 +56,7 @@ export default class FrameDriver {
   }
 
   @undisposed
-  pause () {
+  pause() {
     this.pause_ = true
     return this
   }

@@ -1,22 +1,22 @@
 /**
  * 立方体
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
 import isArray from 'lodash/isArray'
-import check from 'param-check'
-import mix from 'litchy/lib/mix'
+import validate from 'io-validate'
+import { mix } from 'mix-with'
 import Geometry from './Geometry'
 import Vertex from './Vertex'
 import Polygon from './Polygon'
 
-function genVerexes (sideLen, center) {
+function genVerexes(sideLen, center) {
   var len = sideLen / 2
 
   var vertexes = [
-      [-len, -len, len], [len, -len, len], [len, len, len], [-len, len, len],
-      [-len, -len, -len], [len, -len, -len], [len, len, -len], [-len, len, -len]
+    [-len, -len, len], [len, -len, len], [len, len, len], [-len, len, len],
+    [-len, -len, -len], [len, -len, -len], [len, len, -len], [-len, len, -len]
   ].map(vertex => {
     return [vertex[0] + center.x, vertex[1] + center.y, vertex[2] + center.z]
   })
@@ -24,7 +24,7 @@ function genVerexes (sideLen, center) {
   return vertexes
 }
 
-function genPlanes (vertexes) {
+function genPlanes(vertexes) {
   const vts = vertexes
   const makePolygon = (index1, index2, index3, index4) => {
     return new Polygon([vts[index1], vts[index2], vts[index3], vts[index4]])
@@ -41,7 +41,7 @@ function genPlanes (vertexes) {
 }
 
 const Mesher = superclass => class Mesher extends superclass {
-  mesh () {
+  mesh() {
     return genPlanes(this.vertexes)
       .map(el => el.mesh())
       .reduce((prev, triangles) => prev.concat(triangles), [])
@@ -49,18 +49,18 @@ const Mesher = superclass => class Mesher extends superclass {
 }
 
 export default class Cube extends mix().with(Geometry, Mesher) {
-  get center () {
+  get center() {
     return this.center_
   }
 
-  get sideLen () {
+  get sideLen() {
     return this.sideLen_
   }
 
-  constructor (sideLen, centerX, centerY, centerZ) {
+  constructor(sideLen, centerX, centerY, centerZ) {
     super()
 
-    check(sideLen, 'sideLen').gt(0)
+    validate(sideLen, 'sideLen').gt(0)
 
     let center
 

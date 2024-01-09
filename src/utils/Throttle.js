@@ -1,17 +1,17 @@
 /**
  * 频率限制器
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
-import check from 'param-check'
-import disposable from 'litchy/lib/decorator/disposable'
-import undisposed from 'litchy/lib/decorator/undisposed'
+import { mix } from 'mix-with'
+import validate from 'io-validate'
+import Disposable from 'refra/lib/mixin/Disposable'
+import undisposed from 'refra/lib/decorator/undisposed'
 
-@disposable
-export default class Throttle {
+export default class Throttle extends mix().with(Disposable) {
   @undisposed
-  get shouldRun () {
+  get shouldRun() {
     const now = (new Date()).getTime()
     const ret = now - this.lastTime_ >= this.limit_
 
@@ -22,8 +22,10 @@ export default class Throttle {
     return ret
   }
 
-  constructor (limit) {
-    check(limit, 'limit').gt(0)
+  constructor(limit) {
+    super()
+
+    validate(limit, 'limit').gt(0)
 
     this.lastTime_ = 0
     this.limit_ = 1000 / limit

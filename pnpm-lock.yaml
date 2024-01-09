@@ -12,23 +12,26 @@ dependencies:
     specifier: ^0.1.7
     version: 0.1.7
   dodele:
-    specifier: ^1.0.5
-    version: 1.0.5
+    specifier: ^1.0.10
+    version: 1.0.10
+  io-validate:
+    specifier: ^2.2.2
+    version: 2.2.2
   konph:
     specifier: ^0.1.6
     version: 0.1.6
-  litchy:
-    specifier: ^1.2.2
-    version: 1.2.2
   lodash:
     specifier: ^4.17.4
     version: 4.17.4
-  param-check:
-    specifier: ^1.1.9
-    version: 1.1.9
+  mix-with:
+    specifier: ^3.2.4
+    version: 3.2.4
   polygala:
     specifier: ^0.1.0
     version: 0.1.0
+  refra:
+    specifier: ^4.0.32
+    version: 4.0.32
   shortid:
     specifier: ^2.2.8
     version: 2.2.8
@@ -456,7 +459,7 @@ packages:
       convert-source-map: 1.9.0
       debug: 2.6.9
       json5: 0.5.1
-      lodash: 4.17.4
+      lodash: 4.17.21
       minimatch: 3.1.2
       path-is-absolute: 1.0.1
       private: 0.1.8
@@ -474,7 +477,7 @@ packages:
       babel-types: 6.26.0
       detect-indent: 4.0.0
       jsesc: 1.3.0
-      lodash: 4.17.4
+      lodash: 4.17.21
       source-map: 0.5.7
       trim-right: 1.0.1
     dev: true
@@ -506,7 +509,7 @@ packages:
       babel-helper-function-name: 6.24.1
       babel-runtime: 6.26.0
       babel-types: 6.26.0
-      lodash: 4.17.4
+      lodash: 4.17.21
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -559,7 +562,7 @@ packages:
     dependencies:
       babel-runtime: 6.26.0
       babel-types: 6.26.0
-      lodash: 4.17.4
+      lodash: 4.17.21
     dev: true
 
   /babel-helper-remap-async-to-generator@6.24.1:
@@ -692,7 +695,7 @@ packages:
       babel-template: 6.26.0
       babel-traverse: 6.26.0
       babel-types: 6.26.0
-      lodash: 4.17.4
+      lodash: 4.17.21
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -974,7 +977,7 @@ packages:
       babel-runtime: 6.26.0
       core-js: 2.6.12
       home-or-tmp: 2.0.0
-      lodash: 4.17.4
+      lodash: 4.17.21
       mkdirp: 0.5.6
       source-map-support: 0.4.18
     transitivePeerDependencies:
@@ -994,7 +997,7 @@ packages:
       babel-traverse: 6.26.0
       babel-types: 6.26.0
       babylon: 6.18.0
-      lodash: 4.17.4
+      lodash: 4.17.21
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -1010,7 +1013,7 @@ packages:
       debug: 2.6.9
       globals: 9.18.0
       invariant: 2.2.4
-      lodash: 4.17.4
+      lodash: 4.17.21
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -1020,7 +1023,7 @@ packages:
     dependencies:
       babel-runtime: 6.26.0
       esutils: 2.0.3
-      lodash: 4.17.4
+      lodash: 4.17.21
       to-fast-properties: 1.0.3
     dev: true
 
@@ -1571,11 +1574,6 @@ packages:
       wrap-ansi: 2.1.0
     dev: true
 
-  /clone@2.1.2:
-    resolution: {integrity: sha512-3Pe/CF1Nn94hyhIYpjtiLhdCoEoz0DqQ+988E9gmeEdQZlojxnOb74wctFyuwWQHzqyf9X7C7MG8juUpqBJT8w==}
-    engines: {node: '>=0.8'}
-    dev: false
-
   /co@4.6.0:
     resolution: {integrity: sha512-QVb0dM5HvG+uaxitm8wONl7jltx8dqhfU33DcqtOZcLSVIKSDDLDi7+0LbAKiyI8hD9u42m2YxXSkMGWThaecQ==}
     engines: {iojs: '>= 1.0.0', node: '>= 0.12.0'}
@@ -1998,8 +1996,8 @@ packages:
       buffer-indexof: 1.1.1
     dev: true
 
-  /dodele@1.0.5:
-    resolution: {integrity: sha512-nfeiMTB0NN9Q/DrzZLO+klIoHlq8L6NCX9WGTidSBI/faxUWpV+HvVdV+DQua/uhqW2XyzgJ53OZSTRQwU6Yaw==}
+  /dodele@1.0.10:
+    resolution: {integrity: sha512-ypj/4X5sA5M0uhKNhjRTAxbu+C/MmL3R6FpKng0739Spet1VRBlhwquvOpFv4mG/t/N4E3SlgOVPoay3pZf2Iw==}
     dev: false
 
   /domain-browser@1.2.0:
@@ -3150,7 +3148,7 @@ packages:
     dependencies:
       http-proxy: 1.18.1(debug@3.2.7)
       is-glob: 3.1.0
-      lodash: 4.17.4
+      lodash: 4.17.21
       micromatch: 2.3.11
     transitivePeerDependencies:
       - debug
@@ -3185,6 +3183,10 @@ packages:
   /iferr@0.1.5:
     resolution: {integrity: sha512-DUNFN5j7Tln0D+TxzloUjKB+CtVu6myn0JEFak6dG18mNt9YkQ6lzGCdafwofISZ1lLF3xRHJ98VKy9ynkcFaA==}
     dev: true
+
+  /immediate@3.3.0:
+    resolution: {integrity: sha512-HR7EVodfFUdQCTIeySw+WDRFJlPcLOJbXfwwZ7Oom6tjsvZ3bOkCDJHehQC3nxJrv7+f9XecwazynjU8e4Vw3Q==}
+    dev: false
 
   /import-local@1.0.0:
     resolution: {integrity: sha512-vAaZHieK9qjGo58agRBg+bhHX3hoTZU/Oa3GESWLz7t1U62fk63aHuDJJEteXoDeTCcPmUT+z38gkHPZkkmpmQ==}
@@ -3254,6 +3256,12 @@ packages:
     resolution: {integrity: sha512-xgs2NH9AE66ucSq4cNG1nhSFghr5l6tdL15Pk+jl46bmmBapgoaY/AacXyaDznAqmGL99TiLSQgO/XazFSKYeQ==}
     engines: {node: '>=0.10.0'}
     dev: true
+
+  /io-validate@2.2.2:
+    resolution: {integrity: sha512-15Ep3gBilSETHvA9zHYnXn64D5Hg0nSo7NyR+9a3ltDFOldDzKPdmu5Zjh1MLTOuR1+sgCTdKkQaRaHym5tTmQ==}
+    dependencies:
+      lodash: 4.17.21
+    dev: false
 
   /ip@1.1.8:
     resolution: {integrity: sha512-PuExPYUiu6qMBQb4l06ecm6T6ujzhmh+MeJcW9wa89PoAz5pvd4zPgN5WJV104mb6S2T1AwNIAaB70JNrLQWhg==}
@@ -3743,20 +3751,6 @@ packages:
       type-check: 0.3.2
     dev: true
 
-  /litchy@1.2.2:
-    resolution: {integrity: sha512-bZBWF+m9+DJhReopZuAjCiiNJzzQNXNSLqpMm9U4d/Fx3pyrdpv7n9Ifyq92inZpesaghE9wxQfGtVSJiqpmpQ==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
-    dependencies:
-      chivy: 0.1.7
-      clone: 2.1.2
-      fast-deep-equal: 1.1.0
-      lodash: 4.17.4
-      mix-with: 1.0.3
-      param-check: 1.1.9
-      polygala: 0.1.0
-      shortid: 2.2.8
-    dev: false
-
   /load-json-file@1.1.0:
     resolution: {integrity: sha512-cy7ZdNRXdablkXYNI049pthVeXFurRyb9+hA/dZzerZ0pGTx42z+y+ssxBaVV2l70t1muq5IdKhn4UtcoGUY9A==}
     engines: {node: '>=0.10.0'}
@@ -3839,6 +3833,14 @@ packages:
     resolution: {integrity: sha512-JwObCrNJuT0Nnbuecmqr5DgtuBppuCvGD9lxjFpAzwnVtdGoDQ1zig+5W8k5/6Gcn0gZ3936HDAlGd28i7sOGQ==}
     dev: true
 
+  /lodash.isfunction@3.0.9:
+    resolution: {integrity: sha512-AirXNj15uRIMMPihnkInB4i3NHeb4iBtNg9WRWuK2o31S+ePwwNmDPaTL3o7dTJ+VXNZim7rFs4rxN4YU1oUJw==}
+    dev: false
+
+  /lodash.isstring@4.0.1:
+    resolution: {integrity: sha512-0wJxfxH1wgO3GrbuP+dTTk7op+6L41QCXbGINEmD+ny/G/eCqGzxyCsh7159S+mgDDcoarnBw6PC1PS5+wUGgw==}
+    dev: false
+
   /lodash.keys@3.1.2:
     resolution: {integrity: sha512-CuBsapFjcubOGMn3VD+24HOAPxM79tH+V6ivJL3CHYjtrawauDJHUk//Yew9Hvc6e9rbCrURGk8z6PC+8WJBfQ==}
     dependencies:
@@ -3847,9 +3849,12 @@ packages:
       lodash.isarray: 3.0.4
     dev: true
 
+  /lodash.mapvalues@4.6.0:
+    resolution: {integrity: sha512-JPFqXFeZQ7BfS00H58kClY7SPVeHertPE0lNuCyZ26/XlN8TvakYD7b9bGyNmXbT/D3BbtPAAmq90gPWqLkxlQ==}
+    dev: false
+
   /lodash@4.17.21:
     resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
-    dev: true
 
   /lodash@4.17.4:
     resolution: {integrity: sha512-6X37Sq9KCpLSXEh8uM12AKYlviHPNNk4RxiGBn4cmKGJinbXBneWIV7iE/nXkM928O7ytHcHb6+X6Svl0f4hXg==}
@@ -4126,8 +4131,10 @@ packages:
       through2: 2.0.5
     dev: true
 
-  /mix-with@1.0.3:
-    resolution: {integrity: sha512-ZUYnBuLhhf2l1CgAfK/s6HK8DSpbJrti1GjG2y+0fKJqvrTnjTwrLXI0DNULil2mqbHnMHHSlkSELD6WtiGcDw==}
+  /mix-with@3.2.4:
+    resolution: {integrity: sha512-J1iKCzHEMnpFQVrYLqKChQRYH2RmoCmtcGnWd/wwpMyVr1IxG8gW7861gGa0igOm+6vni3yrnN38OSp/gDAHjg==}
+    dependencies:
+      tslib: 2.6.2
     dev: false
 
   /mixin-deep@1.3.2:
@@ -4554,13 +4561,6 @@ packages:
       readable-stream: 2.3.8
     dev: true
 
-  /param-check@1.1.9:
-    resolution: {integrity: sha512-uyMIet2Xiozsq9dFNuPkgYPBwFcObqGXOAM8LXZ0DXOUzaK4ppDeD/DVe544UuxBnOS0NTk2aPmGFLqMTaBFsQ==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
-    dependencies:
-      lodash: 4.17.4
-    dev: false
-
   /parse-asn1@5.1.6:
     resolution: {integrity: sha512-RnZRo1EPU6JBnra2vGHj0yhp6ebyjBZpmUCLHWiFhxlzvBCCpAuZ7elsBp1PVAbQN0/04VD/19rfzlBSwLstMw==}
     dependencies:
@@ -4714,6 +4714,12 @@ packages:
     resolution: {integrity: sha512-BzRg1gbDbkH1D+wCwmJEO92VdIAhLKTcMovqI1MELgXh270XjgYquTIqdP/CUvR9XimIQV9fNJSXs+hNAH2+Gw==}
     dependencies:
       setimmediate: 1.0.5
+    dev: false
+
+  /polygala@2.1.0:
+    resolution: {integrity: sha512-VPtGwPxRec3dLT11SCtWdOqQNPQCMeEmJh/3Q5kKsRxpXqOATr2cq9h2qMevMRAB1OWEUgR2gaLdyaTsEGD6FQ==}
+    dependencies:
+      immediate: 3.3.0
     dev: false
 
   /portfinder@1.0.32(supports-color@5.5.0):
@@ -4983,6 +4989,17 @@ packages:
       indent-string: 2.1.0
       strip-indent: 1.0.1
     dev: true
+
+  /refra@4.0.32:
+    resolution: {integrity: sha512-iGzLyXsgjVUlmbbbzcBzwPsWJJZfANGtjjFZSvybrfJEcQuUo4kii5Q1r0KNOZLXG7Q53e21wyDL5eQlAkcHOQ==}
+    dependencies:
+      fast-deep-equal: 1.1.0
+      lodash.isfunction: 3.0.9
+      lodash.isstring: 4.0.1
+      lodash.mapvalues: 4.6.0
+      mix-with: 3.2.4
+      polygala: 2.1.0
+    dev: false
 
   /regenerate@1.4.2:
     resolution: {integrity: sha512-zrceR/XhGYU/d/opr2EKO7aRHUeiBI8qjtfHqADTwZd6Szfy16la6kqD0MIUs5z5hx6AaKa+PixpPrR289+I0A==}
@@ -5837,6 +5854,10 @@ packages:
     resolution: {integrity: sha512-WZGXGstmCWgeevgTL54hrCuw1dyMQIzWy7ZfqRJfSmJZBwklI15egmQytFP6bPidmw3M8d5yEowl1niq4vmqZw==}
     engines: {node: '>=0.10.0'}
     dev: true
+
+  /tslib@2.6.2:
+    resolution: {integrity: sha512-AEYxH93jGFPn/a2iVAwW87VuUIkR1FVUKB77NwMF7nBTDkDrrT/Hpt/IrCJ0QXhW27jTBDcf5ZY7w6RiqTMw2Q==}
+    dev: false
 
   /tty-browserify@0.0.0:
     resolution: {integrity: sha512-JVa5ijo+j/sOoHGjw0sxw734b1LhBkQ3bvUGNdxnVXDCX81Yx7TFgnZygxrIIWn23hbfTaMYLwRmAxFyDuFmIw==}

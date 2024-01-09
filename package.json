@@ -51,13 +51,15 @@
     "webpack-glsl-loader": "^1.0.1"
   },
   "dependencies": {
+    "babel-runtime": "^6.26.0",
     "chivy": "^0.1.7",
-    "dodele": "^1.0.5",
+    "dodele": "^1.0.10",
+    "io-validate": "^2.2.2",
     "konph": "^0.1.6",
-    "litchy": "^1.2.2",
     "lodash": "^4.17.4",
-    "param-check": "^1.1.9",
+    "mix-with": "^3.2.4",
     "polygala": "^0.1.0",
+    "refra": "^4.0.32",
     "shortid": "^2.2.8"
   }
 }

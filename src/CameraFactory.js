@@ -1,7 +1,7 @@
 /**
  * 摄像机创建器
  *
- * @author Y3G
+ * @author yusangeng@outlook.com
  */
 
 import merge from 'lodash/merge'
@@ -39,7 +39,7 @@ const defaultDataMap = {
   pannini: {}
 }
 
-function create ({ type, data }) {
+function create({ type, data }) {
   const CameraClass = cameraMap[type]
 
   if (!CameraClass) {
@@ -50,7 +50,7 @@ function create ({ type, data }) {
 }
 
 export default superclass => class c extends superclass {
-  createCamera (options = {}) {
+  createCamera(options = {}) {
     const el = this.el
 
     const defaultOptions = {
