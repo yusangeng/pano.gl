@@ -49,10 +49,11 @@ export default class Texture extends mix().with(Eventable) {
   constructor({ projection = 'equiprectangular', frameSize, provider }) {
     super()
 
-    validate(projection, 'projection').among('equiprectangular', 'fisheye')
     validate(provider, 'provider').isObject()
 
     let prj = projection.toLowerCase()
+
+    validate(prj, 'projection.toLowerCase()').among('equiprectangular', 'fisheye')
 
     if (prj === 'equiprectangular') {
       prj = PROJECTION_EQUIPRECTANGLULAR

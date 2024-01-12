@@ -25,6 +25,11 @@ class ImageViewerWrap extends mix().with(Eventable) {
     this.viewer.src = './image/8192x4096.jpg'
   }
 
+  @callback('click', '.j-6000')
+  on6000Click() {
+    this.viewer.src = './image/6000x3000.jpg'
+  }
+
   @callback('click', '.j-4096')
   on4096Click() {
     this.viewer.src = './image/4096x2048.jpg'
