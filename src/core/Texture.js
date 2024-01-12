@@ -66,21 +66,9 @@ export default class Texture extends mix().with(Eventable) {
     this.projection_ = prj
 
     if (frameSize) {
-      // frame canvas 尺寸
-      const frameSize = this.frameSize_ = merge({}, frameSize)
-      const frame = this.frameCanvas_ = document.createElement('canvas')
-
-      frame.width = frameSize.width
-      frame.height = frameSize.height
-
-      // 默认全黑
-      const ctx = frame.getContext('2d')
-      ctx.fillRect(0, 0, frame.width, frame.height)
-
-      this.direct_ = false
+      this.createFrameCanvas(frameSize)
     } else {
-      // 如果不需要裁剪和缩放，则不需要创建 frameCanvas，直接把 media_ 传出去即可
-      this.direct_ = true
+      this.clearFrameCanvasAndSetDirect()
     }
 
     provider.on('*', evt => this.trigger(assign({ target: this }, evt)))
@@ -98,5 +86,29 @@ export default class Texture extends mix().with(Eventable) {
   @undisposed
   update() {
     return this.provider_.updateTexture(this)
+  }
+
+  // private
+
+  createFrameCanvas(frameSize) {
+    // frame canvas 尺寸
+    const fSize = this.frameSize_ = merge({}, frameSize)
+    const frame = this.frameCanvas_ = document.createElement('canvas')
+
+    frame.width = fSize.width
+    frame.height = fSize.height
+
+    // 默认全黑
+    const ctx = frame.getContext('2d')
+    ctx.fillRect(0, 0, frame.width, frame.height)
+
+    this.direct_ = false
+  }
+
+  clearFrameCanvasAndSetDirect() {
+    // 如果不需要裁剪和缩放，则不需要创建 frameCanvas，直接把 media_ 传出去即可
+    this.frameSize_ = null
+    this.frameCanvas_ = null
+    this.direct_ = true
   }
 }

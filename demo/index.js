@@ -6,28 +6,44 @@ import callback from 'dodele/lib/decorator/callback'
 import ImageViewer from '../src/FramelessImageViewer'
 import VideoViewer from '../src/FramelessVideoViewer'
 
+function createImageViewer(src, frameSize = void 0) {
+  const ret = new ImageViewer({
+    el: '#image-view',
+    src: src,
+    camera: {
+      type: 'perspective'
+    }
+  })
+
+  ret.on("media-load", () => {
+    console.log("media-load")
+  })
+
+  ret.on("media-error", () => {
+    console.error("media-error")
+  })
+}
+
 @delegate
 class ImageViewerWrap extends mix().with(Eventable) {
   constructor() {
     super()
-
-    this.viewer = new ImageViewer({
-      el: '#image-view',
-      src: './image/8192x4096.jpg',
-      camera: {
-        type: 'perspective'
-      }
-    })
+    this.viewer = createImageViewer('./image/8192x4096.jpg')
   }
 
   @callback('click', '.j-8192')
   on8192Click() {
-    this.viewer.src = './image/8192x4096.jpg'
+    this.viewer.dispose()
+    this.viewer = createImageViewer('./image/8192x4096.jpg')
   }
 
   @callback('click', '.j-6000')
   on6000Click() {
-    this.viewer.src = './image/6000x3000.jpg'
+    this.viewer.dispose()
+    this.viewer = createImageViewer('./image/8192x4096.jpg', {
+      width: 4096,
+      height: 2048
+    })
   }
 
   @callback('click', '.j-4096')
