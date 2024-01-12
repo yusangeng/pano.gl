@@ -21,8 +21,8 @@ dependencies:
     specifier: ^0.1.6
     version: 0.1.6
   lodash:
-    specifier: ^4.17.4
-    version: 4.17.4
+    specifier: ^4.17.21
+    version: 4.17.21
   mix-with:
     specifier: ^3.2.4
     version: 3.2.4
@@ -397,7 +397,7 @@ packages:
       convert-source-map: 1.9.0
       fs-readdir-recursive: 1.1.0
       glob: 7.2.3
-      lodash: 4.17.4
+      lodash: 4.17.21
       output-file-sync: 1.1.2
       path-is-absolute: 1.0.1
       slash: 1.0.0
@@ -433,7 +433,7 @@ packages:
       convert-source-map: 1.9.0
       debug: 2.6.9
       json5: 0.5.1
-      lodash: 4.17.4
+      lodash: 4.17.21
       minimatch: 3.1.2
       path-is-absolute: 1.0.1
       private: 0.1.8
@@ -1454,7 +1454,7 @@ packages:
     dependencies:
       dateformat: 2.2.0
       konph: 0.1.6
-      lodash: 4.17.4
+      lodash: 4.17.21
     dev: false
 
   /chokidar@1.7.0:
@@ -3728,7 +3728,7 @@ packages:
   /konph@0.1.6:
     resolution: {integrity: sha512-mSf3kuvEuaHzN0Id6q1pfSMjwPrrts7DAImgZrQN9/cDn1j2DXG0MLVP3Q6WM5Rd8QuBlU4Kc3jo+cnMpX8hpg==}
     dependencies:
-      lodash: 4.17.4
+      lodash: 4.17.21
     dev: false
 
   /lazy-cache@1.0.4:
@@ -3855,9 +3855,6 @@ packages:
 
   /lodash@4.17.21:
     resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
-
-  /lodash@4.17.4:
-    resolution: {integrity: sha512-6X37Sq9KCpLSXEh8uM12AKYlviHPNNk4RxiGBn4cmKGJinbXBneWIV7iE/nXkM928O7ytHcHb6+X6Svl0f4hXg==}
 
   /loglevel@1.8.1:
     resolution: {integrity: sha512-tCRIJM51SHjAayKwC+QAg8hT8vg6z7GSgLJKGvzuPb1Wc+hLzqtuVLxp6/HzSPOozuK+8ErAhy7U/sVzw8Dgfg==}
@@ -6181,7 +6178,7 @@ packages:
       express: 4.18.2
       filesize: 3.6.1
       gzip-size: 3.0.0
-      lodash: 4.17.4
+      lodash: 4.17.21
       mkdirp: 0.5.6
       opener: 1.5.2
       ws: 4.1.0
