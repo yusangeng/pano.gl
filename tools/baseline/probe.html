@@ -196,7 +196,23 @@
         // The renderer appends its canvas to `host` during construction, so it
         // exists by now. Recording starts here; draws from any earlier viewer
         // are ignored from this point on.
-        window.__probe.setTarget(host.querySelector('canvas'))
+        var canvas = host.querySelector('canvas')
+        /*
+         * readPixels always reads a fixed SIZE x SIZE rectangle from the origin,
+         * so a canvas of any other size would be captured as a silently wrong
+         * sub-rectangle instead of as a failure -- the one error mode this
+         * harness cannot afford, since nothing downstream could tell a
+         * cropped fixture from a correct one. The container is what sizes the
+         * canvas, so this checks that chain end to end rather than trusting the
+         * comment at the top of this file.
+         */
+        if (!canvas) return reject(new Error('viewer produced no canvas for ' + camera))
+        if (canvas.width !== SIZE || canvas.height !== SIZE) {
+          return reject(new Error(
+            'canvas is ' + canvas.width + 'x' + canvas.height + ', probe reads ' + SIZE + 'x' + SIZE
+          ))
+        }
+        window.__probe.setTarget(canvas)
 
         var settled = false
         var fail = function (e) { if (!settled) { settled = true; reject(e) } }

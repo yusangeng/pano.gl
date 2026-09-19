@@ -21,6 +21,30 @@ PNG rows are top-down, flipped at encode time because the GL origin is
 bottom-up. A renderer reading its own framebuffer from row 0 is already in the
 same orientation, so a comparison needs no flip in either direction.
 
+## Reproducibility
+
+Checked by re-running the full capture on a later run and diffing the working
+tree: **every one of the 16 PNGs and all 16 uniform streams came back
+byte-identical**, and `index.json` differed only in `capturedAt`. So the
+`pngSha256` column is a cross-run invariant rather than a record of one
+afternoon, and a pixel gate comparing against these files is comparing against
+something that can be re-derived on demand.
+
+Two things this does not cover, and neither is a defect in the harness:
+
+- **Same machine, same browser build.** `capture.mjs` pins Playwright's
+  `channel: 'chromium'` so the rasteriser is the real one rather than
+  SwiftShader, but a future Chromium could legitimately round differently. If a
+  regeneration ever produces different pixels, that is the first thing to
+  suspect, and the right response is to decide deliberately whether the locked
+  baseline moves rather than to silently accept new bytes.
+- **GPU-dependent rounding.** A different machine's driver may not reproduce
+  these bytes exactly. Anything comparing across machines needs a tolerance,
+  which is what gate C already assumes between the two backends.
+
+If you regenerate and get a diff anywhere other than `capturedAt`, do not commit
+it until you know why. The whole point of freezing this is that it stops moving.
+
 ## Why three frames
 
 v0.2.2 rebuilds geometry only when `camera.id` changes
