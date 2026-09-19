@@ -919,7 +919,7 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 
 | 期 | 内容 | 验收标准 | 旧代码 |
 |---|---|---|---|
-| **P0** | **冻结基线** | 四个投影 × N 组相机状态的**像素**与 **uniform 流**已捕获、提交为 fixture | **依赖** |
+| **P0** | **冻结基线** | **已完成**：四个投影 × 4 组相机状态的**像素**与 **uniform 流**已捕获并提交，清单见 `test/fixtures/baseline/index.json`（逐条含 PNG 字节数与 sha256），捕获器与判据见 `tools/baseline/`，读数与推论见 `test/fixtures/baseline/README.md` | **依赖** |
 | P1 | 工具链骨架 | `npm run build` 出包；`npm test` 真在跑测试；CI 断言 WebGPU 可用 | 不动 |
 | P2 | `core/` 纯逻辑 | 分支覆盖 ≥90%；常量生成器测试通过；**CPU 参考实现复现 P0 的 uniform 流** | 不动 |
 | P3 | `renderer/` + WebGPU | **门禁 A、B 通过**；golden image 命中 | 参考资料 |
@@ -932,7 +932,7 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 
 | 门禁 | 位置 | 验什么 | 失败意味着 |
 |---|---|---|---|
-| **A** | P3 | 全屏三角形替掉立方体/四边形后，**四个投影各自**与 P0 基线比像素。**基线只含纬度为零的状态** —— F5 是刻意的行为变更，纬度非零处本来就该不一致 | 某个投影的片元着色器其实依赖几何细分（§4.5 被推翻） |
+| **A** | P3 | 全屏三角形替掉立方体/四边形后，**四个投影各自**与 P0 基线比像素。**可比状态是从基线派生的子集，不是"全部"**：F5 把三个非线性相机限制在 `lat == 0`（v1 刻意让纬度生效，纬度非零处本来就该不一致），F12 把 zoom 可比性限制在 `pannini`（其余相机的放大被 v0.2.2 丢掉），F10 实测生效故非零经度仍可比。逐条推导见 `test/fixtures/baseline/README.md` 末节 | 某个投影的片元着色器其实依赖几何细分（§4.5 被推翻） |
 | **B** | P3 | 非线性相机的**逆矩阵还原**精确复现旧坐标范围（cylindrical 1×1、planet/pannini 4×4） | 旧的分段行为里有没看懂的东西 |
 | **C** | P6 | WGSL vs GLSL 跨后端一致，±1~2 LSB，极点放宽 | 两份实现的数值路径差异超预期 |
 
@@ -973,7 +973,7 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 
 ## 11. 已知缺陷清单
 
-本设计修掉的全部旧缺陷。**【核码】** 全部经源码确认。
+本设计修掉的全部旧缺陷。**【核码】** 全部经源码确认；标 **【实测】** 的条目另有 P0 基线的实测证据（`test/fixtures/baseline/`，逐条的取证方式见 `test/fixtures/baseline/README.md`）。
 
 ### 11.1 正确性
 
@@ -983,20 +983,20 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 | F2 | `PROJECTION_FISHEYE` 只在被注释掉的分支里赋值 → 死常量 | `Texture.js:57` | 删除；常量表只保留已实现项 |
 | F3 | GLSL `tex_proj_fisheye()` 活着返回 `vec2(0,0)`，JS 侧同名分支抛异常 → 两侧矛盾 | `fshader.glsl:121-124` / `Texture.js:60` | 同上，两侧一致 |
 | F4 | 深度测试开着、深度缓冲从不清理 → 正确性依赖上一帧深度值 | `utils/gl.js:18-19` / `Renderer.js:144` | §4.6 无深度测试、无深度附件 |
-| F5 | **非线性相机 `povLatitude` 无效** —— 死 uniform `u_CamPOVLatitude`，且内部 ortho 相机只读不更新 | `fshader.glsl:21` | **修，且这是本项目唯一一处刻意的行为变更**：三个非线性公式的 `phi` 加 `- lat`。门禁 A 只比对纬度为零的状态，另立测试钉住新行为；见 §12 |
-| F6 | `u_CamGeoWidth` / `u_CamGeoHeight` 是死 uniform，每帧白传 | `fshader.glsl:17-18` | §4.5 提升为显式投影参数 `extent`，**在 CPU 侧建矩阵时真正被读**；不再进 uniform |
+| F5 | **【实测】** **非线性相机 `povLatitude` 无效** —— 死 uniform `u_CamPOVLatitude`，且内部 ortho 相机只读不更新。取证：`test/fixtures/baseline/*/origin.uniforms.json` 中 `u_CamPOVLatitude` **从不出现**（编译器丢弃 → `getUniformLocation` 返回 null → `Renderer.render` 跳过），三个非线性相机的 `u_CamTransMatrix` 四态逐字节相同（位姿只走 `u_CamPOVLongitude`），且 `cam_proj_cylindrical` 的 `phi = atan(y) + HALF_PI` 独立地不读纬度。比「被忽略」更强：纬度**原理上**到不了 GPU | `fshader.glsl:21` | **修，且这是本项目唯一一处刻意的行为变更**：三个非线性公式的 `phi` 加 `- lat`。门禁 A 只比对纬度为零的状态，另立测试钉住新行为；见 §12 |
+| F6 | **【实测】** `u_CamGeoWidth` / `u_CamGeoHeight` 是死 uniform，每帧白传（同 F5 的取证：全套 16 条 capture 里都不出现） | `fshader.glsl:17-18` | §4.5 提升为显式投影参数 `extent`，**在 CPU 侧建矩阵时真正被读**；不再进 uniform |
 | F7 | `createProgram` 失败 log + `return null` → viewer 构造「成功」但永不渲染 | `utils/gl.js` | §6.3 构造时抛 |
 | F8 | 无 `contextlost` 处理 | 全库 | §6.4 |
 | F9 | **无 devicePixelRatio 处理 → 高分屏发虚** | `Renderer.adjustSize` | §4.8 |
-| F10 | `fshader.glsl:32` 全局非常量初始化（ESSL 1.00/3.00 均非法，ANGLE 容忍） | `fshader.glsl:32` | 移进函数体 |
-| F11 | `povLongitude` setter 用 `long % 25` 作误差累积护栏，与线性相机的 `[0,360)` 回绕不一致 | 三个非线性相机 | 统一为 `[0, 360)` 回绕 |
-| F12 | `PanniniCamera` 的 zoom 上界是 `2`，其他相机是 `1` | `PanniniCamera.js` | **需确认哪个是正确行为**，统一 |
+| F10 | **【实测】** `fshader.glsl:32` 全局非常量初始化（ESSL 1.00/3.00 均非法，ANGLE 容忍）—— 实测**没有被编译成常量零**：`cylindrical/` 的 `origin` 与 `tilt` 两张 PNG 不同，而 `lng` 是 `u_CamPOVLongitude` 的唯一消费者（`theta = z * TWO_PI - lng / 2.0` 及下游两处）。旧版确实会转，§11.4 的 B1 行为因此是可观测的而非纸面的 | `fshader.glsl:32` | 移进函数体 |
+| F11 | **【实测】** `povLongitude` setter 用 `long % 25` 作误差累积护栏，与线性相机的 `[0,360)` 回绕不一致 —— 实测 `45 → 20`、`180 → 5`、`300 → 0`，与 `% 25` 逐值吻合 | 三个非线性相机 | 统一为 `[0, 360)` 回绕 |
+| F12 | **【实测】** `PanniniCamera` 的 zoom 上界是 `2`，其他相机是 `1`；实测这个夹取还是**单向**的：`CylindricalCamera` / `PlanetCamera` 的 `clamp(value, 0.1, 1)` 把放大整个丢掉（`zoomed` 态 `u_CamZoom` 仍是 1），只有缩小生效。`pannini` 是唯一 `u_CamZoom` 离开 1 的相机，正好构成对照 | `PanniniCamera.js` | **需确认哪个是正确行为**，统一 |
 
 ### 11.2 资源泄漏
 
 | # | 缺陷 | 位置 | 新设计如何处置 |
 |---|---|---|---|
-| L1 | `window.removeEventLstener` 拼错，**两处** → resize 监听永久泄漏 | `RenderFlow.dispose` / `Renderer.dispose` | §4.8 `ResizeObserver.disconnect()` |
+| L1 | **【实测】** `window.removeEventLstener` 拼错，**两处** → resize 监听永久泄漏。实测比「监听泄漏」更重：`RenderFlow.dispose` 把它当**第一条语句**调用，抛出后 `driver_.dispose()` 永不执行，**rAF 渲染循环也永不停止**——每个构造过的 viewer 永远在画。取证：`tools/baseline/probe.html` 必须按 canvas 身份过滤 `drawArrays`，否则后建的 viewer 会污染先前 capture 的帧记录 | `RenderFlow.dispose` / `Renderer.dispose` | §4.8 `ResizeObserver.disconnect()` |
 | L2 | 插件从不释放 —— `ZoomPlugin` / `PanPlugin` 是裸类无 `dispose()` | `Viewer.js:41-42` | §5.3 `AbortController` |
 | L3 | 顶点缓冲从不删除 —— `initVertexBuffer` 每次 `createBuffer()`，全库零 `deleteBuffer` | `utils/gl.js` | §4.5 顶点缓冲消失 |
 | L4 | `camera_ = null` 但不 `dispose()`；非线性相机内部的 `ortho_` 也从不释放 | `RenderFlow.dispose` | §6.2 显式释放 |
@@ -1025,6 +1025,8 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 
 **【核码】** 三层链路的净效果是 `povLongitude / 4`：`CameraState.povLongitude` 是**度**，`theta` 是**弧度**，减掉的是二者的混合量 —— 既不是正确的度转弧度（`* PI / 180`，差约 29 倍），也不是任何一致的量纲。**修正它会直接改变拖拽灵敏度**，那是一个用户可见的行为变更，不是一次内部重构。
 
+**【实测】** 这条链路是活的，所以「照旧」是一个真实的约束而不是纸面推演：`cylindrical/origin` 与 `cylindrical/tilt` 的基线 PNG 不同（F10 的取证），证明 v0.2.2 的非线性相机确实在转，v1 必须转到同一个地方。
+
 **v1 不做这个决定。** 验收标准是「渲染出 v0.2.2 渲染的东西」，照旧是唯一能过门禁 A 的做法。要改就是单独一次有意的变更，需要自己的测试（形状同 §12 的 F5），并且要说明为什么新的灵敏度是对的。P3 的着色器、P6 的 GLSL 与 `src/core/reference.ts` 三处都带这条注释，指向这里。
 
 ---
@@ -1037,11 +1039,16 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 |---|---|---|---|
 | V1 | 全屏三角形能否服务全部四个投影 | A | 中 —— 失败则退回分族几何，架构不动 |
 | V2 | 非线性相机的逆矩阵还原能否精确复现旧坐标范围 | B | 中 —— 失败则需从 uniform 流逐帧定位 |
-| V3 | F5（非线性相机 `povLatitude` 无效）是否属实 | A | 低 —— 是 bug 修掉，不是 bug 则说明理解有误 |
-| V4 | F12（pannini zoom 上界 2 vs 1）哪个是正确行为 | — | 低 —— 需人工判断，非测试可决 |
+| V4 | F12（pannini zoom 上界 2 vs 1）哪个是正确行为 | — | 低 —— 需人工判断，非测试可决。**实测已给出事实基础**：`1` 的那一侧不是「上界更保守」而是单向夹取，`CylindricalCamera` / `PlanetCamera` 连放大都做不到（v0.2.2 里就没有那个能力） |
 | V5 | 两份着色器的数值路径差异是否在 ±1~2 LSB 内 | C | 中 —— 失败先用 CPU 参考仲裁 |
 | V6 | WGSL uniform 布局在非 Apple GPU（Intel/AMD/高通）上是否同样成立 | — | 中 —— **【实测】只测过 Apple M2 与 SwiftShader** |
 | V7 | Linux CI（无 GPU runner）上 SwiftShader 路径是否可行 | — | 低 —— **【实测】只验证过 macOS，Linux 上是推断** |
+
+### 12.1 已结案
+
+- **V3（F5 是否属实）—— 属实，已结案。** P0 基线的实测把 F5 钉死，取证见 §11.1 的 F5 行与 `test/fixtures/baseline/README.md`。这一条从待验证清单里移出，作为 §11.1 的**已知**缺陷进入设计。同一批实测顺带把 F6（死 uniform）、F10（初始值生效）、F11（`% 25` 的具体取值）、F12（夹取是单向的）一并从【核码】升到【实测】，F5/F6/F10 三条**均未被证伪**，故 §11 无删行。
+
+  附带一条不在原清单里的观测，供 P2 的 CPU 参考实现对照：**三个非线性相机的 `u_CamTransMatrix` 四态逐字节相同**——它来自构造在 `(0,0)` 且此后不更新的内部 `ortho_` 相机，位姿只经 `u_CamPOVLongitude` 传递。线性相机恰好相反：矩阵逐态变化且完全不收 POV uniform。P2 若按「矩阵携带位姿」实现非线性相机，与基线对不上。
 
 ### 探路报告的残余风险（原文引用）
 
