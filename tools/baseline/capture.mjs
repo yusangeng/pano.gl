@@ -58,6 +58,21 @@ const sourceUrl = await page.evaluate(size => {
 }, CANVAS_SIZE)
 
 /*
+ * Assert the rasterizer *before* producing anything. channel:'chromium' asks
+ * for the real GPU, but nothing above verified we got it: headless Chromium
+ * falls back to SwiftShader without an error when its GPU process cannot
+ * start, and 16 perfectly self-consistent captures taken on software would
+ * pass every downstream check while being a baseline of the wrong rasterizer.
+ * The renderer string is recorded in index.json so the frozen baseline also
+ * carries the provenance a regeneration can be diffed against.
+ */
+const renderer = await page.evaluate(() => window.__rendererInfo())
+if (!renderer || /swiftshader|software/i.test(renderer)) {
+  throw new Error(`hardware rasterizer required, but the browser reports: ${renderer || 'no WebGL context'}`)
+}
+console.log(`renderer: ${renderer}`)
+
+/*
  * The source the captures were made with, committed alongside them.
  *
  * A pixel gate cannot compare against these PNGs while rendering a different
@@ -70,7 +85,7 @@ await writeFile(
   Buffer.from(sourceUrl.slice(sourceUrl.indexOf(',') + 1), 'base64')
 )
 
-const index = { canvasSize: CANVAS_SIZE, capturedAt: new Date().toISOString(), captures: [] }
+const index = { canvasSize: CANVAS_SIZE, renderer, capturedAt: new Date().toISOString(), captures: [] }
 
 /*
  * Start from a clean slate. Nothing downstream reconciles the fixture tree

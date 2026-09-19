@@ -1,6 +1,7 @@
 {
   "canvasSize": 128,
-  "capturedAt": "2026-09-19T08:56:47.507Z",
+  "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+  "capturedAt": "2026-09-19T16:40:05.529Z",
   "captures": [
     {
       "id": "perspective/origin",
