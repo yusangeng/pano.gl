@@ -24,6 +24,7 @@
 | `test/fixtures/baseline/index.json` | 捕获清单 + 每组的内容哈希 |
 | `test/fixtures/baseline/<camera>/<state>.uniforms.json` | 逐帧 uniform 流 |
 | `test/fixtures/baseline/<camera>/<state>.png` | 逐帧像素（仅最后一帧，PNG 无损） |
+| `test/fixtures/baseline/source.png` | **捕获所用的素材图**，连同 fixture 一起提交 |
 | `test/fixtures/baseline/bundle.js` | **v0.2.2 的构建产物，一并提交** |
 
 > **为什么连 bundle 一起提交**：基线不能依赖「2027 年还能装上 Babel 6 + webpack 3」。`npm run build-debug` 的产物是自包含的 UMD，提交它，这个 fixture 就永久可复现。
@@ -456,6 +457,19 @@ const sourceUrl = await page.evaluate(size => {
   return window.__makeSource(size)
 }, CANVAS_SIZE)
 
+/*
+ * The source the captures were made with, committed alongside them.
+ *
+ * A pixel gate cannot compare against these PNGs while rendering a different
+ * panorama, and a consumer that regenerated this pattern would be a second copy
+ * of it -- one that could silently drift from the one the baseline was actually
+ * taken with. So the bytes are kept.
+ */
+await writeFile(
+  path.join(fixtureRoot, 'source.png'),
+  Buffer.from(sourceUrl.slice(sourceUrl.indexOf(',') + 1), 'base64')
+)
+
 const index = { canvasSize: CANVAS_SIZE, capturedAt: new Date().toISOString(), captures: [] }
 
 for (const camera of CAMERAS) {
@@ -559,9 +573,30 @@ for (const n of ['u_CamPOVLatitude','u_CamPOVLongitude','u_CamTransMatrix']) {
 
 **判读**：`u_CamPOVLatitude` 若为 `IDENTICAL` → **F5 证实**（`rotate(30, 45)` 完全没进入这个 uniform）。`u_CamTransMatrix` 应当 `differs`。
 
-把结论写进 `test/fixtures/baseline/README.md`（Step 6 建），并据此在 spec §11 里把 F5 从【待验证】改成【核码】或删除。
+- [ ] **Step 6: 核对 F10（旧着色器文件作用域的 `lng` 初始化是否生效）**
 
-- [ ] **Step 6: 写 fixture 说明**
+这一步**不能靠读代码定论**。`legacy/src/shader/fshader.glsl` 里 `float lng = u_CamPOVLongitude / 2.0;` 是文件作用域的非恒定初始化，在 GLSL ES 1.0 里**非法** —— 有的驱动会把它编译成 0，那样旧的非线性相机根本不会转。哪种情况发生了，只有实测知道：
+
+```bash
+node -e "
+const fs = require('fs')
+const read = s => fs.readFileSync('test/fixtures/baseline/cylindrical/' + s + '.png')
+// Same PNG encoder on both sides, so byte equality is pixel equality here.
+console.log('cylindrical origin vs tilt:', Buffer.compare(read('origin'), read('tilt')) === 0 ? 'IDENTICAL' : 'differ')
+"
+```
+
+**为什么这两个状态能判定**：`cylindrical` 的 `phi` 不读纬度，两个状态的 `zoom` 都是 0，纬度本来就被忽略 —— 这个投影能看见的唯一输入差异**只有经度**（0 vs 45）。
+
+**判读**：
+- `IDENTICAL` ⇒ `lng` 被编译成 0，**F10 在捕获所用的 Chromium/Metal 上成立**：旧的非线性相机不响应转动。
+- `differ` ⇒ 它生效了，那这份 fixture 的像素里带着「把度数当弧度减」的旋转。
+
+**两个结论都必须写进 `test/fixtures/baseline/README.md`**，因为 P3 门禁 A 要**读这个结论来决定哪些状态可比**（F5 让非零纬度不可比；F10 让非零经度可能不可比，取决于这里测出什么）。门禁 A 会自己重测一遍，但 README 是给人看的那份记录。
+
+把 F5 / F10 的结论一并写进 `test/fixtures/baseline/README.md`（Step 7 建），并据此在 spec §11 里把这两条从【待验证】改成【核码】或删除。
+
+- [ ] **Step 7: 写 fixture 说明**
 
 `test/fixtures/baseline/README.md`：
 
@@ -580,7 +615,13 @@ cd tools/baseline && npm install && node capture.mjs
 - `<camera>/<state>.png` — the last of three steady-state frames, 128x128, lossless.
 - `<camera>/<state>.uniforms.json` — every uniform write for all three frames,
   in submission order, keyed by the name recovered from `getUniformLocation`.
+- `source.png` — the panorama every capture was rendered from, committed so that
+  a later pixel comparison renders the same image rather than regenerating one.
 - `index.json` — capture manifest, including the observed uniform set per camera.
+
+PNG rows are top-down, flipped at encode time because the GL origin is
+bottom-up. A renderer reading its own framebuffer from row 0 is already in the
+same orientation, so a comparison needs no flip in either direction.
 
 ## Why three frames
 
@@ -593,12 +634,31 @@ want the answer should use the last frame.
 
 - `u_CamGeoWidth` / `u_CamGeoHeight` are uploaded by every non-linear camera and
   read by nothing in the shader.
-- See `README.md` in this directory for the `u_CamPOVLatitude` finding.
+- `u_CamPOVLatitude` / `u_CamPOVLongitude` / `u_CamTransMatrix`: see the two
+  findings recorded below.
+- F5 (non-linear cameras ignore latitude): `<Step 5 的结论>`
+- F10 (the file-scope `lng` initializer): `<Step 6 的结论>`
+
+## Why the F10 finding matters downstream
+
+P3's gate A compares new renders against these PNGs. Its comparable set is
+derived from the two findings above, not written down:
+
+- F5 makes every non-zero latitude incomparable for the three non-linear
+  cameras, because v1 deliberately makes latitude effective where v0.2.2
+  ignored it.
+- F10 decides whether non-zero longitude is comparable too. If the invalid
+  file-scope initializer compiled to zero, longitude never reached a pixel and
+  those states are comparable; if it took effect, the pixels carry a rotation
+  produced by subtracting degrees from radians, which v1 does not reproduce.
+
+Both are recorded here so that a reviewer can see why the pixel gate runs on
+fewer states than the matrix gate, rather than having to rediscover it.
 ```
 
-（Step 5 的结论追加到此文件末尾的「Known findings」节。）
+（Step 5 与 Step 6 的结论追加到此文件末尾的「Known findings」节。）
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add tools/baseline/capture.mjs tools/baseline/probe.html test/fixtures/baseline/

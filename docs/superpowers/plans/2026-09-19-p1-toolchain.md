@@ -148,11 +148,13 @@ otherwise: npm run build-debug produces a byte-identical bundle."
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
+    "@types/pngjs": "^6.0.5",
     "@vitest/coverage-v8": "^3",
     "eslint": "^9",
     "neostandard": "^0.12.0",
     "playwright": "^1.63.0",
     "@playwright/test": "^1.63.0",
+    "pngjs": "^7.0.0",
     "tsup": "^8",
     "typedoc": "^0.28",
     "typescript": "^5.9",
@@ -163,6 +165,8 @@ otherwise: npm run build-debug produces a byte-identical bundle."
 ```
 
 **与旧 package.json 的差异是刻意的**：`babel` / `babel-*` / `webpack` / `webpack-glsl-loader` / `isparta` / `istanbul` / `mocha` / `chai` / `litchy` / `konph` / `polygala` / `shortid` / `lodash` / `chivy` / `param-check` / `dodele` **全部退出**。
+
+> `pngjs` 装在 P1 而不是用它的 P2/P3，因为「测试要读基线 PNG」这件事从 P0 存下 `test/fixtures/baseline/*.png` 的那一刻就定了。它进 devDependencies 而不是 dependencies：只被测试读，运行时不碰。`test/support/baseline.ts` 和 P3 的门禁 A 都从它取像素。
 
 > `build:legacy` 需要 webpack 与 babel 的依赖。它们**必须留着**直到 P7 —— 否则 v0.2.x 就发不了版了。见 Task 6。
 

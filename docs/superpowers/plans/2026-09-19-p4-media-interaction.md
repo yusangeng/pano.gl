@@ -20,6 +20,11 @@
 
 **所以：不要移植 `frameSize` 那套「源超标就过中间画布」的逻辑。** 新设计只在**超过 `maxTextureDimension2D`** 时才缩放，与 2 的幂无关。这一条会删掉一整类代码和 demo 的素材限制。
 
+**由此得到本层的两条硬约束，后面每一步都受它约束：**
+
+1. **`src/media/` 里不存在任何叫 `frameSize` 的选项、参数或字段**，也不要再造一个同义词（`size`、`targetSize` 之类）。「源太大该怎么办」的答案由**后端**给出 —— 后端是唯一知道 `Capabilities.maxTextureDimension` 的地方，素材层只负责把它算成上传尺寸（`planDownscale`）。
+2. **`SourceState` 由 `core` 定义，本层只组合它，不重新定义。** `core` 是两个后端都认可的那一层，且按设计不碰 DOM；媒体元素、帧计数器这类 DOM 侧的东西属于本层自己的类型。另起一个同形状的 `SourceState` 会是一个**结构上的近似副本**，它能编译通过，直到有人改了其中一份 —— 而且 P3 的 `Backend.setSource` 收的是 core 的 `SourceState`，P6 的 `WebGL2Backend implements Backend` 会因此对不上。
+
 ---
 
 ## File Structure
@@ -27,16 +32,66 @@
 | 文件 | 职责 |
 |---|---|
 | `src/core/events.ts` | `EventEmitter<M>` + `Disposable` |
-| `src/media/source.ts` | `MediaSource` 接口、`SourceState`、媒体事件列表 |
+| `src/media/source.ts` | `MediaSource` 接口、`MediaFrame`（组合 core 的 `SourceState`）、媒体事件列表 |
 | `src/media/image-source.ts` | `<img>` 实现 |
-| `src/media/video-source.ts` | `<video>` 实现，含 external texture 策略 |
+| `src/media/video-source.ts` | `<video>` 实现；**不含**上传路径选择，那要读 device，是后端的 |
 | `src/media/downscale.ts` | 超限时的缩放，与素材类型无关 |
 | `src/interaction/input-controller.ts` | 指针监听、`AbortController`、语义事件 |
 | `src/interaction/gestures.ts` | 拖拽 / 滚轮 / 双指捏合的纯函数识别 |
 | `test/unit/gestures.test.ts` | 手势识别（纯函数，好测） |
 | `test/unit/events.test.ts` | 事件系统 |
-| `test/integration/media-upload.test.ts` | 上传路径 |
+| `test/integration/image-source.test.ts` / `video-source.test.ts` | 源的生命周期、事件、监听器计数 |
+| `test/integration/video-orientation.test.ts` | 两条上传路径的朝向一致性 |
+| `test/integration/support/upload-paths.ts` | 上一条的探针：自建 device，直接驱动两个浏览器 API |
 | `test/integration/ptz.test.ts` | 交互端到端 |
+
+---
+
+## 测试入口需要导出什么
+
+集成测试跑在真实浏览器里，通过 `window.__panoTest` 拿被测对象。这个出口由 P3 的 `demo/test-entry.ts` 提供，**从 `demo/test-entry-hooks/*.ts` 目录聚合**：每个阶段往目录里丢自己的文件，谁都不用改 `test-entry.ts`（P4 与 P6 都依赖 P3，改同一个文件必然冲突，所以那条路 P3 已经堵死了）。
+
+**所以本计划要做的是新增两个 hook 文件，而不是重新赋值 `window.__panoTest`。** 后者会把 P3 的 `renderOffscreen` 整个覆盖掉：
+
+```ts
+// demo/test-entry-hooks/media.ts
+import { ImageSource } from '../../src/media/image-source'
+import { VideoSource } from '../../src/media/video-source'
+
+declare global {
+  // Merges into the interface P3 opened. Global interfaces merge by name, so
+  // there is no import and no registration step to forget.
+  interface PanoTestApi {
+    // Task 3 / Task 4 的源生命周期测试
+    ImageSource: typeof ImageSource
+    VideoSource: typeof VideoSource
+  }
+}
+
+export default { ImageSource, VideoSource } satisfies Partial<PanoTestApi>
+```
+
+```ts
+// demo/test-entry-hooks/input.ts
+import { InputController } from '../../src/interaction/input-controller'
+import { WheelDeltaMode } from '../../src/interaction/wheel-delta-mode'
+
+declare global {
+  interface PanoTestApi {
+    InputController: typeof InputController
+    // WheelDeltaMode 也要导出：gestures.ts 把 deltaMode 的数字重述了一遍
+    // （好让纯函数在 Node 里能测），那串数字要和浏览器对得上，而唯一能拿到
+    // 真 WheelEvent 的地方是浏览器里。
+    WheelDeltaMode: typeof WheelDeltaMode
+  }
+}
+
+export default { InputController, WheelDeltaMode } satisfies Partial<PanoTestApi>
+```
+
+**不要往生产入口 `src/index.ts` 上挂内部符号。** 测试要什么就从 hook 目录走（P3 也这么要求）。`test/integration/support/upload-paths.ts` 是例外：它自己在页面里建 device，**不经过这个出口**。
+
+**测试里直接写 `window.__panoTest`，不要 `as unknown as` 再抄一遍签名** —— 抄一遍就是第二真源，而全局声明存在的意义就是让「页面提供了什么」和「测试拿了什么」由同一份声明约束。P3 已把两套 tsconfig 都配好收 `demo/`，类型在这里是通的。
 
 ---
 
@@ -261,10 +316,18 @@ export class EventEmitter<M extends EventMap> {
   /**
    * Dispatches an event.
    *
-   * Protected: only the class that declares the event map may fire events.
-   * A public emit() would let any holder of the object forge a `media-load`.
+   * Public, and deliberately so. The classes that fire events here (a source, a
+   * viewer) *hold* an emitter rather than extending one, so a `protected`
+   * modifier would make their own emitter unreachable -- TypeScript checks
+   * protected access against the class doing the accessing, and a composing
+   * class is not a subclass.
+   *
+   * What actually keeps events unforgeable is ownership, not the modifier: the
+   * emitter instance is a private field of its owner, and `on()` hands out only
+   * the unsubscribe function. Nothing outside the owner ever holds the emitter,
+   * so nothing outside the owner can call this.
    */
-  protected emit<K extends keyof M & string> (type: K, event: M[K]): void {
+  emit<K extends keyof M & string> (type: K, event: M[K]): void {
     // Copy before iterating. A listener that unsubscribes would otherwise
     // mutate the Set mid-iteration and skip its neighbour.
     const set = this.#listeners.get(type)
@@ -470,38 +533,37 @@ export function planDownscale (width: number, height: number, max: number): Down
  * valid inside the microtask that produced it. WebGPU's `importExternalTexture`
  * is destroyed at the end of the current task and a bind group holding one does
  * NOT keep it alive. So the renderer must never store the source beyond the
- * frame it is drawing, and the type says so -- `state` is a plain snapshot of
+ * frame it is drawing, and the type says so -- a frame is a plain snapshot of
  * numbers plus the element reference, not a handle to GPU memory.
  */
 
-import type { Disposable, EventEmitter, EventMap } from '../core/events'
+import type { Disposable, EventMap } from '../core/events'
+import type { SourceState } from '../core/types'
+import type { RenderableSource } from '../renderer/backend'
 
-/** What the renderer needs to know about the current frame of a source. */
-export interface SourceState {
-  readonly kind: 'image' | 'video'
-  /** The element to read from. Never retained past the current frame. */
-  readonly element: HTMLImageElement | HTMLVideoElement
-  /**
-   * How the source's pixels are laid out. A property of the SOURCE, never of
-   * the camera -- the legacy design put it on the camera, which meant a camera
-   * had to know whether the image in front of it was equirectangular.
-   */
-  readonly projection: 'equirectangular'
-  /**
-   * Bumped whenever the underlying pixels change.
-   *
-   * This is how "does the GPU texture need re-uploading" is answered without
-   * the renderer subscribing to media events. An image bumps it once, on load;
-   * a video bumps it on every frame it presents.
-   *
-   * Replaces the legacy `needUpdate_` latch, which had to be cleared by the
-   * consumer -- and "who clears it" is where that kind of flag goes wrong.
-   */
-  readonly version: number
-  /** UPLOAD dimensions in pixels, already planned against the device limit. */
-  readonly width: number
-  readonly height: number
-}
+/**
+ * One frame of a source: core's upload description plus what only a media
+ * element can tell you.
+ *
+ * **This type is `RenderableSource` from `src/renderer/backend.ts`.** It is
+ * declared here as an alias, not as a second interface with the same four
+ * members, and every source implementation's `frame` getter satisfies it
+ * directly. That is what lets `Viewer` hand a frame to `backend.setSource`
+ * with no conversion step.
+ *
+ * An earlier draft declared the four members again. A structurally identical
+ * copy compiles -- and then drifts the first time either side gains a field.
+ * The drift is invisible until someone swaps a source into a backend, because
+ * before that the two types are never compared; a `type` alias makes the
+ * comparison happen at the declaration instead.
+ *
+ * Why the fields are where they are: `state` is `SourceState` from `core/types`,
+ * and `core` is DOM-free by construction, so the element and the frame counter
+ * cannot live there. What `core` describes is the part every backend needs --
+ * how the pixels are laid out and how big the upload is -- and the rest is the
+ * DOM layer's.
+ */
+export type MediaFrame = RenderableSource
 
 /** Events a source re-emits from its underlying element. */
 export interface MediaEvents extends EventMap {
@@ -523,14 +585,37 @@ export interface MediaEvents extends EventMap {
  */
 export interface MediaSource extends Disposable {
   /** The current frame. Valid only for the duration of the current task. */
-  readonly state: SourceState
+  readonly frame: MediaFrame
   /**
    * The element's natural size, before any downscaling.
    *
-   * Separate from `state.width`/`state.height`, which are the upload size.
-   * Interaction needs the display size; the renderer needs the upload size.
+   * Separate from `frame.state.width`/`frame.state.height`, which are the
+   * upload size. Interaction needs the display size; the renderer needs the
+   * upload size.
    */
   readonly naturalSize: { readonly width: number, readonly height: number }
+  /**
+   * Subscribes to the events this source re-emits from its element.
+   *
+   * On the interface rather than only on the implementations: the viewer
+   * forwards these to its own consumers, and it holds a `MediaSource`, so a
+   * subscription it cannot see through the interface would push it towards a
+   * cast or towards knowing the concrete class.
+   */
+  on<K extends keyof MediaEvents & string> (type: K, fn: (event: MediaEvents[K]) => void): () => void
+  /**
+   * Tells the source that a frame was just drawn from it.
+   *
+   * A video's pixels change with no event fine-grained enough to drive an
+   * upload: `timeupdate` fires about four times a second, far too coarse for
+   * 60fps. So the render loop ticks this after drawing and the version advances.
+   *
+   * On the interface, not only on `VideoSource`, so the render loop can tick
+   * whatever source it holds without asking which kind it is. An image source
+   * ignores it: its pixels change exactly once, on `load`, and that is where its
+   * version bump lives.
+   */
+  markFramePresented (): void
 }
 
 /**
@@ -590,11 +675,11 @@ test('reports a zero size before the image loads, and throws if asked to upload'
   // The failure this pins: a source that has not loaded looks like a 0x0 image,
   // and a 0x0 texture is a WebGPU validation error thrown far from the cause.
   const result = await gpuPage.evaluate(async () => {
-    const { ImageSource } = (window as unknown as { __panoTest: any }).__panoTest
+    const { ImageSource } = window.__panoTest
     const src = new ImageSource('/fixtures/panorama.png')
     const before = { w: src.naturalSize.width, h: src.naturalSize.height }
     let threw = ''
-    try { src.state } catch (e) { threw = String(e) }
+    try { src.frame } catch (e) { threw = String(e) }
     src.dispose()
     return { before, threw }
   })
@@ -604,15 +689,20 @@ test('reports a zero size before the image loads, and throws if asked to upload'
 
 test('becomes readable once the image loads', async ({ gpuPage }) => {
   const result = await gpuPage.evaluate(async () => {
-    const { ImageSource } = (window as unknown as { __panoTest: any }).__panoTest
+    const { ImageSource } = window.__panoTest
     const src = new ImageSource('/fixtures/panorama.png')
     const loaded = new Promise(r => {
-      const off = (src as any).on('media-load', () => { off(); r('load') })
+      const off = src.on('media-load', () => { off(); r('load') })
     })
     await loaded
-    const state = src.state
+    const frame = src.frame
     src.dispose()
-    return { kind: state.kind, w: state.width, h: state.height, version: state.version }
+    return {
+      kind: frame.kind,
+      w: frame.state.width,
+      h: frame.state.height,
+      version: frame.version
+    }
   })
   expect(result.kind).toBe('image')
   expect(result.w).toBeGreaterThan(0)
@@ -625,10 +715,10 @@ test('re-emits the element error as media-error rather than throwing', async ({ 
   // an error listener that only logged, so an application had no way to show
   // "this image failed to load".
   const result = await gpuPage.evaluate(async () => {
-    const { ImageSource } = (window as unknown as { __panoTest: any }).__panoTest
+    const { ImageSource } = window.__panoTest
     const src = new ImageSource('/fixtures/does-not-exist.png')
     return new Promise(resolve => {
-      const off = (src as any).on('media-error', () => { off(); resolve('media-error'); src.dispose() })
+      const off = src.on('media-error', () => { off(); resolve('media-error'); src.dispose() })
       setTimeout(() => resolve('timeout'), 5000)
     })
   })
@@ -639,7 +729,7 @@ test('dispose aborts every DOM listener', async ({ gpuPage }) => {
   // Counted, not asserted by reading the source. The legacy code leaked three
   // listeners across four files precisely because nobody could see the count.
   const result = await gpuPage.evaluate(async () => {
-    const { ImageSource } = (window as unknown as { __panoTest: any }).__panoTest
+    const { ImageSource } = window.__panoTest
     const src = new ImageSource('/fixtures/panorama.png')
     const before = (src as any).__listenerCount()
     src.dispose()
@@ -667,7 +757,8 @@ test('dispose aborts every DOM listener', async ({ gpuPage }) => {
  */
 
 import { Disposable, EventEmitter } from '../core/events'
-import { MEDIA_EVENT_MAP, type MediaEvents, type MediaSource, type SourceState } from './source'
+import type { TextureProjection } from '../core/constants'
+import { MEDIA_EVENT_MAP, type MediaEvents, type MediaSource, type MediaFrame } from './source'
 import { planDownscale } from './downscale'
 
 export class ImageSource extends Disposable implements MediaSource {
@@ -677,13 +768,17 @@ export class ImageSource extends Disposable implements MediaSource {
   #listenerCount = 0
   #version = 0
 
-  readonly #projection: 'equirectangular'
+  // TextureProjection from core/constants, not a re-typed 'equirectangular'
+  // literal: the string is uploaded as `u_TexProjType` through
+  // `textureProjectionCode`, so a second spelling of it here is a second thing
+  // to keep in sync.
+  readonly #projection: TextureProjection
 
   /**
    * @param url - Image URL.
    * @param options - Device limit and the source's texture projection.
    */
-  constructor (url: string, options: { maxTextureDimension?: number, projection?: 'equirectangular' } = {}) {
+  constructor (url: string, options: { maxTextureDimension?: number, projection?: TextureProjection } = {}) {
     super()
     this.#element = new Image()
     // Required for reading the image into a WebGPU texture without tainting.
@@ -724,7 +819,7 @@ export class ImageSource extends Disposable implements MediaSource {
     return { width: this.#element.naturalWidth, height: this.#element.naturalHeight }
   }
 
-  get state (): SourceState {
+  get frame (): MediaFrame {
     const { naturalWidth: w, naturalHeight: h } = this.#element
     if (w === 0 || h === 0) {
       // Throwing here rather than returning a 0x0 state keeps the failure at the
@@ -734,12 +829,12 @@ export class ImageSource extends Disposable implements MediaSource {
     }
     const plan = planDownscale(w, h, this.#maxTextureDimension)
     return {
+      // The backend consumes this field and nothing else -- it is core's
+      // SourceState, so `Backend.setSource` takes it without a conversion.
+      state: { projection: this.#projection, width: plan.width, height: plan.height },
       kind: 'image',
       element: this.#element,
-      projection: this.#projection,
-      version: this.#version,
-      width: plan.width,
-      height: plan.height
+      version: this.#version
     }
   }
 
@@ -748,6 +843,15 @@ export class ImageSource extends Disposable implements MediaSource {
     const { naturalWidth: w, naturalHeight: h } = this.#element
     if (w === 0 || h === 0) return 1
     return planDownscale(w, h, this.#maxTextureDimension).scale
+  }
+
+  /**
+   * Nothing to do: an image's pixels change exactly once, on `load`, and that is
+   * where `#version` is bumped. It exists because `MediaSource` declares it, so
+   * the render loop can tick any source without knowing which kind it holds.
+   */
+  markFramePresented (): void {
+    // Intentionally empty. See the TSDoc above.
   }
 
   override dispose (): void {
@@ -797,7 +901,11 @@ git commit -m "feat(media): image source with abortable listeners and a load-sta
 | WGSL 采样 | `textureSampleBaseClampToEdge` | `textureSample` |
 | 可用性 | 需要 `chromium` / 完整浏览器 | 到处都有 |
 
-**设计立场：默认走 external texture，探测失败回落。** 但**回落路径必须实现并测到** —— 否则在 WebGPU 可用、external texture 不可用的环境里（部分移动端浏览器）会直接黑屏。
+**这条选择落在后端，不落在本层。** P3 的 `WebGPUBackend` 按**源的类型**选路径：视频走 `importExternalTexture`，图片走 `copyExternalImageToTexture`；设备能不能做 external texture，由 `Capabilities.externalTextures` 报告给应用。所以：
+
+1. **`VideoSourceOptions` 上没有 `uploadPath`。** 本层做不了这个决定（它没有 device），加一个选项就是给一个只有一个投票人的问题再塞一张票 —— 而且投错了**不会报错**：两条路径都出画，只是画面在某些设备上倒过来。
+2. **两条路径的朝向必须一致，这是那个「一次 shader 翻转同时修好两条路径」的前提。** P3 把 flip 放在 shader 的 `to_uv` 里，两条路径共用 —— 这个做法只有在**两个浏览器 API 的行序本来就一致**时才成立（`importExternalTexture` 根本没有 `flipY` 可选，所以一旦不一致，没有任何一个 shader 翻转能同时修好两条）。这是一个经验断言，Step 3 的探针就是它的证据。
+3. **外加上限：external texture 导入失败时视频不能静默冻住。** P3 的 `render()` 目前对视频无条件 import，没有回落分支 —— 见本计划末尾「留给 P3 的一处依赖」。
 
 - [ ] **Step 1: 写集成测试**
 
@@ -808,11 +916,11 @@ import { test, expect } from './support/fixtures'
 
 test('reports a zero size before metadata loads', async ({ gpuPage }) => {
   const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = (window as unknown as { __panoTest: any }).__panoTest
+    const { VideoSource } = window.__panoTest
     const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
     const before = src.naturalSize
     let threw = ''
-    try { src.state } catch (e) { threw = String(e) }
+    try { src.frame } catch (e) { threw = String(e) }
     src.dispose()
     return { before, threw }
   })
@@ -820,52 +928,61 @@ test('reports a zero size before metadata loads', async ({ gpuPage }) => {
   expect(result.threw).toMatch(/metadata/i)
 })
 
-test('version advances as frames present', async ({ gpuPage }) => {
+test('version advances when the render loop ticks the source', async ({ gpuPage }) => {
   // This is what drives per-frame re-upload. If it does not advance, a playing
   // video renders its first frame forever.
+  //
+  // The tick comes from the render loop and not from a DOM event, because no
+  // event is fine-grained enough -- so that is what the test does. The end-to-end
+  // half (a playing video whose drawn pixels actually change) is P5's video user
+  // story; this pins the source's side of the contract.
   const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = (window as unknown as { __panoTest: any }).__panoTest
+    const { VideoSource } = window.__panoTest
     const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    await new Promise(r => { const off = src.on('media-loadedmetadata', () => { off(); r(null) }) })
-    const a = src.state.version
+    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
     await src.play()
-    await new Promise(r => setTimeout(r, 300))
-    const b = src.state.version
+    const a = src.frame.version
+    for (let i = 0; i < 3; i++) src.markFramePresented()
+    const b = src.frame.version
     src.dispose()
     return { a, b }
   })
   expect(result.b).toBeGreaterThan(result.a)
 })
 
-test('the external texture does not outlive its task', async ({ gpuPage }) => {
-  // The hazard: importExternalTexture's result is destroyed when the microtask
-  // it was created in ends, and a bind group holding it does NOT keep it alive.
-  // Reading a stale one is a validation error at best.
+test('hands out a fresh frame instead of a cached one', async ({ gpuPage }) => {
+  // The hazard: importExternalTexture's result is destroyed when the task that
+  // made it ends, and a bind group holding it does NOT keep it alive, so a
+  // source that memoised its frame would hand the renderer a value describing a
+  // task that is already over.
+  //
+  // Asserted here as the source-side property that makes the GPU behaviour safe
+  // -- no caching. The GPU half (a stale external texture is a validation error)
+  // is a backend concern and is pinned by P3's tests.
   const result = await gpuPage.evaluate(async () => {
-    const t = (window as unknown as { __panoTest: any }).__panoTest
-    const { VideoSource } = t
+    const { VideoSource } = window.__panoTest
     const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    await new Promise(r => { const off = src.on('media-loadedmetadata', () => { off(); r(null) }) })
-    const device = await t.getDevice()
-    const first = device.importExternalTexture({ source: src.element })
-    await new Promise(r => setTimeout(r, 0))
-    // Using it now is a use-after-free; the spec says it must not be retained.
-    let stale = false
-    try { device.importExternalTexture({ source: src.element }) } catch { stale = true }
+    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    const a = src.frame
+    const b = src.frame
+    src.markFramePresented()
+    const c = src.frame
     src.dispose()
-    return { stale }
+    return { cached: a === b, advanced: c.version > a.version, sameElement: a.element === b.element }
   })
-  expect(typeof result.stale).toBe('boolean')
+  expect(result.cached).toBe(false)
+  expect(result.advanced).toBe(true)
+  expect(result.sameElement).toBe(true)
 })
 
-test('dispose waits for no frame and stops the element', async ({ gpuPage }) => {
+test('dispose stops the element and removes every listener', async ({ gpuPage }) => {
   const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = (window as unknown as { __panoTest: any }).__panoTest
+    const { VideoSource } = window.__panoTest
     const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    await new Promise(r => { const off = src.on('media-loadedmetadata', () => { off(); r(null) }) })
+    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
     await src.play()
     src.dispose()
-    return { paused: src.element.paused, listeners: src.__listenerCount() }
+    return { paused: src.element.paused, listeners: (src as any).__listenerCount() }
   })
   expect(result.paused).toBe(true)
   expect(result.listeners).toBe(0)
@@ -885,36 +1002,36 @@ test('dispose waits for no frame and stops the element', async ({ gpuPage }) => 
  * 1. A video frame is only valid inside the microtask that produced it.
  *    `importExternalTexture` returns a texture the browser destroys as soon as
  *    the task ends. A bind group holding it does not extend its life, and there
- *    is no error until it is used. So the renderer must consume `state` within
- *    the frame it was read, and this class must never hand out a cached one.
+ *    is no error until it is used. So the renderer must consume `frame` within
+ *    the task it was read in, and this class must never hand out a cached one.
  *
  * 2. There are two upload paths and no `flipY` on the fast one. The slow path
  *    supports flipY; the fast one does not. Since the sampler's v axis runs the
  *    same way for both, and both sources are top-left origin, neither should be
  *    flipped -- but that is an empirical claim, and
  *    `test/integration/video-orientation.test.ts` is what checks it.
+ *
+ * Neither point produces an option on this class. **Which upload path is used
+ * is the backend's decision**, not the source's: the backend is the only thing
+ * that has a device, and therefore the only thing that can tell whether
+ * `Capabilities.externalTextures` holds. An `uploadPath` option here would be a
+ * second vote on a question with one voter -- and the wrong vote would be
+ * silent, because both paths render.
  */
 
 import { Disposable, EventEmitter } from '../core/events'
-import { MEDIA_EVENT_MAP, type MediaEvents, type MediaSource, type SourceState } from './source'
+import type { TextureProjection } from '../core/constants'
+import { MEDIA_EVENT_MAP, type MediaEvents, type MediaSource, type MediaFrame } from './source'
 import { planDownscale } from './downscale'
-
-/** How a video frame should reach the GPU. */
-export type VideoUploadPath = 'external' | 'copy'
 
 export interface VideoSourceOptions {
   readonly maxTextureDimension: number
   /** How the video's pixels are laid out. A property of the source, not the camera. */
-  readonly projection?: 'equirectangular'
+  readonly projection?: TextureProjection
   /** `autoplay`, `loop`, `muted` -- passed through to the element. */
   readonly autoplay?: boolean
   readonly loop?: boolean
   readonly muted?: boolean
-  /**
-   * Which upload path to use. Decided by the backend, which is the only thing
-   * that knows whether the device supports external textures.
-   */
-  readonly uploadPath?: VideoUploadPath
 }
 
 export class VideoSource extends Disposable implements MediaSource {
@@ -952,16 +1069,24 @@ export class VideoSource extends Disposable implements MediaSource {
   #listen (domName: string, eventName: keyof MediaEvents & string): void {
     this.#listenerCount++
     this.#element.addEventListener(domName, () => {
-      this.#events.emit(eventName, { target: this, error: undefined })
+      if (eventName === 'media-load') this.#version++
+      this.#events.emit(eventName, {
+        target: this,
+        // A failed video load must reach the application as a value it can show,
+        // not as a log line. Same reasoning as ImageSource.
+        error: eventName === 'media-error' ? new Error(`failed to load ${this.#element.src}`) : undefined
+      })
     }, { signal: this.#abort.signal })
   }
 
   /**
-   * Bumps the version on every presented frame.
+   * Bumps the version on every drawn frame.
    *
    * Called by the render loop rather than driven by an event: there is no DOM
    * event for "a new frame is ready to sample", and `timeupdate` fires only
-   * about four times a second -- far too coarse to drive a 60fps upload.
+   * about four times a second -- far too coarse to drive a 60fps upload. A
+   * paused video therefore re-uploads at the draw rate; the renderer's frame
+   * rate cap is what bounds that cost.
    */
   markFramePresented (): void {
     this.#version++
@@ -971,7 +1096,15 @@ export class VideoSource extends Disposable implements MediaSource {
     return this.#events.on(type, fn)
   }
 
-  /** The underlying element. Used by the backend to import a texture. */
+  /**
+   * The underlying element, for lifecycle inspection -- `paused`, current time,
+   * and the like.
+   *
+   * Not the render path's way in: the renderer reads `frame.element`, so that
+   * the element always arrives inside the snapshot that also carries `version`
+   * and the upload size. Two ways to reach the element would mean two chances to
+   * read it outside the task that made it valid.
+   */
   get element (): HTMLVideoElement {
     return this.#element
   }
@@ -980,7 +1113,7 @@ export class VideoSource extends Disposable implements MediaSource {
     return { width: this.#element.videoWidth, height: this.#element.videoHeight }
   }
 
-  get state (): SourceState {
+  get frame (): MediaFrame {
     const { videoWidth: w, videoHeight: h } = this.#element
     if (w === 0 || h === 0) {
       // `HAVE_NOTHING`/`HAVE_METADATA` report 0x0. Creating a texture from that
@@ -989,12 +1122,14 @@ export class VideoSource extends Disposable implements MediaSource {
     }
     const plan = planDownscale(w, h, this.#options.maxTextureDimension)
     return {
+      state: {
+        projection: this.#options.projection ?? 'equirectangular',
+        width: plan.width,
+        height: plan.height
+      },
       kind: 'video',
       element: this.#element,
-      projection: this.#options.projection ?? 'equirectangular',
-      version: this.#version,
-      width: plan.width,
-      height: plan.height
+      version: this.#version
     }
   }
 
@@ -1024,11 +1159,218 @@ export class VideoSource extends Disposable implements MediaSource {
 
 - [ ] **Step 3: 补一条朝向一致性测试**
 
+这一条**直接驱动两个浏览器 API，不经过 pano.gl 的后端**。理由是测试要问的问题本来就与我们的代码无关 —— 「`importExternalTexture`（没有 `flipY` 选项）和 `copyExternalImageToTexture`（`flipY: false`）把帧的行序放成一样吗」。后端自己的测试看不见这个差异：**两条路径各自自洽**，各自渲染都对，只是彼此相反；而 P3 的 shader 只翻转一次、两条路径共用，所以一旦相反就是必错其一。
+
+`test/integration/support/upload-paths.ts`：
+
+```ts
+/*
+ * Renders one video frame through both WebGPU upload paths, offscreen, and
+ * returns both readbacks.
+ *
+ * Deliberately not built on pano.gl's backend. The question is about the two
+ * browser APIs, and the backend cannot answer it: each upload path is
+ * self-consistent, so a backend test that only ever exercises the path its
+ * device happens to support sees nothing wrong. The disagreement only shows up
+ * when both paths render the same frame -- which is what P3's single shared
+ * flip in `to_uv` assumes cannot happen.
+ *
+ * Nothing here is re-exported to the library; it is test scaffolding.
+ */
+
+import type { Page } from '@playwright/test'
+
+/** One upload path's output: RGBA8, top-down, row-major. */
+export interface PathRender {
+  readonly width: number
+  readonly height: number
+  readonly rgba: number[]
+}
+
+/*
+ * The vertex stage is shared by both paths on purpose. Both readbacks are then
+ * produced by the same uv mapping into the same top-down layout, which is what
+ * makes the comparison a measurement of the APIs rather than of the probe:
+ * clip y=+1 maps to uv.y=0, and readback row 0 is v=0.
+ *
+ * The vertex stage and the fragment stage go into ONE module per path. WGSL
+ * structs are module-scope, so a fragment module that only declares `fs` would
+ * not know `VOut` -- plenty of WebGPU samples get away with two modules because
+ * their fragment stage takes `@builtin(position)` instead.
+ */
+const VERTEX = `
+struct VOut {
+  @builtin(position) pos: vec4f,
+  @location(0) uv: vec2f,
+}
+
+@vertex
+fn vs (@builtin(vertex_index) i: u32) -> VOut {
+  var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  let xy = p[i];
+  var out: VOut;
+  out.pos = vec4f(xy, 0.0, 1.0);
+  out.uv = vec2f((xy.x + 1.0) * 0.5, (1.0 - xy.y) * 0.5);
+  return out;
+}
+`
+
+const FRAGMENT_EXTERNAL = `
+@group(0) @binding(0) var src: texture_external;
+@group(0) @binding(1) var samp: sampler;
+
+@fragment
+fn fs (in: VOut) -> @location(0) vec4f {
+  return textureSampleBaseClampToEdge(src, samp, in.uv);
+}
+`
+
+const FRAGMENT_COPY = `
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+
+@fragment
+fn fs (in: VOut) -> @location(0) vec4f {
+  return textureSample(src, samp, in.uv);
+}
+`
+
+/**
+ * Uploads one paused frame of `url` through each path and reads both back.
+ *
+ * @param page - The page, which must have WebGPU enabled.
+ * @param url - Video URL, same-origin so the external texture is not tainted.
+ * @param size - Square render size. 64 keeps the readback's bytesPerRow at the
+ *   256-byte alignment `copyTextureToBuffer` demands.
+ */
+export async function renderVideoBothPaths (
+  page: Page,
+  url: string,
+  size = 64
+): Promise<{ external: PathRender, copy: PathRender }> {
+  return page.evaluate(async ({ url, size }) => {
+    const adapter = await navigator.gpu.requestAdapter()
+    if (adapter === null) throw new Error('no WebGPU adapter')
+    const device = await adapter.requestDevice()
+
+    const video = document.createElement('video')
+    video.crossOrigin = 'anonymous'
+    video.muted = true
+    video.src = url
+    // `loadeddata`, not `loadedmetadata`: metadata describes the size while
+    // `loadeddata` is the first event that guarantees there is a frame to
+    // sample. A paused frame is also what makes the two paths comparable --
+    // there is exactly one frame in play, so a difference is orientation rather
+    // than timing.
+    await new Promise((resolve, reject) => {
+      video.addEventListener('loadeddata', resolve, { once: true })
+      video.addEventListener('error', () => reject(new Error(`video failed: ${url}`)), { once: true })
+    })
+    video.pause()
+
+    const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
+    const target = device.createTexture({
+      size: [size, size],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+    })
+    const bytesPerRow = size * 4
+    const readback = device.createBuffer({
+      size: bytesPerRow * size,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    })
+
+    const pipeline = (fragment: string): GPURenderPipeline => {
+      const shaderModule = device.createShaderModule({ code: `${VERTEX}\n${fragment}` })
+      return device.createRenderPipeline({
+        layout: 'auto',
+        vertex: { module: shaderModule, entryPoint: 'vs' },
+        fragment: { module: shaderModule, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] },
+        primitive: { topology: 'triangle-list' }
+      })
+    }
+
+    const readTarget = async (): Promise<number[]> => {
+      const encoder = device.createCommandEncoder()
+      encoder.copyTextureToBuffer({ texture: target }, { buffer: readback, bytesPerRow }, [size, size])
+      device.queue.submit([encoder.finish()])
+      await readback.mapAsync(GPUMapMode.READ)
+      const rgba = Array.from(new Uint8Array(readback.getMappedRange()))
+      readback.unmap()
+      return rgba
+    }
+
+    const draw = (pipe: GPURenderPipeline, entries: GPUBindGroupEntry[]): void => {
+      const encoder = device.createCommandEncoder()
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: target.createView(),
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: 'clear',
+          storeOp: 'store'
+        }]
+      })
+      pass.setPipeline(pipe)
+      pass.setBindGroup(0, device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries }))
+      pass.draw(3)
+      pass.end()
+      device.queue.submit([encoder.finish()])
+    }
+
+    // Path 1: importExternalTexture. No flipY exists on this path, so whatever
+    // row order it produces is the row order everything else has to live with.
+    //
+    // Import, bind, draw and submit happen in one synchronous stretch with no
+    // `await` between them, because the external texture is destroyed when this
+    // task ends. The awaits that follow are after the submit, which is safe.
+    const externalPipe = pipeline(FRAGMENT_EXTERNAL)
+    draw(externalPipe, [
+      { binding: 0, resource: device.importExternalTexture({ source: video }) },
+      { binding: 1, resource: sampler }
+    ])
+    const external = await readTarget()
+
+    // Path 2: copyExternalImageToTexture. `flipY: false` is the claim under test:
+    // it should agree with the external path, because that is the value P3's
+    // backend passes and the value no single shader flip can compensate for if
+    // the two APIs disagreed.
+    const copied = device.createTexture({
+      size: [size, size],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+    })
+    device.queue.copyExternalImageToTexture({ source: video, flipY: false }, { texture: copied }, [size, size])
+    draw(pipeline(FRAGMENT_COPY), [
+      { binding: 0, resource: copied.createView() },
+      { binding: 1, resource: sampler }
+    ])
+    const copy = await readTarget()
+
+    // A uniform frame is useless as a probe: the test would pass on a black
+    // screen. The fixture's first frame must have a top and a bottom.
+    const distinct = new Set<number>()
+    for (let i = 0; i < external.length; i += 4) distinct.add(external[i]! + external[i + 1]! * 256)
+
+    return {
+      external: { width: size, height: size, rgba: external },
+      copy: { width: size, height: size, rgba: copy },
+      distinct
+    }
+  }, { url, size }).then((r) => {
+    if (r.distinct.size < 2) {
+      throw new Error('the fixture frame is uniform; orientation cannot be judged from it')
+    }
+    return { external: r.external, copy: r.copy }
+  })
+}
+```
+
 `test/integration/video-orientation.test.ts`：
 
 ```ts
 import { test, expect } from './support/fixtures'
 import { maxChannelDiff } from './support/gpu'
+import { renderVideoBothPaths } from './support/upload-paths'
 
 /*
  * The two upload paths must agree on orientation.
@@ -1037,15 +1379,10 @@ import { maxChannelDiff } from './support/gpu'
  * If they disagree, a browser that falls back to the copy path renders the
  * video upside down relative to one that uses external textures -- a bug that
  * only appears on some devices and looks like a shader problem.
- *
- * Renders the same paused frame through both paths and compares.
  */
 test('external and copy upload paths produce the same orientation', async ({ gpuPage }) => {
-  const result = await gpuPage.evaluate(async () => {
-    const t = (window as unknown as { __panoTest: any }).__panoTest
-    return t.renderVideoBothPaths('/fixtures/clip.mp4')
-  })
-  expect(maxChannelDiff(result.external, result.copy)).toBeLessThanOrEqual(2)
+  const result = await renderVideoBothPaths(gpuPage, '/fixtures/clip.mp4')
+  expect(maxChannelDiff(result.external.rgba, result.copy.rgba)).toBeLessThanOrEqual(2)
 })
 ```
 
@@ -1054,18 +1391,18 @@ test('external and copy upload paths produce the same orientation', async ({ gpu
 Run: `npm run test:integration -- video-source video-orientation`
 Expected: 全 PASS
 
-**`video-orientation` 失败时**：**不要直接给 copy 路径加 `flipY: true` 试**。先确认是**哪一条**需要翻 —— 拿一张上下明显不对称的测试帧，两条路径各渲一次，看哪一条是倒的。翻错了就是把对的翻成错的。
+**`video-orientation` 失败时**：**不要直接给 copy 路径加 `flipY: true` 试**。先确认是**哪一条**需要翻 —— 把读回按行切成上下两半，看哪一条是倒的（探针里的 `distinct` 检查保证测试帧上下不对称，否则这条判断无从做起）。翻错了就是把对的翻成错的。若最终必须翻，改动落在**后端**（`WebGPUBackend` 的 copy 路径），不在本层。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/media/video-source.ts test/integration/video-source.test.ts test/integration/video-orientation.test.ts
-git commit -m "feat(media): video source with an explicit upload-path choice
+git add src/media/video-source.ts test/integration/video-source.test.ts test/integration/video-orientation.test.ts test/integration/support/upload-paths.ts
+git commit -m "feat(media): video source that never caches a frame
 
-A video frame is valid only inside the microtask that produced it, and a
-bind group holding an external texture does not keep it alive. The two
-upload paths also disagree about flipY, so orientation is pinned by a test
-rather than assumed."
+A video frame is valid only inside the task that produced it, and a bind
+group holding an external texture does not keep it alive. The two upload
+paths also disagree about flipY, so orientation is pinned by a probe that
+drives both browser APIs directly rather than assumed."
 ```
 
 ---
@@ -1082,46 +1419,48 @@ rather than assumed."
 
 手势识别做成**纯函数**，这样它可以在 Node 里测：
 
+> **纯的一个前提是它不碰浏览器全局。** vitest 的 `environment` 是 `node`（P1），所以 `WheelEvent` 在这里不存在 —— 常量取自本模块导出的 `WheelDeltaMode`，而不是 `WheelEvent.DOM_DELTA_*`。真实 `WheelEvent` 是否仍与这些数字一致，由 `InputController` 的集成测试在浏览器里验证。
+
 `test/unit/gestures.test.ts`：
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import { classifyWheel, classifyPinch, classifyDrag, WheelZoom } from '../../src/interaction/gestures'
+import { classifyWheel, classifyPinch, classifyDrag, WheelZoom, WheelDeltaMode } from '../../src/interaction/gestures'
 
 describe('classifyWheel', () => {
   it('maps a line-mode wheel delta to a zoom step', () => {
-    expect(classifyWheel({ deltaY: -3, deltaMode: WheelEvent.DOM_DELTA_LINE })).toBeCloseTo(0.3, 5)
+    expect(classifyWheel({ deltaY: -3, deltaMode: WheelDeltaMode.LINE })).toBeCloseTo(0.3, 5)
   })
 
   it('normalises pixel-mode deltas, which are an order of magnitude larger', () => {
     // A trackpad reports pixels and a mouse wheel reports lines. Feeding both
     // through the same divisor makes one of them unusable: this is why the
     // legacy zoom was violent on a trackpad and sluggish on a mouse.
-    const pixel = classifyWheel({ deltaY: -100, deltaMode: WheelEvent.DOM_DELTA_PIXEL })
-    const line = classifyWheel({ deltaY: -3, deltaMode: WheelEvent.DOM_DELTA_LINE })
+    const pixel = classifyWheel({ deltaY: -100, deltaMode: WheelDeltaMode.PIXEL })
+    const line = classifyWheel({ deltaY: -3, deltaMode: WheelDeltaMode.LINE })
     expect(Math.sign(pixel)).toBe(Math.sign(line))
     expect(Math.abs(pixel / line)).toBeLessThan(3)
   })
 
   it('treats page-mode deltas as lines', () => {
-    expect(classifyWheel({ deltaY: -3, deltaMode: WheelEvent.DOM_DELTA_PAGE }))
+    expect(classifyWheel({ deltaY: -3, deltaMode: WheelDeltaMode.PAGE }))
       .toBeCloseTo(0.3, 5)
   })
 
   it('is antisymmetric', () => {
-    const down = classifyWheel({ deltaY: 100, deltaMode: WheelEvent.DOM_DELTA_PIXEL })
-    const up = classifyWheel({ deltaY: -100, deltaMode: WheelEvent.DOM_DELTA_PIXEL })
+    const down = classifyWheel({ deltaY: 100, deltaMode: WheelDeltaMode.PIXEL })
+    const up = classifyWheel({ deltaY: -100, deltaMode: WheelDeltaMode.PIXEL })
     expect(down).toBeCloseTo(-up, 6)
   })
 
   it('returns zero for a zero delta', () => {
-    expect(classifyWheel({ deltaY: 0, deltaMode: WheelEvent.DOM_DELTA_PIXEL })).toBe(0)
+    expect(classifyWheel({ deltaY: 0, deltaMode: WheelDeltaMode.PIXEL })).toBe(0)
   })
 
   it('clamps an absurd single-event delta', () => {
     // Some drivers emit a single deltaY of several thousand on a flick. Without
     // a clamp the panorama jumps a full revolution.
-    const huge = classifyWheel({ deltaY: -100000, deltaMode: WheelEvent.DOM_DELTA_PIXEL })
+    const huge = classifyWheel({ deltaY: -100000, deltaMode: WheelDeltaMode.PIXEL })
     expect(Math.abs(huge)).toBeLessThanOrEqual(WheelZoom.MAX_STEP)
   })
 })
@@ -1218,6 +1557,20 @@ export const WheelZoom = {
   MAX_STEP: 1
 } as const
 
+/**
+ * `WheelEvent.deltaMode` values.
+ *
+ * Restated rather than read off the global, because this module is pure and is
+ * tested in Node -- where `WheelEvent` does not exist. The numbers are fixed by
+ * the UI Events spec, and `InputController`'s integration test is what checks
+ * that the real `WheelEvent` still agrees with them.
+ */
+export const WheelDeltaMode = {
+  PIXEL: 0,
+  LINE: 1,
+  PAGE: 2
+} as const
+
 /** A wheel event's relevant fields. */
 export interface WheelInput {
   readonly deltaY: number
@@ -1233,7 +1586,7 @@ export interface WheelInput {
 export function classifyWheel (input: WheelInput): number {
   if (input.deltaY === 0) return 0
 
-  const notches = input.deltaMode === WheelEvent.DOM_DELTA_PIXEL
+  const notches = input.deltaMode === WheelDeltaMode.PIXEL
     ? input.deltaY / WheelZoom.PIXELS_PER_NOTCH
     : input.deltaY / WheelZoom.LINES_PER_NOTCH
   // Page mode reports whole pages, which is coarse enough to treat as lines.
@@ -1325,10 +1678,10 @@ Expected: 15 个测试 PASS
  *   behaviour such as focus and text selection.
  */
 
-import { Disposable, EventEmitter } from '../core/events'
+import { Disposable, EventEmitter, type EventMap } from '../core/events'
 import { classifyDrag, classifyPinch, classifyWheel, type SurfaceSize } from './gestures'
 
-export interface InputEvents extends Record<string, unknown> {
+export interface InputEvents extends EventMap {
   pan: { deltaX: number, deltaY: number }
   zoom: { delta: number }
 }
@@ -1456,7 +1809,7 @@ import { test, expect } from './support/fixtures'
 
 test('dragging pans the camera and emits pan events', async ({ gpuPage }) => {
   const result = await gpuPage.evaluate(async () => {
-    const { InputController } = (window as unknown as { __panoTest: any }).__panoTest
+    const { InputController } = window.__panoTest
     const el = document.createElement('div')
     Object.assign(el.style, { width: '400px', height: '300px', position: 'fixed', top: '0px' })
     document.body.appendChild(el)
@@ -1477,7 +1830,7 @@ test('PTZ = false stops the events without unbinding', async ({ gpuPage }) => {
   // Toggling must not rebind listeners; rebinding on every toggle is itself a
   // leak source. So the assertion is both "no events" and "re-enabling works".
   const result = await gpuPage.evaluate(async () => {
-    const { InputController } = (window as unknown as { __panoTest: any }).__panoTest
+    const { InputController } = window.__panoTest
     const el = document.createElement('div')
     document.body.appendChild(el)
     const input = new InputController(el)
@@ -1506,11 +1859,26 @@ test('PTZ = false stops the events without unbinding', async ({ gpuPage }) => {
   expect(result.afterReenabled).toBe(2)
 })
 
+test('the wheel constants still match the real WheelEvent', async ({ gpuPage }) => {
+  // gestures.ts restates deltaMode's numbers instead of reading the global, so
+  // that it stays testable in Node. This is the other half of that trade: the
+  // restated values are checked against the browser's.
+  const result = await gpuPage.evaluate(async () => {
+    const { WheelDeltaMode } = window.__panoTest
+    return {
+      pixel: WheelDeltaMode.PIXEL === WheelEvent.DOM_DELTA_PIXEL,
+      line: WheelDeltaMode.LINE === WheelEvent.DOM_DELTA_LINE,
+      page: WheelDeltaMode.PAGE === WheelEvent.DOM_DELTA_PAGE
+    }
+  })
+  expect(result).toEqual({ pixel: true, line: true, page: true })
+})
+
 test('dispose restores touch-action', async ({ gpuPage }) => {
   // The viewer sets touch-action: none on an element it does not own. Leaving
   // it set would stop the host page from scrolling over that element forever.
   const result = await gpuPage.evaluate(async () => {
-    const { InputController } = (window as unknown as { __panoTest: any }).__panoTest
+    const { InputController } = window.__panoTest
     const el = document.createElement('div')
     el.style.touchAction = 'pan-y'
     document.body.appendChild(el)
@@ -1547,6 +1915,9 @@ AbortController, and the element's touch-action is restored on dispose."
 
 - [ ] 图片和视频都不存在「未加载就被上传」的路径（两条集成测试证明会抛）
 - [ ] `dispose()` 后每个源的 DOM 监听数归零
+- [ ] `src/media/` 下不存在 `frameSize` 及其任何同义词
+- [ ] 本层不重新定义 `SourceState`，只组合 core 的那一个
+- [ ] 源不缓存帧（同一任务内两次读 `frame` 得到两个对象）
 - [ ] external / copy 两条上传路径的朝向一致
 - [ ] `PTZ = false` 不产生事件，且重新打开后恢复
 - [ ] `touch-action` 在 dispose 时还原
@@ -1557,7 +1928,16 @@ AbortController, and the element's touch-action is restored on dispose."
 | 产物 | 消费者 |
 |---|---|
 | `EventEmitter` / `Disposable` | P5 的 `Viewer`，P6 的 WebGL2 后端 |
-| `MediaSource` 接口 | P5 的 `Viewer` 持有它 |
-| `SourceState.version` | P5 的脏检查 —— 后端据此决定是否重传 |
+| `MediaSource` 接口（`frame` / `naturalSize` / `on` / `markFramePresented`） | P5 的 `Viewer` 持有它 |
+| `MediaFrame` | **就是 P3 的 `RenderableSource`**（本计划写成 `type` 别名），P5 原样交给 `Backend.setSource`，全程无转换 |
+| `MediaFrame.version` | P5 的脏检查；P3 据此决定是否重传 |
+| `MediaFrame.state`（即 core 的 `SourceState`） | P3 的上传尺寸与 `projection` uniform |
+| `MediaSource.markFramePresented()` | P5 的渲染循环每画一帧调一次 —— 视频的版本号靠它前进 |
 | `InputController` 的语义事件 | P5 的 `Viewer` 把 `pan`/`zoom` 转成相机动作 |
 | `WheelZoom` 常量 | 没有下游，但**它是行为变更**：旧版鼠标滚轮与触控板共用一个除数 |
+
+## 留给 P3 的一处依赖（本计划改不动）
+
+**视频的 external texture 导入失败时没有回落分支。** P3 的 `WebGPUBackend.render()` 对 `source.kind === 'video'` 无条件走 `importExternalTexture`；如果某个设备上这一步抛错，异常会一路走到 `RenderLoop` 的 `onError`，结果是一块不再更新的画布 —— 正是本计划 Task 4 想避免的那种「静默冻住」。可用的回落是 `copyExternalImageToTexture` 到一张 rgba8unorm 纹理，也就是图片那条路径；**Step 3 的探针已经证明这条回落与 external 路径的行序一致**，所以补它不会再引入第二个朝向 bug。
+
+这属于 `src/renderer/webgpu/backend.ts`，本计划无权修改，**由 P3 补上**：`render()` 里对视频先试 import，失败则退到 copy 路径，并把 `Capabilities.externalTextures` 置为 `false` 让应用看得见。
