@@ -1,11 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, mkdir, mkdtemp, writeFile, rm, cp } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { STATES, CAMERAS, CANVAS_SIZE, captureId } from './states.mjs'
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../test/fixtures/baseline')
+const here = path.dirname(fileURLToPath(import.meta.url))
+const root = path.resolve(here, '../../test/fixtures/baseline')
 const readJson = async p => JSON.parse(await readFile(p, 'utf8'))
 const capture = (camera, state) => readJson(path.join(root, camera, `${state}.uniforms.json`))
 const lastFrame = doc => doc.frames.at(-1)
@@ -21,9 +25,11 @@ const uniform = (doc, name) => lastFrame(doc).find(u => u.name === name)
  */
 const captured = index => index.captures.filter(c => !c.error)
 
+// Read once at load: six tests were re-reading the same manifest.
+const INDEX = await readJson(path.join(root, 'index.json'))
+
 test('every camera x state pair has a capture', async () => {
-  const index = await readJson(path.join(root, 'index.json'))
-  const got = new Set(captured(index).map(c => c.id))
+  const got = new Set(captured(INDEX).map(c => c.id))
   for (const camera of CAMERAS) {
     for (const state of STATES) {
       assert.ok(got.has(captureId(camera, state)), `missing capture ${captureId(camera, state)}`)
@@ -32,8 +38,7 @@ test('every camera x state pair has a capture', async () => {
 })
 
 test('every capture recorded the camera transform and both projection kinds', async () => {
-  const index = await readJson(path.join(root, 'index.json'))
-  for (const c of index.captures) {
+  for (const c of INDEX.captures) {
     assert.ok(!c.error, `${c.id}: ${c.error}`)
     for (const name of ['u_CamTransMatrix', 'u_CamProjType', 'u_TexProjType']) {
       assert.ok(c.uniformNames.includes(name), `${c.id} is missing ${name}`)
@@ -45,8 +50,7 @@ test('the captured projection kind matches the camera under test', async () => {
   // Guards the fixture itself: a probe that silently fell back to the default
   // camera would otherwise produce a complete, self-consistent, wrong baseline.
   const EXPECTED = { perspective: 1, cylindrical: 2, planet: 3, pannini: 4 }
-  const index = await readJson(path.join(root, 'index.json'))
-  for (const c of captured(index)) {
+  for (const c of captured(INDEX)) {
     const doc = await readJson(path.join(root, c.camera, `${c.state.id}.uniforms.json`))
     const kind = uniform(doc, 'u_CamProjType')
     assert.ok(kind, `${c.id} has no u_CamProjType`)
@@ -88,8 +92,7 @@ test('camera rotation reaches the GPU', async () => {
 })
 
 test('pixels decode to a full RGBA frame', async () => {
-  const index = await readJson(path.join(root, 'index.json'))
-  for (const c of captured(index)) {
+  for (const c of captured(INDEX)) {
     const png = await readFile(path.join(root, c.camera, `${c.state.id}.png`))
     assert.ok(png.length > 0, `${c.id}: empty png`)
     // PNG signature. A base64 slip would produce a file that is non-empty but
@@ -102,9 +105,39 @@ test('pixels decode to a full RGBA frame', async () => {
   }
 })
 
+test('the manifest matches the files on disk', async () => {
+  /*
+   * index.json is the text-diffable face of binary fixtures: a changed PNG is
+   * supposed to surface as a changed pngSha256. That contract only holds if
+   * something actually compares the hash to the bytes -- git will happily
+   * accept a hand-edited PNG and a stale index.json in the same commit.
+   */
+  for (const c of captured(INDEX)) {
+    const png = await readFile(path.join(root, c.camera, `${c.state.id}.png`))
+    const sha = createHash('sha256').update(png).digest('hex')
+    assert.equal(sha, c.pngSha256, `${c.id}: png on disk does not match index.json pngSha256`)
+    assert.equal(png.length, c.pngBytes, `${c.id}: png byte count drifted from index.json`)
+
+    const doc = await capture(c.camera, c.state.id)
+    assert.equal(doc.camera, c.camera, `${c.id}: uniforms.json says camera ${doc.camera}`)
+    assert.equal(doc.state.id, c.state.id, `${c.id}: uniforms.json says state ${doc.state.id}`)
+    assert.equal(doc.frames.length, c.frameCount, `${c.id}: frame count drifted from index.json`)
+    assert.equal(doc.frames.length, 3, `${c.id}: expected three frames`)
+
+    /*
+     * Names carry the whole evidence chain for the dead-uniform findings.
+     * probe.html records a literal '?' when its name lookup fails, so a
+     * name-recovery breakage would otherwise hide inside plausible-looking
+     * data instead of failing here.
+     */
+    const names = [...new Set(doc.frames.flat().map(u => u.name))].sort()
+    for (const n of names) assert.ok(n && n !== '?', `${c.id}: unnamed uniform write recorded`)
+    assert.deepEqual(names, c.uniformNames, `${c.id}: uniform names drifted from index.json`)
+  }
+})
+
 test('capture resolution is the one the fixtures were recorded at', async () => {
-  const index = await readJson(path.join(root, 'index.json'))
-  assert.equal(index.canvasSize, CANVAS_SIZE)
+  assert.equal(INDEX.canvasSize, CANVAS_SIZE)
 })
 
 test('the dead uniforms reach no camera (pins F5 and F6)', async () => {
@@ -120,8 +153,7 @@ test('the dead uniforms reach no camera (pins F5 and F6)', async () => {
    * as a one-line failure instead of a mysterious tolerance problem.
    */
   const dead = ['u_CamPOVLatitude', 'u_CamGeoWidth', 'u_CamGeoHeight']
-  const index = await readJson(path.join(root, 'index.json'))
-  for (const c of captured(index)) {
+  for (const c of captured(INDEX)) {
     for (const name of dead) {
       assert.ok(!c.uniformNames.includes(name), `${c.id} unexpectedly received ${name}`)
     }
@@ -163,5 +195,42 @@ test('the observed degenerate states are pinned (F5 + F11 + F12 compose)', async
     const zoom = uniform(await capture(camera, 'zoomed'), 'u_CamZoom')
     if (!zoom) continue // the linear camera receives no u_CamZoom at all
     assert.ok(zoom.value >= 0.1 && zoom.value <= 2, `${camera}: u_CamZoom ${zoom.value} outside the clamp range`)
+  }
+})
+
+test('verify-fixtures.mjs fails loudly when the fixtures are broken', { skip: process.env.BASELINE_VERIFY_NEGATIVE_TEST === '1' ? 'nested run of the negative test' : false }, async () => {
+  /*
+   * task-finish gate 6 trusts this exit code: a wrapper that exits 0 on a
+   * broken fixture tree would make every downstream gate vacuous. The failure
+   * branch has to be executed at least once to be believed.
+   *
+   * Runs against a throwaway copy of the harness with an empty manifest -- the
+   * completeness test fails there, which is the cheapest realistic breakage.
+   * The committed fixtures are never touched.
+   *
+   * The marker env var stops the copy's own copy of this test from spawning
+   * another copy of itself: without it this test would recurse without bound,
+   * one temp directory per level, for as long as the OS allows.
+   */
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'baseline-verify-'))
+  try {
+    const toolsDir = path.join(tmp, 'tools', 'baseline')
+    await mkdir(toolsDir, { recursive: true })
+    for (const f of ['verify-fixtures.mjs', 'fixtures.test.mjs', 'states.mjs']) {
+      await cp(path.join(here, f), path.join(toolsDir, f))
+    }
+    const fixRoot = path.join(tmp, 'test', 'fixtures', 'baseline')
+    await mkdir(fixRoot, { recursive: true })
+    await writeFile(path.join(fixRoot, 'index.json'), JSON.stringify({ canvasSize: CANVAS_SIZE, captures: [] }))
+
+    const r = spawnSync(process.execPath, ['verify-fixtures.mjs'], {
+      cwd: toolsDir,
+      encoding: 'utf8',
+      env: { ...process.env, BASELINE_VERIFY_NEGATIVE_TEST: '1' }
+    })
+    assert.equal(r.status, 1, `expected exit 1 on broken fixtures, got ${r.status}\nstderr: ${r.stderr}`)
+    assert.match(r.stderr, /capture\.mjs/, 'the failure should tell the operator how to regenerate')
+  } finally {
+    await rm(tmp, { recursive: true, force: true })
   }
 })

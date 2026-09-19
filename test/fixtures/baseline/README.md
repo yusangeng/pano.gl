@@ -16,6 +16,8 @@ cd tools/baseline && npm install && node capture.mjs
   a later pixel comparison renders the same image rather than regenerating one.
 - `index.json` — capture manifest: the observed uniform set per camera, byte
   count and sha256 per PNG, so a changed fixture shows up in a text diff.
+  `fixtures.test.mjs` fails if the manifest and the bytes on disk ever
+  disagree, so the hash column is enforced, not decorative.
 
 PNG rows are top-down, flipped at encode time because the GL origin is
 bottom-up. A renderer reading its own framebuffer from row 0 is already in the
