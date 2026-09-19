@@ -661,6 +661,7 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 - Modify: `.gitignore`
 - Create: `test/integration/support/require-webgpu.ts`
 - Create: `test/integration/support/require-no-webgpu.ts`
+- Create: `test/integration/support/canvas.ts`
 - Create: `test/integration/smoke.test.ts`
 - Create: `test/integration/fallback/smoke.test.ts`
 
@@ -870,12 +871,109 @@ beforeAll(async () => {
 })
 ```
 
-- [ ] **Step 4: 写两个冒烟测试**
+- [ ] **Step 4: 写像素回读原语**
+
+`test/integration/support/canvas.ts`。P5 的每个 User Story 都靠它把「画面上有没有东西」变成断言，所以它自己必须先被证明过 —— Step 5 的冒烟测试就是那个证明。
+
+```ts
+/*
+ * Reading pixels back out of a canvas, for tests that assert on what was
+ * drawn rather than on what was returned.
+ *
+ * Goes through `toDataURL`, NOT `drawImage`. This is measured, not assumed:
+ * a WebGPU canvas read by `drawImage` is correct in the task that drew it and
+ * in the animation frame immediately after, and fully transparent one frame
+ * past that -- 3/3 blank at two rAFs, across all four combinations of
+ * {rgba8unorm, bgra8unorm} x {opaque, premultiplied}. The one-rAF case is a
+ * race, which is why single samples of it disagree. A test that waited for a
+ * frame and then read with `drawImage` would see an empty canvas and report it
+ * as a renderer that drew nothing -- a wrong answer wearing the shape of a
+ * real failure. `toDataURL` was correct at 0, 1, 2, 5 and 20 frames: 15 of 15.
+ *
+ * It costs about 2ms per read at 64x32, which is the other reason the read
+ * below downscales: a full 1600x1200 canvas is 400x the pixels to decode for
+ * a question ("did this change", "is there content") that 64x32 answers.
+ *
+ * The bytes come back RGBA whatever the canvas's GPU format is: `getImageData`
+ * converts on the way out, so the `bgra8unorm` that `getPreferredCanvasFormat()`
+ * returns on macOS never reaches the caller and nothing here reorders channels.
+ */
+
+/** One frame's worth of waiting for the renderer's own rAF loop to run again. */
+export function nextFrames (count = 1): Promise<void> {
+  return new Promise((resolve) => {
+    let left = count
+    const tick = (): void => {
+      if (--left <= 0) resolve()
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+}
+
+function decode (dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('the canvas did not produce a decodable PNG'))
+    image.src = dataUrl
+  })
+}
+
+/**
+ * Reads `canvas` back as RGBA8, downscaled to `width`x`height`.
+ *
+ * @param canvas - Any canvas, WebGPU or 2D.
+ * @param width - Output width. 64 keeps the readback near the 256-byte row
+ *   alignment `copyTextureToBuffer` wants and keeps comparisons cheap.
+ * @param height - Output height.
+ */
+export async function readCanvas (
+  canvas: HTMLCanvasElement,
+  width = 64,
+  height = 32
+): Promise<ImageData> {
+  const image = await decode(canvas.toDataURL('image/png'))
+  const scratch = document.createElement('canvas')
+  scratch.width = width
+  scratch.height = height
+  const ctx = scratch.getContext('2d', { willReadFrequently: true })
+  if (ctx === null) throw new Error('no 2D context to read the canvas back into')
+  ctx.drawImage(image, 0, 0, width, height)
+  return ctx.getImageData(0, 0, width, height)
+}
+
+/** The largest per-channel difference between two same-size readbacks. */
+export function maxChannelDiff (a: ArrayLike<number>, b: ArrayLike<number>): number {
+  if (a.length !== b.length) throw new Error('readbacks differ in size')
+  let max = 0
+  for (let i = 0; i < a.length; i++) max = Math.max(max, Math.abs(a[i]! - b[i]!))
+  return max
+}
+
+/**
+ * How many pixels are not fully transparent black.
+ *
+ * The question a "did anything render" test is really asking, and one an exact
+ * comparison cannot answer: a viewer that drew the wrong thing still drew.
+ */
+export function countNonBlack (image: ImageData): number {
+  let count = 0
+  const { data } = image
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i]! > 0 || data[i + 1]! > 0 || data[i + 2]! > 0) count++
+  }
+  return count
+}
+```
+
+- [ ] **Step 5: 写两个冒烟测试**
 
 `test/integration/smoke.test.ts`（跑在 `integration` project）：
 
 ```ts
 import { expect, test } from 'vitest'
+import { countNonBlack, readCanvas } from './support/canvas'
 
 test('the browser has a real WebGPU adapter', async () => {
   // Non-null: require-webgpu.ts already asserted it. This test's job is to
@@ -886,14 +984,77 @@ test('the browser has a real WebGPU adapter', async () => {
   expect(adapter!.info).toBeTruthy()
 })
 
-test('the canvas format is the one the gates assume', () => {
+test('a WebGPU canvas reads back as RGBA, after frames have passed', async () => {
   /*
-   * BGRA, not RGBA. getPreferredCanvasFormat() returns bgra8unorm on macOS,
-   * so a pixel dump read as RGBA silently reads blue where it means red --
-   * a wrong answer that looks like a right one. Pinning it here means the
-   * gate tests get told rather than having to guess.
+   * The whole chain in one test: a real device, a canvas configured the way
+   * P3's backend will configure it, one frame drawn, and pixels read out of
+   * it after the frame boundary. Every later phase asserts on pixels, so if
+   * any link here is broken the failures show up there as renderer bugs.
+   *
+   * `rgba8unorm`, not getPreferredCanvasFormat(). That returns bgra8unorm on
+   * macOS, so a canvas whose format follows the host makes every pixel
+   * assertion platform-dependent -- which is why the backend pins the format
+   * instead (P3) and why this test pins the same one.
    */
-  expect(navigator.gpu!.getPreferredCanvasFormat()).toBe('bgra8unorm')
+  const adapter = await navigator.gpu!.requestAdapter()
+  const device = await adapter!.requestDevice()
+
+  const canvas = document.createElement('canvas')
+  canvas.width = 8
+  canvas.height = 8
+  document.body.appendChild(canvas)
+
+  const ctx = canvas.getContext('webgpu')
+  expect(ctx, 'no webgpu context on a canvas in a project with a real adapter').not.toBeNull()
+  ctx!.configure({ device, format: 'rgba8unorm', alphaMode: 'opaque' })
+
+  const module = device.createShaderModule({
+    code: `
+      @vertex
+      fn vs (@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+        var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+        return vec4f(p[i], 0.0, 1.0);
+      }
+
+      @fragment
+      fn fs () -> @location(0) vec4f { return vec4f(1.0, 0.0, 0.0, 1.0); }
+    `
+  })
+  const pipeline = device.createRenderPipeline({
+    layout: 'auto',
+    vertex: { module, entryPoint: 'vs' },
+    fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] },
+    primitive: { topology: 'triangle-list' }
+  })
+
+  const encoder = device.createCommandEncoder()
+  const pass = encoder.beginRenderPass({
+    colorAttachments: [{
+      view: ctx!.getCurrentTexture().createView(),
+      clearValue: { r: 0, g: 0, b: 0, a: 1 },
+      loadOp: 'clear',
+      storeOp: 'store'
+    }]
+  })
+  pass.setPipeline(pipeline)
+  pass.draw(3)
+  pass.end()
+  device.queue.submit([encoder.finish()])
+
+  // Two frames, not one. The canvas is only presented after the submit has
+  // been through the compositor, and reading inside the drawing task would
+  // pass even if nothing were ever presented.
+  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+
+  const image = await readCanvas(canvas)
+  expect(countNonBlack(image), 'the canvas read back empty').toBe(image.width * image.height)
+
+  // Red, not blue. This is the assertion that catches a channel swap, and it
+  // is the reason nothing in this repo reorders bytes: getImageData converts
+  // to RGBA on the way out, so a `bgraToRgba`-shaped helper would turn a
+  // correct readback into a wrong one -- and, applied to both sides of a
+  // comparison, would keep passing while doing it.
+  expect(Array.from(image.data.slice(0, 4))).toEqual([255, 0, 0, 255])
 })
 ```
 
@@ -910,7 +1071,7 @@ test('this project really is the no-WebGPU one', () => {
 })
 ```
 
-- [ ] **Step 5: 跑，并证明守卫真的会拦人**
+- [ ] **Step 6: 跑，并证明守卫真的会拦人**
 
 ```bash
 npx playwright install chromium && npm run test:integration
@@ -938,7 +1099,7 @@ Expected: **同样的 FAIL**。这正是这条守卫最大的价值：这个配�
 
 （已实测：同样全红。）改回来。
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add vitest.config.ts test/integration/tsconfig.json test/integration/ package.json .gitignore
