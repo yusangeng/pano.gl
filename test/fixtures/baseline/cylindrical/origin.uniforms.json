@@ -1,0 +1,140 @@
+{
+  "camera": "cylindrical",
+  "state": {
+    "id": "origin",
+    "lat": 0,
+    "lng": 0,
+    "zoom": 0
+  },
+  "frames": [
+    [
+      {
+        "name": "u_CamProjType",
+        "value": 2
+      },
+      {
+        "name": "u_CamTransMatrix",
+        "value": [
+          0,
+          0,
+          0.0020002000965178013,
+          0,
+          0,
+          2,
+          0,
+          0,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -1.0002000331878662,
+          1
+        ]
+      },
+      {
+        "name": "u_CamPOVLongitude",
+        "value": 0
+      },
+      {
+        "name": "u_CamZoom",
+        "value": 1
+      },
+      {
+        "name": "u_TexProjType",
+        "value": 1
+      },
+      {
+        "name": "u_Sampler",
+        "value": 0
+      }
+    ],
+    [
+      {
+        "name": "u_CamProjType",
+        "value": 2
+      },
+      {
+        "name": "u_CamTransMatrix",
+        "value": [
+          0,
+          0,
+          0.0020002000965178013,
+          0,
+          0,
+          2,
+          0,
+          0,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -1.0002000331878662,
+          1
+        ]
+      },
+      {
+        "name": "u_CamPOVLongitude",
+        "value": 0
+      },
+      {
+        "name": "u_CamZoom",
+        "value": 1
+      },
+      {
+        "name": "u_TexProjType",
+        "value": 1
+      },
+      {
+        "name": "u_Sampler",
+        "value": 0
+      }
+    ],
+    [
+      {
+        "name": "u_CamProjType",
+        "value": 2
+      },
+      {
+        "name": "u_CamTransMatrix",
+        "value": [
+          0,
+          0,
+          0.0020002000965178013,
+          0,
+          0,
+          2,
+          0,
+          0,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -1.0002000331878662,
+          1
+        ]
+      },
+      {
+        "name": "u_CamPOVLongitude",
+        "value": 0
+      },
+      {
+        "name": "u_CamZoom",
+        "value": 1
+      },
+      {
+        "name": "u_TexProjType",
+        "value": 1
+      },
+      {
+        "name": "u_Sampler",
+        "value": 0
+      }
+    ]
+  ]
+}
