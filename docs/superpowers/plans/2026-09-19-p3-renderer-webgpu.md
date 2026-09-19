@@ -304,8 +304,12 @@ export type SelectedCapabilities = Capabilities | { readonly backend: 'none' }
 /**
  * The smallest `maxTextureDimension2D` we will believe. A software adapter that
  * reports 0 would otherwise make every source look oversized.
+ *
+ * Exported because `WebGPUBackend` assembles its own `Capabilities` from the
+ * adapter it acquired and has to apply the same floor. The rule is stated here
+ * and must not be re-derived there.
  */
-const MIN_TRUSTWORTHY_TEXTURE_DIMENSION = 2048
+export const MIN_TRUSTWORTHY_TEXTURE_DIMENSION = 2048
 
 /**
  * Decides which backend to use and what to report about it.
@@ -854,14 +858,17 @@ fn panorama_uv(ndc: vec2f) -> vec2f {
   // `povLongitude / 4` -- degrees subtracted from radians. That is a bug in
   // v0.2.2, reproduced here on purpose: the acceptance criterion is "renders
   // what v0.2.2 rendered", and correcting it changes panning sensitivity, which
-  // is a separate user-visible decision (P6 Task 6). See `lngOffset` in
-  // src/core/reference.ts for the full consequence.
+  // is a separate user-visible decision that v1 does not make. Recorded as a
+  // deliberate retention in spec §11.4 (B1), which is where the three copies of
+  // this note point. See `lngOffset` in src/core/reference.ts for the full
+  // consequence.
   let lng = camera.povLongitude / 4.0;
 
   // `povLatitude` is read by nothing here. That is not an omission: the legacy
   // non-linear cameras ignored latitude too (defect F5), and reproducing that is
-  // this phase's acceptance criterion. P6 Task 6 makes it a deliberate,
-  // separately-tested behaviour change. It stays in the struct because removing
+  // this phase's acceptance criterion. Task 8 Step 3 of this plan makes it a
+  // deliberate, separately-tested behaviour change -- not a later phase's job.
+  // It stays in the struct because removing
   // it would move every uniform offset after it, and that layout belongs to P2.
   var uv: vec2f;
   switch camera.projKind {
@@ -1094,7 +1101,7 @@ describe('panorama WGSL', () => {
   it('subtracts povLongitude / 4, the legacy units bug, and not a degree conversion', () => {
     // v0.2.2 subtracted a degree value from a radian angle. Reproducing that is
     // the acceptance criterion for this phase; "fixing" it here would change
-    // panning sensitivity and must be a deliberate change in P6 Task 6 instead.
+    // panning sensitivity, which v1 deliberately does not do (spec §11.4 B1).
     expect(PANORAMA_WGSL).toContain('camera.povLongitude / 4.0')
     expect(PANORAMA_WGSL).not.toMatch(/povLongitude \* PI \/ 180/)
   })
@@ -1389,6 +1396,7 @@ import { buildCameraTransform } from '../../core/matrix'
 import type { CameraState, Projection } from '../../core/types'
 import type { Backend, Capabilities, DeviceLost, RenderableSource } from '../backend'
 import { CAMERA_UNIFORM_SIZE, packCameraUniforms } from '../uniforms'
+import { MIN_TRUSTWORTHY_TEXTURE_DIMENSION } from '../capabilities'
 import { acquireDevice, withValidationScope, type AcquiredDevice } from './device'
 import { PANORAMA_WGSL } from './shaders'
 import { createPanoramaSampler } from './shaders/sampler'
@@ -1530,7 +1538,10 @@ export class WebGPUBackend implements Backend {
     const capabilities: Capabilities = {
       backend: 'webgpu',
       adapter: adapter.info as unknown as Record<string, string>,
-      maxTextureDimension: limits.maxTextureDimension2D,
+      // The floor is applied here, not only inside `describeCapabilities`: this
+      // object is built by hand and is the one callers actually read, so an
+      // adapter reporting 0 would otherwise make every source look oversized.
+      maxTextureDimension: Math.max(MIN_TRUSTWORTHY_TEXTURE_DIMENSION, limits.maxTextureDimension2D),
       externalTextures: true
     }
 

@@ -900,7 +900,7 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 | DPR / 高分屏 | Playwright 的 `deviceScaleFactor` |
 | 手势 | `page.mouse` / `dispatchEvent` 合成 pointer 序列 |
 | 视频真实解码 | **【实测】** H.264 `probably`、VP8 实际解码成功 → **不必退化成 captureStream** |
-| 后端降级 | 屏蔽 `navigator.gpu`，断言走 WebGL2 且发出事件 |
+| 后端降级 | 屏蔽 `navigator.gpu`，断言走 WebGL2 **且降级可被观测** —— v1 不为此加事件：`probe()` 返回带 `backend` 判别的 `SelectedCapabilities`，构造后的 `viewer.capabilities.backend` 也读得到。事件是「事后通知」，而这里要的是「事前可问」，后者才是旧 `createProgram` 那个坑的解法 |
 
 ---
 
@@ -1014,6 +1014,18 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 | N6 | `Camera` / `OrthoCamera` 声明 `@disposable` 却无 `dispose()` | 两个文件 |
 | N7 | `konph` / `polygala` 声明为依赖但零引用 | `package.json` |
 | N8 | `demo/webpack.config.js` 的 `entry: './index.js'` 与实际文件 `Index.js` 大小写不符，Linux/CI 上失败 | `demo/webpack.config.js` |
+
+### 11.4 刻意保留的旧行为
+
+§11.1 是**修掉的**缺陷。这一节相反：**看出来了、也认为它是错的，但 v1 故意照旧**。留在这里是因为一份不记录保留项的缺陷清单会让人以为漏掉了它。
+
+| # | 行为 | 位置 | v1 的处置 |
+|---|---|---|---|
+| B1 | 非线性相机的 `lng` 偏移把**角度值当弧度用** | `fshader.glsl`：文件级 `float lng = u_CamPOVLongitude / 2.0`，三个非线性公式各减 `lng / 2.0`，于是从弧度角上减掉的是 `povLongitude / 4` | **照旧**，见下 |
+
+**【核码】** 三层链路的净效果是 `povLongitude / 4`：`CameraState.povLongitude` 是**度**，`theta` 是**弧度**，减掉的是二者的混合量 —— 既不是正确的度转弧度（`* PI / 180`，差约 29 倍），也不是任何一致的量纲。**修正它会直接改变拖拽灵敏度**，那是一个用户可见的行为变更，不是一次内部重构。
+
+**v1 不做这个决定。** 验收标准是「渲染出 v0.2.2 渲染的东西」，照旧是唯一能过门禁 A 的做法。要改就是单独一次有意的变更，需要自己的测试（形状同 §12 的 F5），并且要说明为什么新的灵敏度是对的。P3 的着色器、P6 的 GLSL 与 `src/core/reference.ts` 三处都带这条注释，指向这里。
 
 ---
 

@@ -342,8 +342,9 @@ void main () {
   // angle was `povLongitude / 4` -- degrees subtracted from radians. That is a
   // bug in v0.2.2, reproduced on purpose: the acceptance criterion is "renders
   // what v0.2.2 rendered", and correcting it changes panning sensitivity, which
-  // is a separate user-visible decision. See lngOffset() in
-  // src/core/reference.ts for the full consequence.
+  // v1 deliberately does not do -- recorded as a retention in spec §11.4 (B1),
+  // which is where this note, P3's WGSL copy and `lngOffset()` in
+  // src/core/reference.ts all point.
   //
   // `/ 4.0`. NOT `* PI / 180.0`. The two differ by a factor of about 29, and
   // the wrong one still renders a plausible-looking panorama.
