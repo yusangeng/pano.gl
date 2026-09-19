@@ -4,7 +4,7 @@ scope: [tools/baseline/**, test/fixtures/baseline/**, .gitignore, docs/superpowe
 verify: if [ -f tools/baseline/verify-fixtures.mjs ]; then (cd tools/baseline && node verify-fixtures.mjs); fi
 bootstrap: (cd tools/baseline && npm install && npx playwright install chromium)
 layer: foundation
-state: open
+state: doing
 createdAt: 2026-09-19T08:51:52.107Z
 ---
 # 任务：P0 — 冻结基线
