@@ -43,3 +43,5 @@ packinfo.js
 lib
 doc
 wasm
+# Vibe design docs / research artifacts
+.vibe
