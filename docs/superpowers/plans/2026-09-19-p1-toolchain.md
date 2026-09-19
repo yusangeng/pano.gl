@@ -6,7 +6,7 @@
 
 **Architecture:** 新实现与旧实现**并存于同一仓库、同一分支**：旧源码 `git mv` 到 `legacy/`（webpack 配置随之指向），新源码从零开始写在 `src/`。`legacy/` 的构建脚本原样保留并在 CI 里跑，保证 v0.2.x 全程可以发版。
 
-**Tech Stack:** TypeScript 5 (strict) · tsup (esbuild) · vitest · Playwright · neostandard · GitHub Actions
+**Tech Stack:** TypeScript 5 (strict) · tsup (esbuild) · vitest（单元 = node project，集成 = browser project）· neostandard · GitHub Actions
 
 ---
 
@@ -30,13 +30,12 @@ spec §10.5 写的是「旧代码不被触碰」。这次移动**不违背它的
 |---|---|
 | `legacy/**` | v0.2.2 的全部旧源码，原样迁移，只改引用它的构建配置 |
 | `src/` | **新实现的唯一根目录**，P1 时只有 `diagnostics.ts` 和 `index.ts` |
-| `test/unit/` | vitest 单元测试 |
-| `test/integration/` | Playwright 集成测试 |
+| `test/unit/` | vitest 单元测试，跑在 node |
+| `test/integration/` | vitest 浏览器模式集成测试，跑在真浏览器里 |
 | `scripts/` | 构建期脚本（P2 起是 shader 常量生成器） |
-| `tsconfig.json` | strict + `noUncheckedIndexedAccess` |
+| `tsconfig.json` | strict + `noUncheckedIndexedAccess`，库自身的 program |
 | `tsup.config.ts` | 打包配置，两套入口 |
-| `vitest.config.ts` | 单元测试 + 覆盖率阈值 |
-| `playwright.config.ts` | 集成测试，**含 WebGPU 守卫** |
+| `vitest.config.ts` | 三个 project：`unit`（node）、`integration`（浏览器，**含 WebGPU 守卫**）、`no-webgpu`（浏览器，反向守卫；P6 用） |
 
 ---
 
@@ -132,10 +131,10 @@ otherwise: npm run build-debug produces a byte-identical bundle."
     "build": "tsup",
     "build:legacy": "node scripts/legacy-build.mjs",
     "test": "npm run test:unit && npm run test:integration",
-    "test:unit": "vitest run",
-    "test:unit:watch": "vitest",
-    "test:integration": "playwright test",
-    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run --project unit",
+    "test:unit:watch": "vitest --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:coverage": "vitest run --project unit --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test scripts",
     "gen:shaders": "node scripts/gen-shader-constants.mjs",
@@ -148,25 +147,30 @@ otherwise: npm run build-debug produces a byte-identical bundle."
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
-    "@types/pngjs": "^6.0.5",
-    "@vitest/coverage-v8": "^3",
+    "@vitest/browser": "^5",
+    "@vitest/browser-playwright": "^5",
+    "@vitest/coverage-v8": "^5",
     "eslint": "^9",
     "neostandard": "^0.12.0",
     "playwright": "^1.63.0",
-    "@playwright/test": "^1.63.0",
-    "pngjs": "^7.0.0",
     "tsup": "^8",
     "typedoc": "^0.28",
     "typescript": "^5.9",
     "vite": "^7",
-    "vitest": "^3"
+    "vitest": "^5"
   }
 }
 ```
 
 **与旧 package.json 的差异是刻意的**：`babel` / `babel-*` / `webpack` / `webpack-glsl-loader` / `isparta` / `istanbul` / `mocha` / `chai` / `litchy` / `konph` / `polygala` / `shortid` / `lodash` / `chivy` / `param-check` / `dodele` **全部退出**。
 
-> `pngjs` 装在 P1 而不是用它的 P2/P3，因为「测试要读基线 PNG」这件事从 P0 存下 `test/fixtures/baseline/*.png` 的那一刻就定了。它进 devDependencies 而不是 dependencies：只被测试读，运行时不碰。`test/support/baseline.ts` 和 P3 的门禁 A 都从它取像素。
+> **不再需要 `pngjs`。** 集成测试现在跑在真浏览器里，读一张基线图就是
+> `fetch(url) → blob → createImageBitmap()`，浏览器自带解码器。P0 的采集工具
+> 如果要用 pngjs，那是它自己的 `tools/baseline/package.json` 的事，与本包的依赖树无关。
+>
+> **`playwright` 留着，`@playwright/test` 不要。** 前者是浏览器模式的 provider
+> （`@vitest/browser-playwright` 的 peer dependency），由它负责起浏览器；后者的测试
+> runner 已经不再使用。少一个 runner、少一套断言库。
 
 > `build:legacy` 需要 webpack 与 babel 的依赖。它们**必须留着**直到 P7 —— 否则 v0.2.x 就发不了版了。见 Task 6。
 
@@ -223,11 +227,26 @@ legacy build keeps its own dependencies until P7 deletes the code."
 }
 ```
 
-> **`test/integration` 被排除在根 program 之外，这不是遗漏。** 集成测试要用 `window.__panoTest`，而那个全局声明**只写在一处**：`demo/test-entry.ts`（P3 Task 5 建）。声明要生效，`demo/` 就必须进入**该测试所在的 program**；而 `demo/test-entry.ts` 用了 `import.meta.glob`，那是 Vite 的机制，编译它需要 `"types": ["vite/client"]`。
+> **`test/integration` 被排除在根 program 之外，这不是遗漏。**
 >
-> 把 `demo/` 收进根 program 会连带把构建器的环境类型拖进**库自己**的类型检查 —— 一个纯库的 `tsc --noEmit` 不该需要知道 Vite 的存在。所以集成测试自成一个 program：`test/integration/tsconfig.json`，P3 Task 5 Step 3 建它，`include` 掉集成测试与 `demo/`，`types` 里带 `vite/client`。**那份子配置必须写 `"exclude": []`** —— 这里继承下去的 `exclude` 相对本文件解析，会把集成测试全部排除掉，子 program 于是静默地什么都不检查；P3 那一步有实测记录。**P3 同时要把 `npm run typecheck` 改成两条**（`tsc --noEmit && tsc --noEmit -p test/integration`），否则那个 program 根本不会被跑。
+> 集成测试跑在**浏览器模式**下，也就是说它们由 Vite 编译、可以 `import baseline from '../fixtures/x.bin?url'`。`?url` / `?raw` 这类后缀的模块声明来自 `vite/client`。于是集成测试需要一个带 `"types": ["@webgpu/types", "vite/client"]` 的 program，而**库自己不该有** —— 一个纯库的 `tsc --noEmit` 不该需要知道 Vite 的存在。
 >
-> 单元测试不碰 `window`、不碰 GPU（见 Testing 一节），所以留在根 program 里是对的。**别把 `exclude` 去掉图省事** —— 去掉了根 program 立刻红，而且报错会指向测试文件，看起来像测试写错了。
+> 所以集成测试自成一个 program：`test/integration/tsconfig.json`，**本计划 Task 8 Step 1 建它**：
+>
+> ```json
+> {
+>   "extends": "../tsconfig.json",
+>   "compilerOptions": { "types": ["@webgpu/types", "vite/client"] },
+>   "include": ["./**/*.ts"],
+>   "exclude": []
+> }
+> ```
+>
+> **`"exclude": []` 必须写，它看着多余但不是。** 继承下来的 `exclude` 相对**声明它的那个文件**解析，所以根配置里的 `"exclude": ["test/integration"]` 会跟到子配置里，把子 program 自己要检查的文件全部排掉。实测（tsc 5.9）：少了这一行，往 `test/integration/` 里放一个故意写错的测试，`tsc -p test/integration` **照样退出码 0**；加上就报出那个错。一个静默地什么都不检查的 typecheck program 比没有还糟 —— 它会让「typecheck 是绿的」变成一句没有信息量的话。
+>
+> **`npm run typecheck` 因此必须是两条**（Task 8 Step 1 改）：`tsc --noEmit && tsc --noEmit -p test/integration`。否则那个 program 根本不会被跑到。
+>
+> 单元测试不碰 `window`、不碰 GPU、不 import 资源（见 Testing 一节），所以留在根 program 里是对的。**别把 `exclude` 去掉图省事** —— 去掉了根 program 立刻红，而且报错会指向集成测试文件，看起来像测试写错了。
 
 **`noUncheckedIndexedAccess` 是刻意的**：spec §7.4 说明删掉 `param-check` 的前提是类型够严。它会让 `arr[i]` 的类型变成 `T | undefined`，一开始会很烦 —— 但那正是 GPU 缓冲下标这类代码该有的严谨度。**不要为了省事关掉它。**
 
@@ -549,11 +568,12 @@ git commit -m "build: keep the v0.2.x bundle buildable during the rewrite"
 
 ---
 
-### Task 7: 单元测试配置
+### Task 7: vitest 的 unit project 与覆盖率
 
 **Files:**
 - Create: `vitest.config.ts`
-- Create: `test/unit/tsconfig.json`（可选，若编辑器需要）
+
+Task 8 会往同一个文件里加 `integration` project。**一个配置文件、两个 project、一个 vitest** —— 单元测试跑 node，集成测试跑真浏览器，命令都是 `vitest run --project <名字>`。
 
 - [ ] **Step 1: 写配置**
 
@@ -562,8 +582,13 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    include: ['test/unit/**/*.test.ts'],
-    environment: 'node',
+    /*
+     * Coverage is configured at the ROOT, not inside the unit project.
+     * Vitest reads coverage from the root config; a `coverage` block nested in
+     * a project is not what the reporter looks at. Scoping is done by running
+     * `vitest run --project unit --coverage` -- only unit tests contribute
+     * because only they ran.
+     */
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
@@ -580,7 +605,16 @@ export default defineConfig({
         lines: 90,
         statements: 90
       }
-    }
+    },
+    projects: [
+      {
+        test: {
+          name: 'unit',
+          include: ['test/unit/**/*.test.ts'],
+          environment: 'node'
+        }
+      }
+    ]
   }
 })
 ```
@@ -590,170 +624,327 @@ export default defineConfig({
 Run: `npm run test:coverage`
 Expected: PASS（此时 `src/` 只有两个文件，且都有测试）
 
-临时把 `src/index.ts` 从 exclude 里去掉再跑一次，确认它**失败** —— 证明门槛不是摆设。改回来。
+**这一步不能只是「跑一下看看」。** 覆盖率门槛的价值全在「不达标会不会红」，所以必须实测一次红：
+
+```bash
+# 造一个没有人调用过的分支
+cat > src/__threshold_probe.ts <<'EOF'
+export function pick(n: number): string {
+  if (n > 0) return 'pos'
+  return 'non-pos'
+}
+EOF
+npm run test:coverage; echo "exit=$?"
+rm src/__threshold_probe.ts
+```
+
+Expected: `exit=1`，且输出里有
+`ERROR: Coverage for branches (...) does not meet global threshold (90%)`。
+
+（已实测：`exit=1`，四个维度各报一条 ERROR。删掉探针文件后恢复正常。）
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add vitest.config.ts
-git commit -m "test: vitest with a 90% branch threshold that actually fails the build"
+git commit -m "test: vitest unit project with a 90% branch threshold that fails the build"
 ```
 
 ---
 
-### Task 8: Playwright 配置与 WebGPU 守卫
+### Task 8: 浏览器模式集成测试与 WebGPU 守卫
 
 **Files:**
-- Create: `playwright.config.ts`
-- Create: `test/integration/support/fixtures.ts`
+- Create: `test/integration/tsconfig.json`
+- Modify: `vitest.config.ts`（加两个 browser project）
+- Modify: `package.json`（typecheck 变两条）
+- Create: `test/integration/support/require-webgpu.ts`
+- Create: `test/integration/support/require-no-webgpu.ts`
 - Create: `test/integration/smoke.test.ts`
+- Create: `test/integration/fallback/smoke.test.ts`
 
-这是本计划**最重要的一步**。spec §9.5 已用实测钉死：Playwright 默认 headless 起的是 `chrome-headless-shell`，**WebGL 正常、WebGPU 拿不到适配器**。不写守卫的话，整套 WebGPU 测试会变成空跑而 CI 一路绿灯。
+这是本计划**最重要的一步**。
 
-- [ ] **Step 1: 写配置**
+集成测试跑在 **vitest 浏览器模式**下：测试文件本身就在页面里，直接 `import` 被测代码，不再需要 `window.__panoTest` 那套跨进程桥接。但「跑在真浏览器里」这件事本身有一个**静默失败模式**：浏览器可能根本没有 GPU，测试于是空跑，而 CI 一路绿灯。守卫就是把这个静默降级变成红灯的东西。
+
+已实测的两条静默路径（两条都能被守卫抓到，见 Step 5）：
+
+1. Playwright 自带的 headless chromium **没有 GPU**（`channel: 'chromium'` 才指到带 GPU 的那个完整构建）。此时 `navigator.gpu` **存在**、`requestAdapter()` 返回 **null**、WebGL2 照常工作 —— 所以「测试跑过了」和「测试什么都没测」在输出上长得一模一样。
+2. **Vitest 5 的 `instances[].launch` / `instances[].context` 会被静默忽略** —— 见 Step 2 的说明。配置被吞掉不会有任何报错，你只是拿到了上面那个没 GPU 的浏览器。
+
+- [ ] **Step 1: 集成测试的 tsconfig，并把 typecheck 改成两条**
+
+`test/integration/tsconfig.json`：
+
+```json
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["@webgpu/types", "vite/client"]
+  },
+  "include": ["./**/*.ts"],
+  "exclude": []
+}
+```
+
+理由见 Task 3 Step 1 的说明。**`"exclude": []` 不能省** —— 少了它这个 program 会静默地什么都不检查（tsc 5.9 实测）。
+
+`package.json` 里把 typecheck 改成两条：
+
+```json
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test/integration",
+```
+
+- [ ] **Step 2: 往 vitest.config.ts 里加两个 browser project**
 
 ```ts
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig } from 'vitest/config'
+import { playwright } from '@vitest/browser-playwright'
 
 export default defineConfig({
-  testDir: './test/integration',
-  fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? 'github' : 'list',
-  use: {
-    // Serve the repo over http:// -- WebGPU requires a secure context.
-    baseURL: 'http://localhost:5173'
-  },
-  projects: [
-    {
-      name: 'chromium-gpu',
-      use: {
-        ...devices['Desktop Chrome'],
-        /*
-         * channel: 'chromium' is load-bearing, and not for the reason it looks
-         * like. Playwright's default headless launch uses chrome-headless-shell,
-         * a separate binary with no GPU stack: WebGL still works (through
-         * SwiftShader) and renders correct pixels, but requestAdapter() returns
-         * null, so every WebGPU test no-ops. The failure mode is "looks fine",
-         * not "reports an error".
-         *
-         * Do not remove this to make CI faster, and do not add --disable-gpu.
-         * The guard in test/integration/support/fixtures.ts is what turns a
-         * silent downgrade into a red build.
-         */
-        channel: 'chromium'
-      }
-    }
-  ],
-  webServer: {
-    command: 'npx vite --port 5173 --strictPort',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI
-  }
-})
-```
-
-- [ ] **Step 2: 写守卫 fixture**
-
-`test/integration/support/fixtures.ts`：
-
-```ts
-import { test as base, expect } from '@playwright/test'
-
-/**
- * A page that has been proven to have a working WebGPU adapter.
- *
- * Every WebGPU test must use this instead of the base `test`. Playwright's
- * default headless launch has no WebGPU at all, and without an explicit check
- * the whole suite silently passes while testing nothing.
- */
-export const test = base.extend<{ gpuPage: import('@playwright/test').Page }>({
-  gpuPage: async ({ page }, use) => {
-    await page.goto('/')
-
-    const report = await page.evaluate(async () => {
-      if (!('gpu' in navigator) || !navigator.gpu) {
-        return { ok: false, reason: 'navigator.gpu is undefined' }
-      }
-      const adapter = await navigator.gpu.requestAdapter()
-      if (!adapter) {
-        return {
-          ok: false,
-          reason:
-            'requestAdapter() returned null. If this ran under chrome-headless-shell ' +
-            '(Playwright default) that is expected -- set channel: "chromium". ' +
-            'Check with: DEBUG=pw:browser npx playwright test'
+  test: {
+    coverage: { /* Task 7 写的，原样保留 */ },
+    projects: [
+      {
+        test: {
+          name: 'integration',
+          setupFiles: ['./test/integration/support/require-webgpu.ts'],
+          include: ['test/integration/**/*.test.ts'],
+          exclude: ['test/integration/fallback/**'],
+          browser: {
+            enabled: true,
+            /*
+             * The launch/context options live HERE, on the provider factory.
+             *
+             * Putting them on `instances[].launch` / `instances[].context`
+             * instead is accepted without a word and then ignored -- you
+             * silently get Playwright's bundled headless chromium, which has
+             * no GPU at all. Measured: with the options in the wrong place
+             * requestAdapter() returns null and every test in this project
+             * fails at the guard; with them here the adapter is real
+             * (apple/metal-3 on the machine this was verified on).
+             *
+             * channel: 'chromium' is load-bearing, and not for the reason it
+             * looks like. Playwright's default headless launch uses
+             * chrome-headless-shell, a separate binary with no GPU stack:
+             * WebGL still works (through SwiftShader) and renders correct
+             * pixels, but requestAdapter() returns null, so every WebGPU test
+             * no-ops. The failure mode is "looks fine", not "reports an error".
+             */
+            provider: playwright({
+              launchOptions: {
+                channel: 'chromium',
+                /*
+                 * CI runners have no GPU, and a GPU-less browser hands back a
+                 * null adapter -- which the guard would (correctly) turn into a
+                 * red build. SwiftShader gives software WebGPU back, but only
+                 * with BOTH of these flags: --enable-unsafe-swiftshader and
+                 * --use-webgpu-adapter=swiftshader on their own each still
+                 * return null. Measured; see also the CI job in Task 9.
+                 *
+                 * Reproduce the CI environment locally with `CI=1 npm run
+                 * test:integration`. Note that the gates therefore have to hold
+                 * on a software rasteriser as well as on a real GPU -- that is
+                 * a tolerance decision for P3, not something this file settles.
+                 */
+                args: process.env.CI
+                  ? ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader']
+                  : []
+              },
+              contextOptions: { deviceScaleFactor: 2 }
+            }),
+            headless: true,
+            // Traces are Playwright-provider-only and open in
+            // https://trace.playwright.dev -- the debugging story Playwright
+            // users expect, kept.
+            trace: 'retain-on-failure',
+            instances: [{ browser: 'chromium' }]
+          }
         }
+      },
+      {
+        test: {
+          name: 'no-webgpu',
+          setupFiles: ['./test/integration/support/require-no-webgpu.ts'],
+          include: ['test/integration/fallback/**/*.test.ts'],
+          browser: {
+            enabled: true,
+            /*
+             * --disable-gpu reproduces the real downgrade condition: navigator.gpu
+             * still exists, requestAdapter() returns null, and WebGL2 keeps
+             * working. Measured. Note --disable-features=WebGPU does NOT work
+             * (the adapter still appears), and adding
+             * --disable-software-rasterizer would kill WebGL2 too.
+             *
+             * This project is what P6 grows into: P6 widens its `include` to
+             * the whole integration suite (excluding the gate tests) so that
+             * every user story from P5 is proven to pass on the WebGL2 path.
+             */
+            provider: playwright({
+              launchOptions: { channel: 'chromium', args: ['--disable-gpu'] }
+            }),
+            headless: true,
+            instances: [{ browser: 'chromium' }]
+          }
+        }
+      },
+      {
+        test: { name: 'unit', /* Task 7 写的，原样保留 */ }
       }
-      return { ok: true, info: adapter.info }
-    })
-
-    expect(
-      report.ok,
-      `WebGPU unavailable: ${'reason' in report ? report.reason : 'unknown'}`
-    ).toBe(true)
-
-    await use(page)
+    ]
   }
 })
-
-export { expect }
 ```
 
-- [ ] **Step 3: 写冒烟测试**
+**为什么两个环境是两个 project 而不是两个 instance**：launch 选项挂在 provider 层，同一个 provider 下的所有 instance 共用一套启动参数。想拿两套，只能两个 project。已实测。
 
-`test/integration/smoke.test.ts`：
+- [ ] **Step 3: 写两个守卫**
+
+守卫做成 **setup 文件**，不是「每个测试记得调一下的 helper」：setup 文件在 project 的每个测试文件之前自动跑，忘不掉。
+
+`test/integration/support/require-webgpu.ts`：
 
 ```ts
-import { test, expect } from './support/fixtures'
+import { beforeAll, expect } from 'vitest'
 
-test('the CI browser has a real WebGPU adapter', async ({ gpuPage }) => {
-  const info = await gpuPage.evaluate(async () => {
-    const adapter = await navigator.gpu.requestAdapter()
-    // Non-null: the fixture already asserted it.
-    return adapter!.info
-  })
-  console.log('adapter:', JSON.stringify(info))
-  expect(info).toBeTruthy()
-})
+/*
+ * Every test in the `integration` project runs against a real WebGPU adapter,
+ * or the run stops here.
+ *
+ * This guard exists because the failure it catches is silent. Playwright's
+ * default headless binary is chrome-headless-shell: WebGL still renders
+ * correct pixels through SwiftShader, navigator.gpu still exists, and only
+ * requestAdapter() gives the game away by returning null. Without this check
+ * the whole suite passes while exercising nothing.
+ */
+beforeAll(async () => {
+  expect(
+    navigator.gpu,
+    'navigator.gpu is undefined -- this browser has no WebGPU at all'
+  ).toBeDefined()
 
-test('docs/superpowers/plans is served, so the web server is the repo', async ({ gpuPage }) => {
-  // Proves baseURL points at a real server rooted in this repo rather than
-  // some default page. Cheap, and it catches a misconfigured webServer before
-  // it shows up as a confusing failure in a real test.
-  const res = await gpuPage.request.get('/package.json')
-  expect(res.ok()).toBe(true)
-  const pkg = await res.json()
-  expect(pkg.name).toBe('pano.gl')
+  const adapter = await navigator.gpu.requestAdapter()
+  expect(
+    adapter,
+    'requestAdapter() returned null, so this project is testing nothing. ' +
+      'Most likely the browser is chrome-headless-shell (the bundled headless ' +
+      'chromium): set launchOptions.channel = "chromium" on the provider ' +
+      'factory in vitest.config.ts -- and make sure it is on the FACTORY, not ' +
+      'on instances[].launch, where Vitest silently ignores it.'
+  ).not.toBeNull()
 })
 ```
 
-- [ ] **Step 4: 跑集成测试**
+`test/integration/support/require-no-webgpu.ts` —— **反向守卫，同样重要**：
 
-Run: `npx playwright install chromium && npm run test:integration`
-Expected: 2 个测试 PASS，控制台打出 `adapter: {"vendor":"apple","architecture":"metal-3",...}`（厂商名随机器而变）
+```ts
+import { beforeAll, expect } from 'vitest'
 
-- [ ] **Step 5: 证明守卫真的会拦人**
+/*
+ * The mirror of require-webgpu. If --disable-gpu ever stops taking effect the
+ * fallback project would quietly start testing the WebGPU path instead, and
+ * "the WebGL2 downgrade works" would become a claim backed by tests that never
+ * went near WebGL2.
+ */
+beforeAll(async () => {
+  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter() : null
+  expect(
+    adapter,
+    'this project must run WITHOUT a WebGPU adapter, but got one -- ' +
+      '--disable-gpu is not taking effect'
+  ).toBeNull()
 
-Run: `npx playwright test --project=chromium-gpu --config=<(sed "s/channel: 'chromium'/channel: undefined/" playwright.config.ts) 2>&1 | tail -20`
+  expect(
+    document.createElement('canvas').getContext('webgl2'),
+    'WebGL2 must still work here; without it the fallback has nothing to fall ' +
+      'back to and the test would be measuring the wrong failure'
+  ).not.toBeNull()
+})
+```
 
-（若进程替换在你的 shell 里不好使，就临时把 `channel: 'chromium'` 改成 `channel: undefined`，跑完改回来。）
+- [ ] **Step 4: 写两个冒烟测试**
 
-Expected: **FAIL**，错误信息包含 `requestAdapter() returned null`。
+`test/integration/smoke.test.ts`（跑在 `integration` project）：
 
-**这一步不能省。** 一个从未失败过的守卫不算守卫。
+```ts
+import { expect, test } from 'vitest'
+
+test('the browser has a real WebGPU adapter', async () => {
+  // Non-null: require-webgpu.ts already asserted it. This test's job is to
+  // report WHICH adapter, so a machine slipping to a software rasteriser is
+  // visible in the log rather than inferred from pixel tolerances later.
+  const adapter = await navigator.gpu!.requestAdapter()
+  console.log('adapter:', JSON.stringify(adapter!.info))
+  expect(adapter!.info).toBeTruthy()
+})
+
+test('the canvas format is the one the gates assume', () => {
+  /*
+   * BGRA, not RGBA. getPreferredCanvasFormat() returns bgra8unorm on macOS,
+   * so a pixel dump read as RGBA silently reads blue where it means red --
+   * a wrong answer that looks like a right one. Pinning it here means the
+   * gate tests get told rather than having to guess.
+   */
+  expect(navigator.gpu!.getPreferredCanvasFormat()).toBe('bgra8unorm')
+})
+```
+
+`test/integration/fallback/smoke.test.ts`（跑在 `no-webgpu` project）：
+
+```ts
+import { expect, test } from 'vitest'
+
+test('this project really is the no-WebGPU one', () => {
+  // require-no-webgpu.ts asserts the substance; this asserts the plumbing,
+  // so a project that silently ran zero tests cannot look like a pass.
+  expect(navigator.gpu).toBeDefined()
+  expect(document.createElement('canvas').getContext('webgl2')).not.toBeNull()
+})
+```
+
+- [ ] **Step 5: 跑，并证明守卫真的会拦人**
+
+```bash
+npx playwright install chromium && npm run test:integration
+```
+Expected: 两个 project 都 PASS；日志里有 `adapter: {"vendor":"apple","architecture":"metal-3",...}`（厂商随机器变）。
+
+**然后必须实测两种改法都会变红。这一步不能省** —— 一个从未失败过的守卫不算守卫。
+
+**改法 A：去掉 `channel: 'chromium'`**
+
+把 provider 的 `launchOptions: { channel: 'chromium' }` 改成 `launchOptions: {}`，跑 `npx vitest run --project integration`。
+
+Expected: **FAIL**，每个测试文件都报
+`AssertionError: requestAdapter() returned null, so this project is testing nothing.`
+
+（已实测：4 个测试文件全红。）改回来。
+
+**改法 B：把 launchOptions 挪到 `instances[]` 上（那个静默陷阱）**
+
+把 `provider: playwright({ launchOptions: { channel: 'chromium' } })` 改成
+`provider: playwright()`，同时把 instance 写成
+`instances: [{ browser: 'chromium', launch: { channel: 'chromium' } }]`，再跑一次。
+
+Expected: **同样的 FAIL**。这正是这条守卫最大的价值：这个配置错误**本身不报错**，唯一能发现它的就是守卫。
+
+（已实测：同样全红。）改回来。
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add playwright.config.ts test/integration/
-git commit -m "test: playwright config with a WebGPU guard that fails loudly
+git add vitest.config.ts test/integration/tsconfig.json test/integration/ package.json
+git commit -m "test: browser-mode integration tests with a WebGPU guard that fails loudly
 
-Playwright's default headless binary renders WebGL correctly through
-SwiftShader but exposes no WebGPU adapter, so a suite that only asserts
-'pixels appeared' passes while testing nothing. The guard turns that
-silent downgrade into a red build."
+The integration tests now run in vitest's browser mode, so a test file is
+in the page and imports the library directly -- no window.__panoTest bridge
+and no second tsconfig program for demo/.
+
+Two silent failure modes are possible and both are covered by setup-file
+guards: Playwright's bundled headless chromium has no GPU (WebGL still
+renders correctly through SwiftShader, so 'pixels appeared' proves nothing),
+and vitest 5 ignores launch options placed on instances[] rather than on the
+provider factory. Neither reports an error; both are caught here."
 ```
 
 ---
@@ -818,17 +1009,33 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      # No GPU runner here. SwiftShader is the intended fallback: it is closer
-      # to the float64 CPU reference than a real GPU is, so it is the better
-      # oracle for correctness. See the spec, section 9.5.
+      # No GPU on a hosted runner. With CI set, vitest.config.ts adds
+      # --enable-unsafe-webgpu --use-webgpu-adapter=swiftshader so the browser
+      # exposes a software WebGPU adapter instead of a null one. Both flags are
+      # needed; either alone still returns null.
+      #
+      # The point is NOT that software is a better oracle -- it is float32 like
+      # any GPU, so it is not closer to the float64 CPU reference than a real
+      # adapter is. The point is that without it this job would be red for a
+      # reason that has nothing to do with the code, and a permanently red job
+      # is a job people learn to ignore.
+      #
+      # What it does cost: the gates now have to hold on a software rasteriser
+      # AND on a real GPU, so P3's tolerances must be checked under both.
+      # `CI=1 npm run test:integration` reproduces this locally.
       - run: npm run test:integration
         env:
           CI: 'true'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
-          path: playwright-report/
+          name: vitest-browser-artifacts
+          # Failure screenshots (always) and Playwright traces
+          # (browser.trace: 'retain-on-failure'). Both live under .vitest/.
+          path: |
+            .vitest/attachments/
+            **/__traces__/
+          if-no-files-found: ignore
 
   legacy:
     runs-on: ubuntu-latest
@@ -857,6 +1064,16 @@ npm run typecheck && npm run lint && npm run test:coverage && npm run build && n
 ```
 Expected: 全部退出码 0
 
+再跑一遍集成测试的 **CI 路径**（软件适配器），确认它在没有 GPU 的机器上也能绿：
+
+```bash
+CI=1 npm run test:integration
+```
+Expected: PASS。
+
+（已实测：本机与 `CI=1` 两种路径下，集成测试均全绿。`CI=1` 用的是
+`google/swiftshader` 软件适配器。）
+
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -865,8 +1082,9 @@ git rm --cached .travis.yml 2>/dev/null || true
 git commit -m "ci: replace the node-9 travis config with github actions
 
 Three jobs: unit (typecheck, lint, coverage, build, artifact loads in
-plain node), integration (playwright with the WebGPU guard), and legacy
-(the v0.2.x bundle still builds)."
+plain node), integration (browser mode with the WebGPU guard, running on a
+SwiftShader adapter since hosted runners have no GPU), and legacy (the
+v0.2.x bundle still builds)."
 ```
 
 ---
@@ -909,8 +1127,10 @@ plain node), integration (playwright with the WebGPU guard), and legacy
 ```ts
 /*
  * The demo grows a real viewer in P5. Until then it exists so `npm start` has
- * something to serve and so the Vite/Playwright web server config is exercised
- * from the first commit rather than debugged later.
+ * something to look at. It is deliberately NOT what the integration tests
+ * drive -- those run in vitest's browser mode and import the library directly,
+ * so the demo page cannot break the suite and the suite cannot quietly start
+ * depending on the demo's markup.
  */
 
 import { VERSION } from '../src/index'
@@ -947,7 +1167,7 @@ git commit -m "docs(demo): minimal vite-served demo page"
 - [ ] `npm run test:coverage` 通过，且**门槛已验证会拦人**（Task 7 Step 2）
 - [ ] `npm run build` 后 `node -e "import('./dist/index.js')"` 成功
 - [ ] `npm run build:legacy` 成功，产物字节数与迁移前一致
-- [ ] `npm run test:integration` 通过，且**守卫已验证会拦人**（Task 8 Step 5）
+- [ ] `npm run test:integration` 通过（本机与 `CI=1` 两条路径都跑过），且**两个守卫都验证过会拦人**（Task 8 Step 5）
 - [ ] `legacy/` 已建立，`src/` 里没有任何旧代码
 - [ ] `.travis.yml` 已删除
 
@@ -955,7 +1175,12 @@ git commit -m "docs(demo): minimal vite-served demo page"
 
 | 产物 | 消费者 |
 |---|---|
-| 能跑测试的 vitest | 之后每一期 |
-| 带 WebGPU 守卫的 playwright | P3 起的所有 GPU 测试 |
+| vitest 的两个 project（`unit` / `integration`） | 之后每一期 |
+| `integration` project 的 WebGPU 守卫（setup 文件，自动生效） | P3 起的所有 GPU 测试 |
+| `no-webgpu` project 与反向守卫 | P6 的降级路径测试 |
+| `CI=1` 的 SwiftShader 启动参数 | P3 门禁容差的跨环境验证 |
 | `src/diagnostics.ts` 的 trace 通道 | P2 起的每一层 |
 | 自包含的 tsup 产物 | P5 的公开 API |
+
+> **给 P3 的提醒**：门禁容差必须在**真 GPU 与 SwiftShader 两种环境**下都验证过。
+> CI 跑的是 SwiftShader，本机跑的是真 GPU —— 只在其中一边调出来的容差，另一边会红。
