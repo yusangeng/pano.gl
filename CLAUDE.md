@@ -22,7 +22,7 @@ npm test                   # unit, then integration
 npm run test:unit          # vitest run
 npm run test:integration   # playwright test
 npm run test:coverage      # vitest run --coverage (90% branch threshold, enforced)
-npm run typecheck          # tsc --noEmit
+npm run typecheck          # tsc --noEmit, then the integration program (test/integration/tsconfig.json)
 npm run lint               # eslint
 npm run gen:shaders        # regenerate src/renderer/shaders/generated.ts
 npm run doc                # API docs (typedoc)
@@ -100,7 +100,8 @@ Camera state is memoised per render behind a dirty flag: a setter that changes w
 - **Unit** — `test/unit/{sourceFileName}.test.ts`, vitest, node environment. 90% branch coverage is a build failure, not a target. Cover the normal path, the invalid-input path and the boundary. Unit tests must not reach a GPU context.
 - **Integration** — `test/integration/{userStoryName}.test.ts`, Playwright, one file per user story, driving the real library in a real page. The page-side surface they use is `window.__panoTest`, typed as `PanoTestApi`; hooks live in `demo/test-entry-hooks/*.ts` and are merged automatically, so a phase that adds a hook adds a file rather than editing a shared one. Never re-declare that shape at a call site with a cast — the whole point of the shared declaration is that "what the page provides" and "what the test takes" are constrained by one type.
   - `PanoTestApi` is declared as a **global** interface (`declare global`), and a hook file widens it with a `declare global` block of its own. Global interfaces merge by name across files with no import and no registration step, which is exactly why the shape was chosen: a hook file cannot forget to wire itself in. An *exported* interface would instead force every hook to write `declare module '../test-entry'` — a relative specifier that has to resolve correctly from a file in a subdirectory, and which augments nothing at all, silently, when it does not.
-  - The hook files are loaded by `import.meta.glob('./test-entry-hooks/*.ts', { eager: true })` in `demo/test-entry.ts`. `demo/` is outside `tsconfig`'s `include` and `import.meta.glob` is invisible to the type system, so a test file that uses a hook imports its module type-only (`import type {} from '../../demo/test-entry-hooks/webgl2'`) purely to pull the augmentation into the program.
+  - The hook files are loaded by `import.meta.glob('./test-entry-hooks/*.ts', { eager: true })` in `demo/test-entry.ts`. `import.meta.glob` is invisible to the type system and the hook modules are not in the integration program's `include`, so a test file that uses a hook imports its module type-only (`import type {} from '../../demo/test-entry-hooks/webgl2'`) purely to pull the augmentation into the program.
+  - `Window.__panoTest` is declared once, in `demo/test-entry.ts` — that is the half a type-only hook import cannot supply, and it is why the two `tsconfig` programs are split. The root `tsconfig.json` covers `src`, `test/unit` and `scripts` and **excludes** `test/integration`; `test/integration/tsconfig.json` covers the integration tests plus `demo/**` and carries `vite/client` types, because `import.meta.glob` needs them. `npm run typecheck` runs both. `demo/` must not enter the root program: a pure library's `tsc --noEmit` should not have to know Vite exists.
 - **Gates** — `gate-a-pixels` compares against the v0.2.2 baseline captured in `test/fixtures/baseline/`; `gate-b-projection` covers the surface-extent and latitude behaviour; `gate-c-cross-backend` is described above. Gate A must be green before gate C's tolerance means anything: two backends that are wrong in the same way agree with each other perfectly.
 
 ## Conventions

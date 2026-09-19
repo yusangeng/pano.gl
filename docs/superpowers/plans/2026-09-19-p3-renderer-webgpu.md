@@ -49,6 +49,8 @@ let p = h.xyz / h.w;          // 线性：远平面上的点，方向即视线
 | `src/renderer/webgpu/shaders/panorama.wgsl` | 顶点 + 两个片元入口 |
 | `src/renderer/webgpu/shaders/index.ts` | 把 `WGSL_CONSTANTS` 与源码拼成最终字符串 |
 | `src/renderer/webgpu/shaders/sampler.ts` | 采样器（过滤模式是像素对齐的一部分） |
+| `test/integration/tsconfig.json` | 集成测试的 program：`include` 掉集成测试与 `demo/**`，带 `vite/client`，`"exclude": []`（理由见 Task 5 Step 3） |
+| `demo/tsconfig.json` | 只服务编辑器：单独打开 `demo/` 下的文件时知道它是 Vite 页面 |
 | `test/integration/support/gpu.ts` | 集成测试共用的 GPU 工具 |
 | `test/integration/uniform-layout.test.ts` | 布局往返测试 |
 | `test/integration/gate-a-pixels.test.ts` | **门禁 A** |
@@ -2171,7 +2173,24 @@ export default { renderOffscreen, WebGPUBackend, acquireDevice } satisfies Parti
 ```
 
 > `demo/test-entry.ts` 的完整性由本步负责（不留占位）。还有两件事也要在**本步**做好：
-> 1. **两套 tsconfig 都要把 `demo/` 收进 program** —— Vite 侧的 `demo/tsconfig.json` 和 Playwright 侧的 `test/integration/tsconfig.json`。否则全局 `Window.__panoTest` 声明只在一半程序里可见，测试侧就得写 `as unknown as`，而那正是本步要消灭的东西。
+> 1. **建 `test/integration/tsconfig.json`，把 `demo/` 收进集成测试的 program，并把 `typecheck` 接上它。** `Window.__panoTest` 声明在 `demo/test-entry.ts` 里，而 P1 的根 tsconfig **排除**了 `test/integration`（原因见 P1 Task 3 Step 1 的说明）—— 所以集成测试自成一个 program：
+>
+>    ```json
+>    {
+>      "extends": "../../tsconfig.json",
+>      "include": ["./**/*.ts", "../../demo/**/*.ts"],
+>      "types": ["@webgpu/types", "vite/client"],
+>      "exclude": []
+>    }
+>    ```
+>
+>    `vite/client` 是必须的：`demo/test-entry.ts` 用了 `import.meta.glob`。
+>
+>    **`"exclude": []` 这一行不能省，而且它看着像废话 —— 它恰恰不是。** `extends` 继承来的 `exclude` 是**相对声明它的那个配置文件**解析的，所以根 tsconfig 的 `"exclude": ["test/integration"]` 在这个子配置里仍然指回集成测试自己，把本 program 要检查的文件全部排除掉。**用 tsc 5.9 实测过：少了这一行，子 program 里放一个故意写错的测试，`tsc -p test/integration` 照样退出码 0** —— 它只检查了 `demo/`。那是一个永远绿的空转检查，比不建这个 program 更糟。加上 `"exclude": []` 后同一个错误立刻报 `TS2339`。
+>
+>    **同时把根 `package.json` 的 `typecheck` 改成 `tsc --noEmit && tsc --noEmit -p test/integration`** —— 不接上这一步，新 program 建了也从不被跑。否则全局声明只在一半程序里可见，测试侧就得写 `as unknown as`，而那正是本步要消灭的东西。
+>
+>    另外建一个 `demo/tsconfig.json`（`include` 掉 `demo/**`，`types` 带 `vite/client`），它只服务编辑器：在 IDE 里单独打开 `demo/` 下的文件时，编辑器得知道这是个 Vite 页面。
 > 2. `index.html` 里那句 `<script type="module" src="/demo/test-entry.ts">` 用的是**根绝对路径**，不是 `./`。它保证页面从哪个 URL 打开都能解析到同一个模块 —— 测试只走 `/`，但有人手工打开 `/index.html` 时不该得到两个不同的模块实例。
 
 - [ ] **Step 4: 写冒烟测试**

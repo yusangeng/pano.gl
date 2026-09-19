@@ -218,9 +218,16 @@ legacy build keeps its own dependencies until P7 deletes the code."
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.mjs"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.mjs"],
+  "exclude": ["test/integration"]
 }
 ```
+
+> **`test/integration` 被排除在根 program 之外，这不是遗漏。** 集成测试要用 `window.__panoTest`，而那个全局声明**只写在一处**：`demo/test-entry.ts`（P3 Task 5 建）。声明要生效，`demo/` 就必须进入**该测试所在的 program**；而 `demo/test-entry.ts` 用了 `import.meta.glob`，那是 Vite 的机制，编译它需要 `"types": ["vite/client"]`。
+>
+> 把 `demo/` 收进根 program 会连带把构建器的环境类型拖进**库自己**的类型检查 —— 一个纯库的 `tsc --noEmit` 不该需要知道 Vite 的存在。所以集成测试自成一个 program：`test/integration/tsconfig.json`，P3 Task 5 Step 3 建它，`include` 掉集成测试与 `demo/`，`types` 里带 `vite/client`。**那份子配置必须写 `"exclude": []`** —— 这里继承下去的 `exclude` 相对本文件解析，会把集成测试全部排除掉，子 program 于是静默地什么都不检查；P3 那一步有实测记录。**P3 同时要把 `npm run typecheck` 改成两条**（`tsc --noEmit && tsc --noEmit -p test/integration`），否则那个 program 根本不会被跑。
+>
+> 单元测试不碰 `window`、不碰 GPU（见 Testing 一节），所以留在根 program 里是对的。**别把 `exclude` 去掉图省事** —— 去掉了根 program 立刻红，而且报错会指向测试文件，看起来像测试写错了。
 
 **`noUncheckedIndexedAccess` 是刻意的**：spec §7.4 说明删掉 `param-check` 的前提是类型够严。它会让 `arr[i]` 的类型变成 `T | undefined`，一开始会很烦 —— 但那正是 GPU 缓冲下标这类代码该有的严谨度。**不要为了省事关掉它。**
 

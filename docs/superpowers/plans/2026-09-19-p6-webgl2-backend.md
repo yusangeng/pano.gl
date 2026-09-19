@@ -1575,7 +1575,7 @@ export interface Webgl2RoundTripResult {
 
 > **增补是程序级的，但增补模块本身必须先进入程序。** 用 tsc 5.9 实测过两件事：模块增补一旦生效，对**整个程序**的文件都生效（另一个文件完全不 import 这个 hook，也能看到 `webgl2Smoke`）；反过来，如果没有任何文件把它拉进程序，增补就不存在，报错指向的是**测试文件**（`Property 'webgl2Smoke' does not exist on type 'PanoTestApi'`），看起来像测试写错了，实际是声明没进程序。
 >
-> 而 `demo/**` 不在 P1 的 tsconfig `include` 里（只有 `src` / `test` / `scripts`），`import.meta.glob` 又是 Vite 的运行时机制、对类型系统不可见 —— 所以**必须由 `test/` 侧主动把 hook 模块拉进来**，否则 `window.__panoTest.<hook>()` 全系列调用都编译不过。
+> 而集成测试的 program（`test/integration/tsconfig.json`，`include` 只有集成测试与 `demo/**`）里，**`demo/test-entry.ts` 进来了、`demo/test-entry-hooks/*` 没有** —— hook 模块只被 `import.meta.glob` 在运行时加载，那是 Vite 的机制、对类型系统不可见。所以**必须由 `test/` 侧主动把 hook 模块拉进来**，否则 `window.__panoTest.<hook>()` 全系列调用都编译不过。
 >
 > P6 的做法：**每个用到某组 hook 的测试侧文件写一行 `import type {} from '<hook 模块>'`**。type-only import 足以应用增补（已实测），没有绑定所以不触发 unused 检查，且被 `verbatimModuleSyntax` 消除、不产生运行时依赖 —— 它纯粹是把声明拉进程序，放在调用点旁边是为了自我说明。
 
@@ -1968,8 +1968,9 @@ import type { Page } from '@playwright/test'
 import { renderOffscreen, maxChannelDiff } from './gpu'
 import type { RenderRequest } from '../../../demo/test-entry-hooks/renderer'
 // Both are here for their module augmentation of PanoTestApi, not for a binding:
-// demo/** is outside tsconfig's include, and import.meta.glob is invisible to the
-// type system, so these two lines are what put `gateSourcePng`,
+// this program's include names demo/test-entry.ts (which declares the Window
+// member) but not the hook modules, and import.meta.glob is invisible to the type
+// system -- so these two lines are what put `gateSourcePng`,
 // `renderOffscreenGLSL` and `referenceImage` on `window.__panoTest`.
 import type {} from '../../../demo/test-entry-hooks/webgl2'
 import type {} from '../../../demo/test-entry-hooks/cross-backend'
