@@ -53,7 +53,7 @@ let p = h.xyz / h.w;          // 线性：远平面上的点，方向即视线
 | `test/integration/uniform-layout.test.ts` | 布局往返测试 |
 | `test/integration/gate-a-pixels.test.ts` | **门禁 A** |
 | `test/integration/gate-b-projection.test.ts` | **门禁 B** |
-| `test/support/baseline-browser.ts` | **P0 fixture 的浏览器 loader**：`?url` → `fetch` → `createImageBitmap`，并统一通道序 |
+| `test/integration/support/baseline-browser.ts` | **P0 fixture 的浏览器 loader**：`?url` → `fetch` → `createImageBitmap`。**放在 `test/integration/` 下而不是 `test/support/`**：它用 `?url` 和 `import.meta.glob`，需要 `vite/client` 的类型，而 `test/integration/tsconfig.json` 是唯一带它的 program（P1 Task 8） |
 
 > **本期不再产出任何桥接层。** `index.html`、`demo/test-entry.ts`、`demo/test-entry-hooks/*`、
 > `PanoTestApi`、`window.__panoTest`、`import.meta.glob` 装配、`demo/tsconfig.json` —— 一个都不建。
@@ -2427,7 +2427,7 @@ a second copy of the thing under test."
 
 - [ ] **Step 1: 写浏览器侧的 fixture loader**
 
-`test/support/baseline-browser.ts` —— P0 那批 fixture 在浏览器里的读法。Node 侧那份（`baseline-node.ts`，P2 产出）在这里一行都用不了：`node:fs`、`path`、`__dirname` 在浏览器里都不存在。
+`test/integration/support/baseline-browser.ts` —— P0 那批 fixture 在浏览器里的读法。Node 侧那份（`baseline-node.ts`，P2 产出）在这里一行都用不了：`node:fs`、`path`、`__dirname` 在浏览器里都不存在。
 
 ```ts
 /*
@@ -2557,47 +2557,20 @@ export function loadSource (): Promise<DecodedImage> {
 }
 ```
 
-> **通道序在这里就定死了，而且两边的原始格式不同。** `getImageData` 给的是 **RGBA**；WebGPU 的 `getPreferredCanvasFormat()` 在 macOS 上是 **`bgra8unorm`**，也就是 `renderOffscreen` 回读出来的字节是 **BGRA**。
+> **两边都是 RGBA，这里不需要任何通道序规整。**
 >
-> 比对必须**显式**处理这一层，不能靠「读出来看着对」。P1 Task 8 的冒烟测试已经把 canvas 格式钉死（`expect(getPreferredCanvasFormat()).toBe('bgra8unorm')` 那条）—— 那条测试的意义就在这里：它让下面这段换序不是防御性代码，而是有依据的。
+> `renderOffscreen` 渲染进的是它**自己显式建的 `rgba8unorm` 纹理**，不是 canvas，`copyTextureToBuffer` 读出来的字节就是 RGBA；基线 PNG 经 `getImageData` 解出来同样是 RGBA。判据是**读的是不是 canvas**，而不是读的是哪个后端 —— `getPreferredCanvasFormat()` 在这条路径上根本不参与。
 >
-> 换序放在比对函数里（Step 3），不放在 loader 里 —— loader 的职责是如实返回 fixture 的字节。
+> 写下来是因为这点反直觉，而且仓库里一度写错过：曾经有个 `bgraToRgba`，理由是「macOS 上 canvas 是 BGRA」。但 `getImageData` **无论 canvas 的 GPU 格式是什么都会转成 RGBA 交出来**（实测：往 `bgra8unorm` 的 canvas 上写绿，回读得到 `[0,255,0,255]`），所以那个函数只会把已经正确的字节换错。更糟的是它错得不像错 —— 两边同时用它，测试照样全绿。
+>
+> **本仓库里不存在这个函数，也不要再把它造回来。** 下面所有比对都是 RGBA 对 RGBA。
 
-- [ ] **Step 2: 在 `gpu.ts` 里加一个通道序规整函数**
-
-追加到 `test/integration/support/gpu.ts`：
-
-```ts
-/**
- * Reorders a BGRA8 readback into RGBA8 so it can be compared with a decoded
- * baseline.
- *
- * The WebGPU canvas format on macOS is `bgra8unorm` (P1's smoke test asserts
- * this), so byte 0 of a readback is blue. Comparing that against `getImageData`
- * output, which is RGBA, would read the red channel out of the blue one -- a
- * mismatch that looks like a real projection error and is not one.
- *
- * Returns a copy. Reordering in place would mutate the caller's buffer, and the
- * caller is usually a test that wants to report the pre-swap values on failure.
- */
-export function bgraToRgba (bgra: ArrayLike<number>): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(bgra.length)
-  for (let i = 0; i + 3 < bgra.length; i += 4) {
-    out[i] = bgra[i + 2]!
-    out[i + 1] = bgra[i + 1]!
-    out[i + 2] = bgra[i]!
-    out[i + 3] = bgra[i + 3]!
-  }
-  return out
-}
-```
-
-- [ ] **Step 3: 写测试**
+- [ ] **Step 2: 写测试**
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import { renderOffscreen, maxChannelDiff, bgraToRgba } from './support/gpu'
-import { LEGACY_EXTENT, legacyFovFrom } from '../support/baseline'
+import { renderOffscreen, maxChannelDiff } from './support/gpu'
+import { LEGACY_EXTENT, legacyFovFrom } from '../../support/baseline'
 import { camerasOf, loadCapture, loadSource, statesOf } from '../support/baseline-browser'
 import type { Projection } from '../../src/core/types'
 
@@ -2695,7 +2668,7 @@ describe('gate A: fullscreen triangle vs the v0.2.2 baseline', () => {
         })
         bitmap.close()
 
-        const diff = maxChannelDiff(bgraToRgba(result.rgba), image.rgba)
+        const diff = maxChannelDiff(result.rgba, image.rgba)
         expect(diff, `${camera} / ${stateId}: max channel difference`).toBeLessThanOrEqual(2)
       }
     }
@@ -2725,7 +2698,7 @@ describe('gate A: fullscreen triangle vs the v0.2.2 baseline', () => {
 >
 > **`new ImageData(rgba, w, h)` 用来把解码结果变成 `ImageBitmap`**：`renderOffscreen` 收的是 `TexImageSource`，而 `ImageData` 不是 —— 它得先变成一个真正的 `ImageBitmap`。`.slice()` 是因为 `ImageData` 要求一个长度精确的 `Uint8ClampedArray`，而共享同一块 buffer 会让 `bitmap.close()` 之后的行为变得微妙。
 
-- [ ] **Step 4: 跑门禁 A**
+- [ ] **Step 3: 跑门禁 A**
 
 Run: `npm run test:integration -- gate-a`
 Expected: 2 条 PASS（一条覆盖全部可比状态，一条是集合断言）。两个 case 的**断言条数**上，覆盖那条会在第一个失败处停下 —— 所以看日志里的 `${camera} / ${stateId}` 标签定位是哪个相机哪个状态。
@@ -2737,7 +2710,7 @@ Expected: 2 条 PASS（一条覆盖全部可比状态，一条是集合断言）
 | 现象 | 先查 |
 |---|---|
 | 全黑或全白 | `invClip` 没填、或 bind group 没绑 |
-| **颜色整体偏（红蓝互换）** | **`bgraToRgba` 没用上或方向反了** —— 先排这个，它长得最像投影 bug |
+| **颜色整体偏（红蓝互换）** | `to_uv` 里 R/B 的取样顺序，或 `renderOffscreen` 的目标纹理格式被改成了 `bgra8unorm`。**不要**靠加一个换序函数来「修」它 —— 那会把两边一起换错而测试照过 |
 | 上下颠倒 | `to_uv` 的 v 方向，或 `invClip` 的 y 符号 |
 | 左右镜像 | `lookAt` 的 `-sin(θ)` 手性 |
 | 只差几个投影 | 那一个的公式转写错了 —— 拿 `src/core/reference.ts` 逐项对 |
@@ -2748,11 +2721,11 @@ Expected: 2 条 PASS（一条覆盖全部可比状态，一条是集合断言）
 **如果 `perspective` 也失败** —— 那是 P2 的问题（矩阵对拍应该先红），别在这里纠缠。
 **如果非线性全失败** —— 那是门禁 B 的问题，先跑 Task 8。
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add test/integration/gate-a-pixels.test.ts test/integration/support/gpu.ts \
-  test/support/baseline-browser.ts
+  test/integration/support/baseline-browser.ts
 git commit -m "test(renderer): gate A -- pixels vs the v0.2.2 baseline, comparable set derived from it
 
 The non-linear cameras cannot be compared at non-zero latitude (F5: the
@@ -2761,10 +2734,11 @@ file-scope lng initializer compiled, at non-zero longitude either (F10, and
 the legacy line also mixes degrees into radians). Both defects are why the
 comparable set is measured off the fixture instead of written down.
 
-The baseline arrives through createImageBitmap and is RGBA; the readback is
-BGRA because that is what getPreferredCanvasFormat() returns on macOS. The
-channel swap is explicit rather than accidental -- reading red out of the
-blue byte produces a confident, wrong diff that looks like a projection bug."
+Both sides are RGBA and nothing reorders channels: the readback comes out of
+an rgba8unorm texture the probe builds itself, and getImageData always hands
+back RGBA whatever the canvas's GPU format was. There is deliberately no
+bgraToRgba here -- getPreferredCanvasFormat() never touches this path, and a
+swap applied to both sides of the comparison would keep passing while wrong."
 ```
 
 ---
@@ -2895,8 +2869,8 @@ fn project_cylindrical(p: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import { renderOffscreen, maxChannelDiff, bgraToRgba } from './support/gpu'
-import { LEGACY_EXTENT } from '../support/baseline'
+import { renderOffscreen, maxChannelDiff } from './support/gpu'
+import { LEGACY_EXTENT } from '../../support/baseline'
 import { loadSource, readCaptureDoc } from '../support/baseline-browser'
 
 /*
@@ -2938,7 +2912,7 @@ describe('latitude now affects the non-linear cameras', () => {
       // Two frames 45 degrees apart in latitude cannot be the same picture. The
       // threshold is the gate A tolerance: anything above it is a real
       // difference, not dithering.
-      expect(maxChannelDiff(bgraToRgba(a.rgba), bgraToRgba(b.rgba))).toBeGreaterThan(2)
+      expect(maxChannelDiff(a.rgba, b.rgba)).toBeGreaterThan(2)
     })
   }
 
@@ -3012,8 +2986,10 @@ skipped along with the adapter."
 | ~~`CAMERA_UNIFORM_LAYOUT`~~ | **不给 P6** —— WebGL2 走具名 uniform，不共享布局。见 P6 的说明 |
 | `src/core/reference.ts` | P6 门禁 C 的裁判 |
 | `test/integration/support/gpu.ts` | **P6 复用** —— `RenderRequest.source` 是 `TexImageSource`，WebGL2 后端同样吃 `copyExternalImageToTexture` 的对应物。加后端时**扩这个文件，不要另起一个平行的 helper** |
-| `test/support/baseline-browser.ts` | **P6 门禁 C 复用** —— 跨后端比对要拿同一批基线 |
-| `bgraToRgba` 的存在理由 | **P6 要重新想一遍** —— WebGL2 走 `readPixels`，`gl.RGBA` 格式给的就是 RGBA。别不假思索地套用，那会把正确的通道序又换错一次 |
+| `test/integration/support/baseline-browser.ts` | **P6 门禁 C 复用** —— 跨后端比对要拿同一批基线 |
+| 通道序**不需要任何处理** | **P6 直接继承这个结论** —— WebGL2 走 `readPixels`，`gl.RGBA` 给的就是 RGBA，和 WebGPU 这条路一样。判据是**读的是不是 canvas 的默认格式**：`renderOffscreen` 读的是自己建的 `rgba8unorm` 纹理，`readPixels` 读的是自己建 framebuffer 上的 `gl.RGBA` attachment，两边都不是 `getPreferredCanvasFormat()` |
+| `TARGET_FORMAT = 'rgba8unorm'` + `configure({ format: TARGET_FORMAT })` | **P6 照抄** —— 屏幕上的 canvas 也显式钉成 `rgba8unorm`，**不要**改成 `getPreferredCanvasFormat()`。跟随宿主格式会让每个像素断言变成平台相关，而且 P5 的 `readCanvas`（`toDataURL`）读出来的仍然是 RGBA，两边对不上 |
+| P1 冒烟测试建立的回读原语 | **P5 直接 import `test/integration/support/canvas.ts`** —— 不要在这里另写一个 `readCanvas`。它已经证明了「`toDataURL` 跨帧可靠、`drawImage` 跨帧不可靠」，重写一遍只会把那个坑再踩一次 |
 
 > **给 P6 的一条纪律**：P3 之后，门禁测试 import `src/` 的内部模块是**约定允许**的，用户故事
 > 测试 import `src/index.ts` 是**约定要求**的。以前这条由 `window.__panoTest` 的形状隐式保证
