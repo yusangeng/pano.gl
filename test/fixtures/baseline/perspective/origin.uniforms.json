@@ -1,0 +1,116 @@
+{
+  "camera": "perspective",
+  "state": {
+    "id": "origin",
+    "lat": 0,
+    "lng": 0,
+    "zoom": 0
+  },
+  "frames": [
+    [
+      {
+        "name": "u_CamProjType",
+        "value": 1
+      },
+      {
+        "name": "u_CamTransMatrix",
+        "value": [
+          0,
+          0,
+          1.0002000331878662,
+          1,
+          0,
+          1.4281480312347412,
+          0,
+          0,
+          1.4281480312347412,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -0.20002000033855438,
+          0
+        ]
+      },
+      {
+        "name": "u_TexProjType",
+        "value": 1
+      },
+      {
+        "name": "u_Sampler",
+        "value": 0
+      }
+    ],
+    [
+      {
+        "name": "u_CamProjType",
+        "value": 1
+      },
+      {
+        "name": "u_CamTransMatrix",
+        "value": [
+          0,
+          0,
+          1.0002000331878662,
+          1,
+          0,
+          1.4281480312347412,
+          0,
+          0,
+          1.4281480312347412,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -0.20002000033855438,
+          0
+        ]
+      },
+      {
+        "name": "u_TexProjType",
+        "value": 1
+      },
+      {
+        "name": "u_Sampler",
+        "value": 0
+      }
+    ],
+    [
+      {
+        "name": "u_CamProjType",
+        "value": 1
+      },
+      {
+        "name": "u_CamTransMatrix",
+        "value": [
+          0,
+          0,
+          1.0002000331878662,
+          1,
+          0,
+          1.4281480312347412,
+          0,
+          0,
+          1.4281480312347412,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -0.20002000033855438,
+          0
+        ]
+      },
+      {
+        "name": "u_TexProjType",
+        "value": 1
+      },
+      {
+        "name": "u_Sampler",
+        "value": 0
+      }
+    ]
+  ]
+}
