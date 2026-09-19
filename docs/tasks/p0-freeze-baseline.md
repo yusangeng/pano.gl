@@ -42,6 +42,7 @@ verify 写成条件式是**自举悖论**：`verify-fixtures.mjs` 是本卡自�
 1. 基线的逐字节可复现限于**同机同 Chromium 构建**；异机 GPU 圆整差异是真实风险，README 已写明处置原则（差异出现先怀疑浏览器构建，动基线须显式决策）。
 2. `tools/baseline/` 是第二个依赖树（playwright）。根包发布时应在 `files`/`.npmignore` 排除之——属 P1 打包范畴，本卡不动根包配置。
 3. `bundle.js`（1.5MB，v0.2.2 产物）占了交付字节的大头。它是「冻结 v0.2.2 渲染行为」的物证与重捕获前提，保留；若 P7 清理时判定可由重捕获产物替代，届时裁决。
+4. 【休眠，审查员留档】栅格器取证依赖 `WEBGL_debug_renderer_info`：若未来 Chromium 禁用该扩展，探针回退到 masked `gl.RENDERER` 的泛型字符串（"WebKit WebGL" 之类）——它可通过 `/swiftshader|software/i` 正则但不携带任何来源。信号是 `index.json` 的 `renderer` 字段**内容变模糊**（字段存在性测试不会红，这是设计而非漏洞）。处置：regeneration 时 renderer 出现在 diff 里即显式决策点，先查明扩展是否被禁用再决定基线动不动。今日 chromium 暴露该扩展，风险未激活。
 
 ## 自审记录
 
