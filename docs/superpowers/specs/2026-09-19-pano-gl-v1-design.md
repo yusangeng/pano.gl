@@ -142,7 +142,7 @@ export type Projection =
   | { kind: 'pannini';     zoom: number; extent: readonly [number, number] }
 
 /** Texture projection is a property of the SOURCE, never of the camera. */
-export type SourceProjection = 'equirectangular'   // 'fisheye' unimplemented
+export type TextureProjection = 'equirectangular'   // 'fisheye' unimplemented
 ```
 
 > **为什么 `extent` 在这里。** 非线性相机的投影公式（`theta = z * TWO_PI`）**不是齐次的**，四边形铺多大是投影参数的一部分。旧设计把它写死在四边形顶点坐标里（cylindrical 为 1×1，planet/pannini 为 4×4），见 §4.5。
@@ -214,13 +214,37 @@ export const TextureProjection = { Equirectangular: 1 } as const   // Fisheye: 2
 
 ```ts
 export interface SourceState {
-  projection: SourceProjection
+  kind: 'image' | 'video'
+  /** The element to read from. Never retained past the current frame. */
+  element: HTMLImageElement | HTMLVideoElement
+  /** Equirectangular (or, later, fisheye). Named `TextureProjection` everywhere. */
+  projection: TextureProjection
+  /**
+   * Bumped whenever the underlying pixels may have changed. This is how the
+   * renderer answers "does the GPU texture need re-uploading" without
+   * subscribing to media events.
+   */
+  version: number
+  /** UPLOAD size in pixels -- already planned against maxTextureDimension2D. */
   width: number
   height: number
-  /** Set when the source exceeds maxTextureDimension2D and must be downscaled. */
-  frameSize?: readonly [number, number]
 }
 ```
+
+> **没有 `frameSize`。** 旧的 `frameSize` 选项兼了两个职责：超限时走中间画布、以及满足 WebGL1 的 2 的幂要求。前者并进 `width`/`height`（由 `planDownscale` 算好），后者**在 WebGPU 下根本不存在**（§5.1）。
+>
+> **`version` 取代了旧 `Texture` 里那个 `needUpdate_` 闩锁标志** —— 闩锁要被消费者清掉，谁清谁不清是 bug 温床；一个只增不减的计数器没有这个问题。
+
+### 3.6 公开构造选项
+
+旧签名是 `new FramelessImageViewer({ el, src, projection, frameSize, camera })`。**保留 `el` / `src` / `camera`，改两处：**
+
+| 旧 | 新 | 为什么 |
+|---|---|---|
+| `projection: 'equiprectangular' \| 'fisheye'` | `projection: 'equirectangular' \| 'fisheye'` | **旧值是拼错的**（`equip-` → `equir-`）。这是公开 API 里的错字，趁大版本改掉 |
+| `frameSize?: [w, h]` | **删** | 职责已并入 §3.5；WebGPU 无 2 的幂要求 |
+
+`'fisheye'` 仍然接受但**构造即抛**（旧代码是渲染时才抛）—— 见 §6.3。
 
 ---
 
@@ -249,19 +273,21 @@ Backend **吃 `CameraState` 和 `Projection`**（`core/` 的类型），**注入
 
 | offset | 字段 | 类型 | 字节 |
 |---|---|---|---|
-| 0 | `clip` | `mat4x4<f32>` | 64 |
+| 0 | `invClip` | `mat4x4<f32>` | 64 |
 | 64 | `projKind` | `u32` | 4 |
 | 68 | `texProjKind` | `u32` | 4 |
 | 72 | `povLatitude` | `f32` | 4 |
 | 76 | `povLongitude` | `f32` | 4 |
 | 80 | `zoom` | `f32` | 4 |
-| 84 | `geoWidth` | `f32` | 4 |
-| 88 | `geoHeight` | `f32` | 4 |
-| 92 | `_pad` | `f32` | 4 |
+| 84 | `_pad0` | `f32` | 4 |
+| 88 | `_pad1` | `f32` | 4 |
+| 92 | `_pad2` | `f32` | 4 |
 
-**总计 96 字节，16 字节对齐**（`96 % 16 == 0`）。
+**总计 96 字节，16 字节对齐**（`96 % 16 == 0`）。三个 `_pad` 是**对齐填充，不是死 uniform**。
 
-**【实测】** `gl-matrix` 的列主序可直接映射到 `mat4x4<f32>`：`u.clip[col][row]` ⟷ `elements[col*4+row]`，**不需要转置**。
+**【实测】** `gl-matrix` 的列主序可直接映射到 `mat4x4<f32>`：`u.invClip[col][row]` ⟷ `elements[col*4+row]`，**不需要转置**。
+
+> **为什么是 `invClip` 而不是 `clip`。** 顶点着色器不再变换几何（全屏三角形直接从顶点索引吐 NDC），所以 `clip` 没有任何读者。片元着色器反过来需要**把屏幕坐标还原成投影公式要的那个点** —— 见 §4.5。`invClip` 就是那个还原，对四个投影是同一个，这是全屏三角形能成立的关键。
 
 > **WebGPU 没有反射**（没有 `getUniformLocation` 的等价物）。所以 JS 侧的偏移必须由一条**往返布局测试**保护 —— 往每个字段写哨兵值、渲染、回读断言。探路时写的那版就是模板。
 
@@ -364,18 +390,30 @@ phi   = atan(y) + HALF_PI;          // atan(y)，y 的大小有意义
 
 **结论：那四个顶点的唯一职责是给每个像素产出一对 `(y, z)`。**
 
-**新设计**：把那个数从顶点坐标提升为**显式投影参数**（§3.1 的 `extent`），着色器里就是一个乘加：
+**新设计**：不做仿射重映射 —— **把相机矩阵求逆，让逆矩阵自己去还原那个坐标**。
 
 ```wgsl
-// The old quad's only job was to turn a screen coordinate into the (y, z) the
-// projection formulas expect. This is that same affine map, made explicit --
-// and this time the parameter is actually read.
-let s = (uv - vec2f(0.5)) * P.extent
+// The legacy rasteriser picked which part of the surface landed on screen and
+// interpolated the position for each pixel. Here that is inverted: given a
+// screen position, `invClip` recovers the point the rasteriser would have
+// produced.
+let h = camera.invClip * vec4f(ndc, 1.0, 1.0);
+let p = h.xyz / h.w;   // 线性：远平面上的点，方向即视线
+                       // 非线性：四边形上的点 (1, y, z)
 ```
 
-**一个乘加，替掉整个几何子系统**：`Cube` / `Polygon` / `Sphere` / `Geometry` / `Vertex` / `mesh` / `flatten` / `clone` / `geoVertexes` / 顶点缓冲 / `camera.id` 重建判断 / 每次换相机漏掉的 buffer。全部删除。
+**为什么不是 spec 早先写的 `(uv - 0.5) * extent`**：那条路要分两支 —— 非线性走仿射，线性得在着色器里**从角度重建朝向**（还要复刻 `lookAt` 那个 `-sin(θ)` 的手性）。而逆矩阵这一条**四个投影共用**，因为：
 
-> **【待验证】** 这个仿射重映射必须精确复现旧的坐标范围。错一个常数画面就歪。**门禁 B**（§10.3）。
+- 线性相机的 `clip = proj × view`，逆回去得到远平面上一点，`normalize` 后就是视线。线性投影是零次齐次的（`atan2(z,x)` 与 `atan(y/√(x²+z²))` 都只看比值），**点的距离不含信息** —— 这正是立方体可以被删掉的原因。
+- 非线性相机的 `clip` 是一个把 `(1, y, z)` 映到屏幕的仿射矩阵，逆回去**正好**是那个四边形上的点。
+
+**一个矩阵、一次乘法、一次透视除法，替掉整个几何子系统**：`Cube` / `Polygon` / `Sphere` / `Geometry` / `Vertex` / `mesh` / `flatten` / `clone` / `geoVertexes` / 顶点缓冲 / `camera.id` 重建判断 / 每次换相机漏掉的 buffer。全部删除。
+
+> **两个后端的 far 平面都落在 ndc z = +1**（GL 的 z∈[-1,1] 与 WebGPU 的 z∈[0,1] 都满足），所以着色器取 `z = 1` 对两个后端都对 —— **着色器不需要知道深度约定**。
+>
+> **`extent` 因此不进 uniform**：它只在 CPU 侧建矩阵时用。这和 F6 的结论一致 —— 该参数终于有了真实的读者。
+
+> **【待验证】** 逆矩阵必须精确复现旧的坐标范围。错一个常数画面就歪。**门禁 B**（§10.3）。
 
 ### 4.6 深度缓冲：删掉，而不是修
 
@@ -855,8 +893,8 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 
 | 门禁 | 位置 | 验什么 | 失败意味着 |
 |---|---|---|---|
-| **A** | P3 | 全屏三角形替掉立方体/四边形后，**四个投影各自**与 P0 基线比像素 | 某个投影的片元着色器其实依赖几何细分（§4.5 被推翻） |
-| **B** | P3 | 非线性相机的**仿射重映射**精确复现旧坐标范围（cylindrical 1×1、planet/pannini 4×4） | 旧的分段行为里有没看懂的东西 |
+| **A** | P3 | 全屏三角形替掉立方体/四边形后，**四个投影各自**与 P0 基线比像素。**基线只含纬度为零的状态** —— F5 是刻意的行为变更，纬度非零处本来就该不一致 | 某个投影的片元着色器其实依赖几何细分（§4.5 被推翻） |
+| **B** | P3 | 非线性相机的**逆矩阵还原**精确复现旧坐标范围（cylindrical 1×1、planet/pannini 4×4） | 旧的分段行为里有没看懂的东西 |
 | **C** | P6 | WGSL vs GLSL 跨后端一致，±1~2 LSB，极点放宽 | 两份实现的数值路径差异超预期 |
 
 **失败预案：**
@@ -906,8 +944,8 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 | F2 | `PROJECTION_FISHEYE` 只在被注释掉的分支里赋值 → 死常量 | `Texture.js:57` | 删除；常量表只保留已实现项 |
 | F3 | GLSL `tex_proj_fisheye()` 活着返回 `vec2(0,0)`，JS 侧同名分支抛异常 → 两侧矛盾 | `fshader.glsl:121-124` / `Texture.js:60` | 同上，两侧一致 |
 | F4 | 深度测试开着、深度缓冲从不清理 → 正确性依赖上一帧深度值 | `utils/gl.js:18-19` / `Renderer.js:144` | §4.6 无深度测试、无深度附件 |
-| F5 | **非线性相机 `povLatitude` 无效** —— 死 uniform `u_CamPOVLatitude`，且内部 ortho 相机只读不更新 | `fshader.glsl:21` | **【待验证】** 门禁 A 覆盖；见 §12 |
-| F6 | `u_CamGeoWidth` / `u_CamGeoHeight` 是死 uniform，每帧白传 | `fshader.glsl:17-18` | §4.5 提升为真投影参数并真正读取 |
+| F5 | **非线性相机 `povLatitude` 无效** —— 死 uniform `u_CamPOVLatitude`，且内部 ortho 相机只读不更新 | `fshader.glsl:21` | **修，且这是本项目唯一一处刻意的行为变更**：三个非线性公式的 `phi` 加 `- lat`。门禁 A 只比对纬度为零的状态，另立测试钉住新行为；见 §12 |
+| F6 | `u_CamGeoWidth` / `u_CamGeoHeight` 是死 uniform，每帧白传 | `fshader.glsl:17-18` | §4.5 提升为显式投影参数 `extent`，**在 CPU 侧建矩阵时真正被读**；不再进 uniform |
 | F7 | `createProgram` 失败 log + `return null` → viewer 构造「成功」但永不渲染 | `utils/gl.js` | §6.3 构造时抛 |
 | F8 | 无 `contextlost` 处理 | 全库 | §6.4 |
 | F9 | **无 devicePixelRatio 处理 → 高分屏发虚** | `Renderer.adjustSize` | §4.8 |
@@ -947,7 +985,7 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 | # | 待验证 | 门禁 | 风险 |
 |---|---|---|---|
 | V1 | 全屏三角形能否服务全部四个投影 | A | 中 —— 失败则退回分族几何，架构不动 |
-| V2 | 非线性相机的仿射重映射能否精确复现旧坐标范围 | B | 中 —— 失败则需从 uniform 流逐帧定位 |
+| V2 | 非线性相机的逆矩阵还原能否精确复现旧坐标范围 | B | 中 —— 失败则需从 uniform 流逐帧定位 |
 | V3 | F5（非线性相机 `povLatitude` 无效）是否属实 | A | 低 —— 是 bug 修掉，不是 bug 则说明理解有误 |
 | V4 | F12（pannini zoom 上界 2 vs 1）哪个是正确行为 | — | 低 —— 需人工判断，非测试可决 |
 | V5 | 两份着色器的数值路径差异是否在 ±1~2 LSB 内 | C | 中 —— 失败先用 CPU 参考仲裁 |
