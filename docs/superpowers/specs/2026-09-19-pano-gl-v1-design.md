@@ -258,10 +258,44 @@ export interface Backend {
   readonly capabilities: Capabilities
 
   setCamera (state: CameraState, projection: Projection): void
-  setSource (source: SourceState): void
+  setSource (source: RenderableSource | null): void
   render (): void
   resize (width: number, height: number, dpr: number): void
   dispose (): void
+
+  /**
+   * Registers a device-loss observer. Returns an unsubscribe function.
+   *
+   * Without this the backend has no way to tell anyone it died, and the viewer's
+   * `device-lost` event (5.5) can never fire -- a lost device would present as a
+   * frozen canvas with no error. Both backends implement it: WebGPU from
+   * `GPUDevice.lost`, WebGL2 from `webglcontextlost`.
+   */
+  onDeviceLost (fn: (lost: DeviceLost) => void): () => void
+}
+
+/**
+ * A source as a backend sees it: the upload description plus where the pixels
+ * come from. `SourceState` alone is only the first half -- no backend can draw
+ * from it.
+ *
+ * Structurally the same as `MediaFrame` (§5.1); declared here rather than
+ * imported so the renderer layer does not depend on the media layer. `MediaFrame`
+ * satisfies it without knowing it exists, so the viewer passes one straight
+ * through and there is no adapter to drift.
+ */
+export interface RenderableSource {
+  readonly state: SourceState
+  readonly kind: 'image' | 'video'
+  /** Never retained past the current task -- a video frame dies with its task. */
+  readonly element: HTMLImageElement | HTMLVideoElement
+  readonly version: number
+}
+
+/** Why a device went away. `reason` is the API's own token; `message` is detail. */
+export interface DeviceLost {
+  readonly reason: string
+  readonly message: string
 }
 ```
 
@@ -548,7 +582,7 @@ interface ViewerEvents {
   'media-error': { target: Viewer, error: unknown }
   rotate: { lat: number, lng: number }
   zoom: { delta: number }
-  'device-lost': { reason: string }
+  'device-lost': DeviceLost
 }
 
 class EventEmitter<M extends Record<string, unknown>> {
@@ -720,13 +754,18 @@ types field   : (none)          → 需要 @types/debug
 // src/diagnostics.ts -- trace channels, declared once so the full set is
 // discoverable and a typo'd namespace cannot compile.
 import createDebug from 'debug'
-export const dViewer   = createDebug('pano:viewer')
-export const dRenderer = createDebug('pano:renderer')
-export const dGpu      = createDebug('pano:gpu')
-export const dCamera   = createDebug('pano:camera')
-export const dMedia    = createDebug('pano:media')
-export const dInput    = createDebug('pano:input')
+
+export const channels = {
+  viewer: createDebug('pano:viewer'),
+  renderer: createDebug('pano:renderer'),
+  gpu: createDebug('pano:gpu'),
+  camera: createDebug('pano:camera'),
+  media: createDebug('pano:media'),
+  input: createDebug('pano:input')
+} as const
 ```
+
+一个对象而不是六个具名导出：调用点是 `channels.gpu(...)`，读起来就说清了「这是日志」，而 `dGpu(...)` 在一屏代码里长得像业务函数；`as const` 保留字面量键，所以拼错 `channels.gpuu` 编译不过，和具名导出一样安全。
 
 ```shell
 DEBUG=pano:*              # 全部

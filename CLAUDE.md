@@ -2,145 +2,112 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **The v1 migration is staged and not finished.** This file describes the **target** — the pano.gl that P0–P7 in `docs/superpowers/plans/` build. A path or command named here may not exist yet; the phase that creates it is the plan of the same name, and the plans are authoritative about order. While a phase is in flight, prefer its plan over this file. P7 Task 4 deletes this note once every claim below has been checked against the finished code.
+
 ## What this is
 
-`pano.gl` is a dependency-light WebGL viewer for equirectangular (360°) images and video. Two public entry points — `FramelessImageViewer` and `FramelessVideoViewer` — render a full-screen panorama into a container element, with four camera models (perspective / cylindrical / planet / pannini) and built-in pan-tilt-zoom.
+`pano.gl` is a dependency-light viewer for equirectangular (360°) images and video. Two public entry points — `FramelessImageViewer` and `FramelessVideoViewer`, both re-exported from `src/index.ts` — render a full-screen panorama into a container element, with four camera models (`linear`, `cylindrical`, `planet`, `pannini`) and built-in pan-tilt-zoom.
 
-All projection math happens **per-fragment in GLSL**, not per-vertex on the CPU. The CPU side only produces a transform matrix and a handful of scalar uniforms; `src/shader/fshader.glsl` converts the interpolated 3D position into equirectangular UVs. This is the single most important thing to understand before changing anything camera- or shader-related.
+TypeScript 5, strict. Two rendering backends behind one interface: WebGPU (primary) and WebGL2 (fallback, for browsers that have no WebGPU).
+
+**The most important thing to understand before touching anything camera- or shader-related:** there is no geometry and no vertex-stage projection. Each backend draws a single fullscreen triangle and recovers the surface point per fragment by inverting the camera matrix. The GPU never interpolates a position.
 
 ## Commands
 
 ```shell
-npm i                                            # deps (babel 6 era; no lockfile drift guard)
-npm start                                        # demo dev server, webpack-dev-server on :9900
-npm run build                                    # build-debug + build-release -> ./.package
-npm run build-debug                              # unminified UMD bundle + BundleSizeDebug.html
-npm run build-release                            # minified UMD bundle + sourcemap + BundleSizeRelease.html
-npm run es5                                      # babel src -> lib (this is what gets published)
-npm run doc                                      # jsdoc -> ./doc
+npm install
+npm run start              # demo dev server (vite)
+npm run build              # tsup -> dist/ (ESM + CJS), unminified
+npm test                   # unit, then integration
+npm run test:unit          # vitest run
+npm run test:integration   # playwright test
+npm run test:coverage      # vitest run --coverage (90% branch threshold, enforced)
+npm run typecheck          # tsc --noEmit
+npm run lint               # eslint
+npm run gen:shaders        # regenerate src/renderer/shaders/generated.ts
+npm run doc                # API docs (typedoc)
 ```
 
-There is **no working test command**. `npm test` runs `babel-node node_modules/.bin/isparta cover node_modules/.bin/_mocha`, but the repository has no `test/` directory, no `.mocharc`/`mocha.opts`, and no test files. `_prebuild` and `_prepublish` are prefixed with `_` so npm never invokes them automatically — `npm run build` does **not** run tests. See "Testing" below.
+Run a single unit test: `npx vitest run test/unit/clamp.test.ts`. Run a single integration test: `npx playwright test gate-c-cross-backend`.
 
-## Build layout
+Integration tests need a real GPU to be meaningful. `playwright.config.ts` sets `channel: 'chromium'` and the `gpuPage` fixture asserts a non-null adapter precisely so that a machine without WebGPU fails loudly instead of silently re-testing nothing. Chromium launch flags can only come from `use.launchOptions.args` — Playwright reads no environment variable for them.
 
-Two independent outputs, both gitignored:
+## Layout and layering
 
-| Path | Produced by | Purpose |
-|---|---|---|
-| `.package/bundle.js`, `.package/bundle.min.js` | `webpack/{debug,release}.js` | UMD bundle, global `PanoGL`, with the GLSL inlined |
-| `lib/` | `npm run es5` | ES5 transpile of `src/`, published to npm as `main` |
+Layers, lowest first. A layer may import from the layers below it and no others:
 
-`package.json` points `main` at `lib/index.js` and `jsnext:main` at `src/index.js`. Because `.glsl` is only importable through `webpack-glsl-loader`, `lib/` will contain `require('../shader/vshader.glsl')` calls that no plain Node/babel process can resolve — only the webpack bundles are self-contained. Consumers importing `pano.gl/lib/...` must be bundling with a glsl loader of their own.
+1. `src/core/` — pure. No DOM, no GPU, no timers.
+2. `src/renderer/`, `src/media/` — each may import `core/` only; they do not import each other.
 
-`npm run build-release` sets `UglifyJSPlugin.mangle.except: ['$super', '$', 'exports', 'require']` — the `$super` entry is load-bearing for the mixin/decorator runtime; don't remove it.
+   That second rule is why `RenderableSource` and `DeviceLost` are declared in `src/renderer/backend.ts` and not in the media layer. A backend has to be handed something it can upload from, and "a description of the pixels plus the element they live in" is media's concept — but the dependency runs renderer ← media, never renderer → media, so the renderer owns the declaration and `MediaFrame` is an alias of it. If you find yourself wanting to import a media type into `renderer/`, this is the thing you are about to break.
+
+3. `src/interaction/`
+4. `src/viewer/` — assembles the rest. `src/index.ts` is the frozen public surface.
+
+Key files:
+
+- `src/core/types.ts` — `CameraState`, `Projection`, `SourceState`
+- `src/core/matrix.ts` — `buildViewMatrix` / `buildProjection` / `buildCameraTransform` / `DepthRange`
+- `src/core/reference.ts` — the four projections in CPU float64
+- `src/core/projection-kinds.json` — the source of truth for the projection type constants
+- `src/renderer/backend.ts` — the `Backend` interface, `Capabilities`, `RenderableSource`, `DeviceLost`
+- `src/renderer/capabilities.ts` — `describeCapabilities`, the one place capability rules live
+- `src/renderer/webgpu/`, `src/renderer/webgl2/` — the two implementations
+- `src/renderer/shaders/generated.ts` — generated; never edit
+- `src/viewer/backend-factory.ts` — WebGPU → WebGL2 selection
+- `scripts/gen-shader-constants.mjs` — the generator
 
 ## Architecture
 
-### Composition model: `litchy` mixins
+### One triangle, and the fragment stage does the projection
 
-Almost every class is assembled from mixins rather than inheritance, using `litchy`. A mixin is a *class factory* with the shape `superclass => class extends superclass`:
+Both backends draw three vertices covering the viewport, with no vertex buffer and no attributes; the vertex stage derives its position from `gl_VertexID` / `vertex_index`. The fragment stage takes the interpolated ndc position, multiplies it by `u_invClip` (`invClip * vec4(ndc, 1.0, 1.0)`), and divides by w to recover the point on the surface the old rasteriser would have interpolated. It then converts that point to equirectangular UVs.
 
-```js
-export default superclass => class LinearProjection extends superclass { ... }
+This is why there is no geometry subsystem: the four camera models differ only in a per-fragment formula, and the surface size each one is evaluated on (`extent`, 1×1 for cylindrical and 4×4 for planet/pannini) is a property of the `Projection`, not of any mesh.
 
-export default class PerspectiveCamera extends mix(Camera).with(Projection, Trans) { ... }
-```
+### Depth range is the backends' only matrix difference
 
-`mix(A).with(B, C)` applies C over B over A. Mixin order matters; the leftmost class in `with(...)` wins for duplicate members but all `super` chains still run.
+WebGL2's ndc z is `[-1, 1]`; WebGPU's is `[0, 1]`. The CPU side passes `'minus-one-to-one'` or `'zero-to-one'` to `buildCameraTransform` accordingly. `DepthRange` is a string-literal union — use it, and do not invent spellings.
 
-`litchy`'s decorators are used pervasively and carry real semantics:
+The shaders need to know nothing about this: both conventions put the far plane at ndc z = +1, so the `1.0` in the reconstruction's z slot is correct under either, and the same fragment source works for both backends.
 
-- `@eventable` — adds `on`/`off`/`trigger`; `trigger('*')` forwards every event.
-- `@disposable` — adds `dispose()`; you must call `super.dispose()` from your own `dispose()`.
-- `@undisposed` — guards a method/getter so calling it after `dispose()` throws instead of silently returning garbage. Applied to nearly every public member.
-- `@hasid` — attaches a stable `id` (used by the renderer to detect camera swaps).
+### The CPU reference is the arbiter
 
-`dodele` supplies `Delegate` (declarative DOM listener binding) and `@callback(eventName, cssSelector)`, which routes a DOM event on a delegated node to a method. `param-check`'s `check(value, 'name').isNumber()` style argument validation is used at nearly every public boundary; keep it up when adding functions. `chivy` provides the `Logger`.
+`src/core/reference.ts` implements the same four projections in float64 and is the executable specification for them. When the two backends disagree, or a backend disagrees with the captured baseline, running all three and finding the odd one out is what turns "they differ" into "this one is wrong". It is deliberately independent: it inverts ndc to a surface point itself rather than reusing the camera matrix, because an arbiter that shares the shaders' precision and their matrix would agree with a wrong matrix by construction.
 
-### Object graph
+It also reproduces v0.2.2 behaviour **including that version's bugs**, because the acceptance criterion is "renders what v0.2.2 rendered". The one to know about is `lngOffset`, which subtracts `povLongitude / 4` — degrees subtracted from a radian angle. That is not a degree conversion, and "fixing" it changes panning sensitivity, which is a separate user-visible decision rather than a port.
 
-```
-FramelessImageViewer / FramelessVideoViewer   (mix(Viewer).with(CameraFactory))
-  └─ Viewer                (mix(Eventable).with(Delegate, RenderFlow))
-       ├─ RenderFlow       owns Renderer + FrameDriver, exposes setCamera/setTexture/rotate/zoom
-       │    ├─ Renderer            WebGL context, canvas, program, texture object, frame rate caps
-       │    └─ FrameDriver         rAF loop, emits 'frame'
-       ├─ ZoomPlugin / PanPlugin   DOM gesture recognizers -> synthetic 'zoom'/'pan' Events
-       └─ Texture          (mix of provider + optional frame canvas)
-            └─ ImageProvider | VideoProvider   media element, event re-emission, upload throttling
-```
+### Projection constants have exactly one source of truth
 
-The concrete viewers are thin: they validate constructor args, build a camera via the `CameraFactory` mixin, build a `Provider` + `Texture`, and forward every `Texture` event up to themselves (rewriting `target` to the viewer). All behavior lives in `Viewer`/`RenderFlow`.
+`src/core/projection-kinds.json` → `scripts/gen-shader-constants.mjs` → `src/renderer/shaders/generated.ts`, which exports `WGSL_CONSTANTS` and `GLSL_CONSTANTS`. The TypeScript constants (`cameraProjectionCode`, `textureProjectionCode` in `src/core/constants.ts`) and both shaders' constant blocks are all derived from that one file.
 
-### The camera contract
+Never write a numeric literal for a projection kind, in TypeScript or in a shader. The numbers used to be maintained by hand in several places at once and agreed only by luck. Change the JSON and run `npm run gen:shaders`.
 
-A camera is anything that satisfies `Camera`'s interface. Adding a new one means implementing:
+### The two shaders are hand-transcribed, and gate C holds them together
 
-- `geoVertexes` — flat `[x,y,z, ...]` triangle soup for the geometry this camera projects.
-- `status()` — returns `{ Name: { type, value } }` where `Name` maps to a GLSL uniform `u_Name` and `type` is the **`gl` function name** (e.g. `'uniform1f'`, `'uniformMatrix4fv'`). `Renderer.render` walks this generically, so a new uniform needs no renderer change — only a matching `uniform` declaration in the shader. Return a superset when delegating (`PlanetCamera` merges its inner `OrthoCamera.status()`).
-- `rotate(lat, lng)`, `zoom(delta)`, `povLatitude`/`povLongitude`, and a stable `id` (`@hasid`).
+`src/renderer/webgpu/shaders/panorama.wgsl` and `src/renderer/webgl2/shaders/panorama.glsl` contain the same four projection formulas, written twice. Nothing in the type system or the build connects them — the constants they share come from the generator, but the formulas do not.
 
-Then register it in **both** maps in `src/CameraFactory.js` (`cameraMap` and `defaultDataMap`) — the factory throws `TypeError: Can NOT find camera class` otherwise. `CameraFactory` is mixed into the two viewers; `viewer.cameraOptions = {...}` is a setter that reconstructs and swaps the camera at runtime.
+`test/integration/gate-c-cross-backend.test.ts` is what keeps them from drifting: it renders every camera state through both shaders and compares the pixels, with the CPU reference as the tiebreaker. **Changing a projection formula means changing both files.** A change made in one of them is the failure this gate exists to catch.
 
-Two families exist:
+### Camera state is pose only
 
-- **Linear** — `PerspectiveCamera` / `OrthoCamera` = `mix(Camera).with(LinearProjection, Trans)`. `LinearProjection` supplies pov angles, the view/projection/trans matrices and the cube geometry (`Cube` at radius 100, not `Sphere` — sphere tessellation was tried and abandoned). `Trans` supplies the projection matrix (`PerspectiveTrans` = `setPerspective`, `OrthoTrans` = `setOrtho`).
-- **Non-linear** — `CylindricalCamera` / `PlanetCamera` / `PanniniCamera` compose `Camera` with a small `Polygon` (a flat quad) and own a private `OrthoCamera` purely to borrow its projection matrix; they override `status()` to also emit `CamGeoWidth`/`CamGeoHeight`/`CamPOV*`/`CamZoom`, which `fshader.glsl`'s `cam_proj_*` functions consume. Their visual behavior is entirely in the fragment shader.
+`CameraState` is `{ povLatitude, povLongitude }`, in degrees. Field of view, zoom and extent belong to the `Projection`, which is a discriminated union over the four kinds. Putting `zoom` on the camera state is a type error, and that is intentional.
 
-`Camera.status()` is memoized behind the `dirty` flag — any setter that changes uniforms must set `this.dirty = true`, or the change will never reach the GPU.
-
-`OrthoCamera` is deliberately not registered in the factory (commented out in `CameraFactory.js` and in the demo) — it is only an internal building block. `Texture`'s fisheye projection is likewise stubbed out (`throw new Error('Unimplemented projection type')`), and `tex_proj_fisheye` in the fragment shader returns `vec2(0.0, 0.0)`.
-
-### Projection type constants are duplicated
-
-`src/core/camera/projectionType.js` and the `#define CAMERA_PROJECTION_TYPE_*` / `TEXTURE_PROJECTION_TYPE_*` blocks at the top of `fshader.glsl` must stay numerically in sync. The JS constants are uploaded as `u_CamProjType` / `u_TexProjType` and compared in GLSL. There is no shared source of truth — changing one without the other silently renders the wrong projection.
-
-### Renderer specifics
-
-- A single GLSL program is shared by all cameras: `programs_` is keyed by the literal `'dummy'`, and both `getProgram` and `setVertexBuffer` ignore their `camera` argument for lookup. A camera that needs a *different* shader pair requires changing that.
-- The vertex buffer is rebuilt only when `camera.id !== this.currentCameraId_`, so swapping cameras re-uploads geometry. `glu.initVertexBuffer` allocates a fresh `gl.createBuffer()` on every call and never deletes the previous one — expect buffer churn when switching cameras frequently.
-- `MAX_FRAME_RATE = 60` throttles draw calls; `VideoProvider` separately throttles texture *uploads* to 30/s. Both matter for the `frameRate` / `updateRate` `RateCounter`s exposed on the viewer.
-- The canvas is created with `class="renderer-canvas"` and a `renderer-canvas-<shortid>` id. The class is a hard dependency of the `@callback('zoom', '.renderer-canvas')` / `@callback('pan', '.renderer-canvas')` wiring in `Viewer` — renaming it breaks PTZ silently.
-- `updateTextureObject` uses `gl.RGB` + `LINEAR` filtering with no mipmaps and no `CLAMP_TO_EDGE`, so the source frame must be power-of-two and equal in size to the canvas-drawn region. This is why the demo ships 2048/4096/8192-wide images and why `Texture` accepts a `frameSize` option to route through an intermediate 2D canvas when the source exceeds `MAX_TEXTURE_SIZE`.
-
-### Texture and providers
-
-`Texture` has two modes. Without `frameSize` it is `direct` — the `<img>`/`<video>` element is uploaded to the GPU as-is. With `frameSize` it owns a 2D canvas that the provider `drawImage`s into, which is the escape hatch for oversized media.
-
-`updateTexture(texture)` returns a boolean meaning "the GPU texture must be re-uploaded this frame"; `direct` returns a latched `needUpdate_` flag, indirect returns whether a redraw occurred. Providers re-emit the media element's DOM events as `media-<type>` (see `mediaEventTypes` in `VideoProvider`), which bubble up through `Texture` → viewer, so consumers can listen for `media-load`, `media-error`, `media-play`, etc. on the viewer itself.
-
-`dispose()` is genuinely required: `RenderFlow.dispose` tears down the rAF driver, renderer, texture and camera, and `VideoProvider` detaches ~23 DOM listeners. Note that both `RenderFlow` and `Renderer` call `window.removeEventLstener(...)` (sic — the typo is in the source, and it means resize listeners are never actually removed).
-
-### Gestures
-
-`PanPlugin` and `ZoomPlugin` bind raw listeners through `Delegate.on$`, track their own gesture state, and dispatch a **synthetic bubbling `Event('pan'|'zoom')` with custom properties attached** (`delta`, `deltaX`, `deltaY`, `distance`) onto the target element. `Viewer.onPan`/`onZoom` catch them via `@callback` and convert pixel deltas into degrees/fov via `this.frameWidth`/`frameHeight`. Every handler calls `preventDefault()`. Setting `viewer.PTZ = false` short-circuits both without unbinding anything.
+Camera state is memoised per render behind a dirty flag: a setter that changes what the GPU sees must mark it dirty, or the change never reaches a frame.
 
 ## Testing
 
-There is currently no test suite. Per the project's conventions, tests belong in `test/unit/{sourceFileName}.test.{ext}` and `test/integration/{userStoryName}.test.{ext}`, using mocha + chai (chai is already a devDependency), with ≥90% branch coverage.
-
-Two practical obstacles to be aware of before adding the first test:
-
-1. `npm test` invokes `isparta` + `_mocha` with no configuration — a `test/` directory and a `mocha.opts` (or a rewritten script) must exist first.
-2. `Renderer` and anything importing it pull in `require('*.glsl')`, which only webpack's `webpack-glsl-loader` resolves. Headless unit tests need either a `require.extensions['.glsl']` hook in a mocha setup file, or the shader source factored out of the module graph. Anything touching `Renderer` also needs a real or stubbed WebGL context, plus `window`/`document` — the modules read `window.requestAnimationFrame` and `document.createElement` at import time.
-
-Pure-logic modules that are cheap to test in isolation: `utils/clamp`, `utils/Throttle`, `utils/RateCounter`, `utils/selectorToElement`, the `geometry/*` meshers (`flatten`/`mesh`/`clone`), and the camera matrix math in `LinearProjection` / `PerspectiveTrans` / `OrthoTrans` (the `status()` memoization behind `dirty` is a good branch-coverage target).
+- **Unit** — `test/unit/{sourceFileName}.test.ts`, vitest, node environment. 90% branch coverage is a build failure, not a target. Cover the normal path, the invalid-input path and the boundary. Unit tests must not reach a GPU context.
+- **Integration** — `test/integration/{userStoryName}.test.ts`, Playwright, one file per user story, driving the real library in a real page. The page-side surface they use is `window.__panoTest`, typed as `PanoTestApi`; hooks live in `demo/test-entry-hooks/*.ts` and are merged automatically, so a phase that adds a hook adds a file rather than editing a shared one. Never re-declare that shape at a call site with a cast — the whole point of the shared declaration is that "what the page provides" and "what the test takes" are constrained by one type.
+  - `PanoTestApi` is declared as a **global** interface (`declare global`), and a hook file widens it with a `declare global` block of its own. Global interfaces merge by name across files with no import and no registration step, which is exactly why the shape was chosen: a hook file cannot forget to wire itself in. An *exported* interface would instead force every hook to write `declare module '../test-entry'` — a relative specifier that has to resolve correctly from a file in a subdirectory, and which augments nothing at all, silently, when it does not.
+  - The hook files are loaded by `import.meta.glob('./test-entry-hooks/*.ts', { eager: true })` in `demo/test-entry.ts`. `demo/` is outside `tsconfig`'s `include` and `import.meta.glob` is invisible to the type system, so a test file that uses a hook imports its module type-only (`import type {} from '../../demo/test-entry-hooks/webgl2'`) purely to pull the augmentation into the program.
+- **Gates** — `gate-a-pixels` compares against the v0.2.2 baseline captured in `test/fixtures/baseline/`; `gate-b-projection` covers the surface-extent and latitude behaviour; `gate-c-cross-backend` is described above. Gate A must be green before gate C's tolerance means anything: two backends that are wrong in the same way agree with each other perfectly.
 
 ## Conventions
 
-- **standardjs style**: no semicolons, 2-space indent, single quotes. There is no linter or `.eslintrc` installed — the README badge is aspirational, so match the surrounding code by hand.
-- File-level JSDoc block with the class/function name and `@author Y3G` heads every module. Existing comments are mostly Chinese; new comments should be written in English.
-- Babel 6 with `transform-decorators-legacy` + `transform-class-properties` — decorators on getters/setters (`@undisposed get foo()`) and class-property decorators are both in use and required. Don't "modernize" these to Babel 7 decorator semantics without migrating the whole codebase.
-- Default exports only; `src/index.js` re-exports the two viewer classes as named exports.
-- `vendor/cuon.js` is a vendored copy of the WebGL "cuon" matrix helper library, imported as `{ Matrix4 }`. It is not an npm dependency and not covered by any build tooling — edit in place if needed.
-- `konph` and `polygala` are declared in `dependencies` but have no references anywhere in `src/`.
-
-## Known rough edges
-
-- `demo/webpack.config.js` sets `entry: './index.js'` but the tracked file is `demo/Index.js`. This resolves on case-insensitive filesystems (macOS) and fails on Linux/CI.
-- `window.removeEventLstener` (typo) in `RenderFlow.dispose` and `Renderer.dispose` — resize listeners leak on dispose.
-- `CylindricalCamera` and `PanniniCamera` both declare `export default class PlanetCamera` and accept a `zoom` constructor option they then ignore (hardcoding `this.zoomValue = 1`). `CylindricalCamera` ignores its `zoomValue` setter's `check(...)` (unlike its siblings), and `PanniniCamera`'s `zoomValue` clamp upper bound is `2` where the others use `1`.
-- `povLongitude` setters on the three non-linear cameras do `long % 25` (an error-accumulation guard) where `LinearProjection` wraps into `[0, 360)`.
-- `Camera` and `OrthoCamera` are `@disposable` but declare no `dispose()` of their own, so `Camera` sets `camera_ = null` in `RenderFlow.dispose` without disposing it. `Texture.dispose()` does dispose its provider.
-- `.travis.yml` targets Node 9 and runs `npm run build` only.
+- neostandard style: no semicolons, 2-space indent, single quotes.
+- `import type` for type-only imports — `verbatimModuleSyntax` is on, so a value import of a type is a build error.
+- `noUncheckedIndexedAccess` is on deliberately. `arr[i]` is `T | undefined`. Do not turn it off to quiet an index; that strictness is what let the old runtime argument checker be removed.
+- English comments. TSDoc on exported functions, classes and interfaces; local comments only where a reader would otherwise get it wrong, and they should say why rather than what.
+- Named exports, with the two viewer classes and their option types as the only public surface.
+- Never edit `src/renderer/shaders/generated.ts`. Edit `src/core/projection-kinds.json` and run `npm run gen:shaders`.
