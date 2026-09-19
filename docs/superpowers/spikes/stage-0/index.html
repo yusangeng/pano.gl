@@ -1,0 +1,1206 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>pano.gl stage-0 spike</title>
+</head>
+
+<body>
+  <canvas id="c" width="64" height="64"></canvas>
+  <script>
+    /*
+     * Stage-0 feasibility probe for the pano.gl rewrite.
+     *
+     * This page does not merely detect API presence: for every backend it
+     * rasterizes a known constant color into an offscreen target and reads the
+     * bytes back. A non-null context that cannot actually produce pixels is
+     * useless for golden-image regression, so presence checks alone would give
+     * a false positive.
+     *
+     * Results are POSTed back to the harness rather than scraped from the DOM,
+     * which keeps the harness free of CDP timing assumptions.
+     */
+
+    const errors = []
+
+    window.addEventListener('error', e => errors.push('window.error: ' + e.message))
+    window.addEventListener('unhandledrejection', e => {
+      const r = e.reason
+      errors.push('unhandledrejection: ' + ((r && r.message) || String(r)))
+    })
+
+    const EXPECTED = [64, 128, 191, 255] // 0.25 / 0.5 / 0.75 / 1.0 in unorm8
+
+    /* A rendered result is only meaningful if the readback matches the color
+     * the shader was told to emit. Tolerance absorbs rounding in the unorm
+     * conversion, nothing else. */
+    function pixelMatches (px, expected = EXPECTED, tol = 2) {
+      if (!px || px.length < 4) return false
+      return expected.every((v, i) => Math.abs(px[i] - v) <= tol)
+    }
+
+    function describeGL (gl) {
+      if (!gl) return null
+
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info')
+      const out = {
+        version: gl.getParameter(gl.VERSION),
+        shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+        vendor: gl.getParameter(gl.VENDOR),
+        renderer: gl.getParameter(gl.RENDERER),
+        unmaskedVendor: dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : null,
+        unmaskedRenderer: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : null,
+        maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+        depthBits: gl.getParameter(gl.DEPTH_BITS),
+        extensions: (gl.getSupportedExtensions() || []).length
+      }
+
+      return out
+    }
+
+    /* ------------------------------------------------------------------ *
+     * WebGL 1
+     * ------------------------------------------------------------------ */
+
+    function testWebGL1 () {
+      const result = { ok: false, context: null, render: null, error: null }
+
+      try {
+        const cv = document.createElement('canvas')
+        cv.width = 64
+        cv.height = 64
+
+        const gl = cv.getContext('webgl') || cv.getContext('experimental-webgl')
+
+        if (!gl) {
+          result.error = 'getContext(webgl) returned null'
+          return result
+        }
+
+        result.context = describeGL(gl)
+
+        const vsSrc = [
+          'attribute vec2 a_Pos;',
+          'void main() { gl_Position = vec4(a_Pos, 0.0, 1.0); }'
+        ].join('\n')
+
+        const fsSrc = [
+          'precision highp float;',
+          'void main() { gl_FragColor = vec4(0.25, 0.5, 0.75, 1.0); }'
+        ].join('\n')
+
+        const compile = (type, src) => {
+          const s = gl.createShader(type)
+          gl.shaderSource(s, src)
+          gl.compileShader(s)
+          if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+            throw new Error('shader compile failed: ' + gl.getShaderInfoLog(s))
+          }
+          return s
+        }
+
+        const prog = gl.createProgram()
+        gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSrc))
+        gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSrc))
+        gl.linkProgram(prog)
+
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+          throw new Error('link failed: ' + gl.getProgramInfoLog(prog))
+        }
+
+        gl.useProgram(prog)
+
+        // Full-screen triangle in clip space: covers the whole target, so any
+        // successfully rasterized pixel carries the shader's constant color.
+        const buf = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
+
+        const loc = gl.getAttribLocation(prog, 'a_Pos')
+        gl.enableVertexAttribArray(loc)
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0)
+
+        // Render into an RGBA8 texture (not the default framebuffer) so the
+        // readback is not perturbed by compositor alpha or color management.
+        const tex = gl.createTexture()
+        gl.bindTexture(gl.TEXTURE_2D, tex)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 64, 64, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+        const fb = gl.createFramebuffer()
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb)
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+
+        const fbs = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
+        if (fbs !== gl.FRAMEBUFFER_COMPLETE) {
+          throw new Error('framebuffer incomplete: 0x' + fbs.toString(16))
+        }
+
+        gl.viewport(0, 0, 64, 64)
+        gl.clearColor(0, 0, 0, 1)
+        gl.clear(gl.COLOR_BUFFER_BIT)
+        gl.drawArrays(gl.TRIANGLES, 0, 3)
+
+        const px = new Uint8Array(4)
+        gl.readPixels(32, 32, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px)
+
+        result.render = { pixel: Array.from(px), matches: pixelMatches(px) }
+        result.ok = result.render.matches
+
+        const lose = gl.getExtension('WEBGL_lose_context')
+        if (lose) lose.loseContext()
+      } catch (e) {
+        result.error = String((e && e.message) || e)
+      }
+
+      return result
+    }
+
+    /* ------------------------------------------------------------------ *
+     * WebGL 2
+     * ------------------------------------------------------------------ */
+
+    function testWebGL2 () {
+      const result = { ok: false, context: null, render: null, floatColorBuffer: null, error: null }
+
+      try {
+        const cv = document.createElement('canvas')
+        cv.width = 64
+        cv.height = 64
+
+        const gl = cv.getContext('webgl2')
+
+        if (!gl) {
+          result.error = 'getContext(webgl2) returned null'
+          return result
+        }
+
+        result.context = describeGL(gl)
+        // EXT_color_buffer_float decides whether HDR / linear-light offscreen
+        // targets are available, which the tone-mapping design depends on.
+        result.floatColorBuffer = {
+          extColorBufferFloat: !!gl.getExtension('EXT_color_buffer_float'),
+          extColorBufferHalfFloat: !!gl.getExtension('EXT_color_buffer_half_float'),
+          floatLinear: !!gl.getExtension('OES_texture_float_linear')
+        }
+
+        const vsSrc = [
+          '#version 300 es',
+          'void main() {',
+          '  float x = float((gl_VertexID << 1) & 2);',
+          '  float y = float(gl_VertexID & 2);',
+          '  gl_Position = vec4(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);',
+          '}'
+        ].join('\n')
+
+        const fsSrc = [
+          '#version 300 es',
+          'precision highp float;',
+          'out vec4 fragColor;',
+          'void main() { fragColor = vec4(0.25, 0.5, 0.75, 1.0); }'
+        ].join('\n')
+
+        const compile = (type, src) => {
+          const s = gl.createShader(type)
+          gl.shaderSource(s, src)
+          gl.compileShader(s)
+          if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+            throw new Error('shader compile failed: ' + gl.getShaderInfoLog(s))
+          }
+          return s
+        }
+
+        const prog = gl.createProgram()
+        gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSrc))
+        gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSrc))
+        gl.linkProgram(prog)
+
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+          throw new Error('link failed: ' + gl.getProgramInfoLog(prog))
+        }
+
+        gl.useProgram(prog)
+
+        const vao = gl.createVertexArray()
+        gl.bindVertexArray(vao)
+
+        const tex = gl.createTexture()
+        gl.bindTexture(gl.TEXTURE_2D, tex)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 64, 64, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+        const fb = gl.createFramebuffer()
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb)
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+
+        const fbs = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
+        if (fbs !== gl.FRAMEBUFFER_COMPLETE) {
+          throw new Error('framebuffer incomplete: 0x' + fbs.toString(16))
+        }
+
+        gl.viewport(0, 0, 64, 64)
+        gl.clearColor(0, 0, 0, 1)
+        gl.clear(gl.COLOR_BUFFER_BIT)
+        gl.drawArrays(gl.TRIANGLES, 0, 3)
+
+        const px = new Uint8Array(4)
+        gl.readPixels(32, 32, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px)
+
+        result.render = { pixel: Array.from(px), matches: pixelMatches(px) }
+        result.ok = result.render.matches
+
+        // Also verify the default framebuffer accepts a draw, since a working
+        // offscreen path does not by itself prove the swapchain path works.
+        const cv2 = document.createElement('canvas')
+        cv2.width = 64
+        cv2.height = 64
+        const gl2 = cv2.getContext('webgl2')
+        result.defaultFramebufferDraw = false
+        if (gl2) {
+          gl2.clearColor(0.25, 0.5, 0.75, 1)
+          gl2.clear(gl2.COLOR_BUFFER_BIT)
+          const px2 = new Uint8Array(4)
+          gl2.readPixels(32, 32, 1, 1, gl2.RGBA, gl2.UNSIGNED_BYTE, px2)
+          result.defaultFramebufferDraw = pixelMatches(px2)
+          result.defaultFramebufferPixel = Array.from(px2)
+        }
+      } catch (e) {
+        result.error = String((e && e.message) || e)
+      }
+
+      return result
+    }
+
+    /* ------------------------------------------------------------------ *
+     * WebGPU
+     * ------------------------------------------------------------------ */
+
+    const WGSL = `
+      @vertex
+      fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+        var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+        return vec4f(p[i], 0.0, 1.0);
+      }
+
+      @fragment
+      fn fs() -> @location(0) vec4f {
+        return vec4f(0.25, 0.5, 0.75, 1.0);
+      }
+    `
+
+    /* Probes a WGSL feature by compiling a module under a validation error
+     * scope. Feature support cannot be inferred from the API surface, and the
+     * rewrite's uniform strategy depends on whether Immediates are available. */
+    async function probeWGSL (device, label, code) {
+      device.pushErrorScope('validation')
+      try {
+        device.createShaderModule({ code })
+      } catch (e) {
+        await device.popErrorScope()
+        return { supported: false, reason: String((e && e.message) || e) }
+      }
+      const err = await device.popErrorScope()
+      return err ? { supported: false, reason: err.message } : { supported: true }
+    }
+
+    /* texture_external has no sampler-less sampling entry point: WGSL requires
+     * textureSampleBaseClampToEdge, and a plain textureSample will not compile
+     * against an external texture binding. */
+    const EXTERNAL_WGSL = `
+      @group(0) @binding(0) var ext: texture_external;
+      @group(0) @binding(1) var samp: sampler;
+
+      @vertex
+      fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+        var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+        return vec4f(p[i], 0.0, 1.0);
+      }
+
+      @fragment
+      fn fs() -> @location(0) vec4f {
+        return textureSampleBaseClampToEdge(ext, samp, vec2f(0.5, 0.5));
+      }
+    `
+
+    /* Draws an external texture into an offscreen rgba8unorm target and reads
+     * the bytes back. Confirming the pixels is the whole point: the method
+     * merely existing says nothing about whether a frame reaches the GPU. */
+    async function renderExternal (device, ext) {
+      const FORMAT = 'rgba8unorm'
+      const W = 64
+      const H = 64
+
+      const target = device.createTexture({
+        size: [W, H],
+        format: FORMAT,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+      })
+
+      const module = device.createShaderModule({ code: EXTERNAL_WGSL })
+      const pipeline = device.createRenderPipeline({
+        layout: 'auto',
+        vertex: { module, entryPoint: 'vs' },
+        fragment: { module, entryPoint: 'fs', targets: [{ format: FORMAT }] },
+        primitive: { topology: 'triangle-list' }
+      })
+
+      const sampler = device.createSampler({ magFilter: 'nearest', minFilter: 'nearest' })
+      const bindGroup = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: ext },
+          { binding: 1, resource: sampler }
+        ]
+      })
+
+      const bytesPerRow = 256
+      const readback = device.createBuffer({
+        size: bytesPerRow * H,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+      })
+
+      const encoder = device.createCommandEncoder()
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: target.createView(),
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: 'clear',
+          storeOp: 'store'
+        }]
+      })
+
+      pass.setPipeline(pipeline)
+      pass.setBindGroup(0, bindGroup)
+      pass.draw(3)
+      pass.end()
+
+      encoder.copyTextureToBuffer({ texture: target }, { buffer: readback, bytesPerRow }, { width: W, height: H })
+      device.queue.submit([encoder.finish()])
+
+      await readback.mapAsync(GPUMapMode.READ)
+      const bytes = new Uint8Array(readback.getMappedRange().slice(0))
+      readback.unmap()
+
+      const off = (H / 2) * bytesPerRow + (W / 2) * 4
+      return [bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]]
+    }
+
+    /**
+     * Exercises both external-texture sources. A VideoFrame built from a canvas
+     * needs no decoder, so it isolates the GPUExternalTexture path from codec
+     * availability; the captureStream variant then proves the real
+     * HTMLVideoElement path works too, which is what the viewer actually feeds.
+     */
+    async function testExternalTexture (device) {
+      const out = {
+        videoFrameFromCanvas: null,
+        videoElementFromCaptureStream: null,
+        videoElementFromRecordedFile: null,
+        codecSupport: null
+      }
+      const SOURCE_RGB = [64, 128, 191]
+
+      out.codecSupport = {
+        canPlayH264: document.createElement('video').canPlayType('video/mp4; codecs="avc1.42E01E"') || '',
+        canPlayVp8: document.createElement('video').canPlayType('video/webm; codecs="vp8"') || '',
+        canPlayVp9: document.createElement('video').canPlayType('video/webm; codecs="vp9"') || '',
+        mediaRecorderVp8: typeof MediaRecorder !== 'undefined' &&
+          MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+      }
+
+      /* --- Path 1: VideoFrame straight from a 2D canvas --- */
+      try {
+        const src = document.createElement('canvas')
+        src.width = 64
+        src.height = 64
+
+        const sctx = src.getContext('2d')
+        sctx.fillStyle = `rgb(${SOURCE_RGB[0]},${SOURCE_RGB[1]},${SOURCE_RGB[2]})`
+        sctx.fillRect(0, 0, 64, 64)
+
+        const vf = new VideoFrame(src, { timestamp: 0 })
+
+        try {
+          const ext = device.importExternalTexture({ source: vf })
+          const px = await renderExternal(device, ext)
+
+          out.videoFrameFromCanvas = {
+            imported: true,
+            pixel: px,
+            sourceRgb: SOURCE_RGB,
+            // An external texture sampled through an sRGB-aware path can come
+            // back linearized, so this reports closeness rather than equality.
+            nearSource: SOURCE_RGB.every((v, i) => Math.abs(px[i] - v) <= 8)
+          }
+        } finally {
+          vf.close()
+        }
+      } catch (e) {
+        out.videoFrameFromCanvas = { imported: false, error: String((e && e.message) || e) }
+      }
+
+      /* --- Path 2: HTMLVideoElement fed by captureStream --- */
+      try {
+        const src = document.createElement('canvas')
+        src.width = 64
+        src.height = 64
+
+        const sctx = src.getContext('2d')
+        sctx.fillStyle = `rgb(${SOURCE_RGB[0]},${SOURCE_RGB[1]},${SOURCE_RGB[2]})`
+        sctx.fillRect(0, 0, 64, 64)
+
+        const video = document.createElement('video')
+        video.muted = true
+        video.playsInline = true
+        video.srcObject = src.captureStream(30)
+
+        await video.play()
+        // Wait for a frame to actually arrive; readyState lags play().
+        await new Promise(resolve => {
+          if (video.readyState >= 2 && video.videoWidth > 0) return resolve()
+          const t = setTimeout(resolve, 3000)
+          video.addEventListener('loadeddata', () => { clearTimeout(t); resolve() }, { once: true })
+        })
+
+        if (video.videoWidth === 0) {
+          out.videoElementFromCaptureStream = {
+            played: false,
+            error: `video never produced a frame (readyState=${video.readyState})`
+          }
+        } else {
+          const ext = device.importExternalTexture({ source: video })
+          const px = await renderExternal(device, ext)
+
+          out.videoElementFromCaptureStream = {
+            played: true,
+            readyState: video.readyState,
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight,
+            pixel: px,
+            nearSource: SOURCE_RGB.every((v, i) => Math.abs(px[i] - v) <= 8)
+          }
+        }
+
+        video.pause()
+        video.srcObject = null
+      } catch (e) {
+        out.videoElementFromCaptureStream = { played: false, error: String((e && e.message) || e) }
+      }
+
+      /* --- Path 3: a real decodes-from-a-file path --- */
+      try {
+        const src = document.createElement('canvas')
+        src.width = 64
+        src.height = 64
+
+        const sctx = src.getContext('2d')
+        const paint = () => {
+          sctx.fillStyle = `rgb(${SOURCE_RGB[0]},${SOURCE_RGB[1]},${SOURCE_RGB[2]})`
+          sctx.fillRect(0, 0, 64, 64)
+        }
+
+        paint()
+
+        // captureStream only emits on change, so the canvas has to keep being
+        // redrawn for the recorder to accumulate more than a single frame.
+        const stream = src.captureStream(30)
+        const raf = setInterval(paint, 16)
+
+        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+          ? 'video/webm;codecs=vp8'
+          : 'video/webm'
+
+        const rec = new MediaRecorder(stream, { mimeType: mime })
+        const chunks = []
+
+        rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data) }
+        rec.start()
+
+        await new Promise(resolve => setTimeout(resolve, 800))
+
+        const stopped = new Promise(resolve => { rec.onstop = resolve })
+        rec.stop()
+        await stopped
+        clearInterval(raf)
+
+        const blob = new Blob(chunks, { type: 'video/webm' })
+        const url = URL.createObjectURL(blob)
+
+        const video = document.createElement('video')
+        video.muted = true
+        video.playsInline = true
+        video.src = url
+
+        await video.play()
+        await new Promise(resolve => {
+          if (video.readyState >= 2 && video.videoWidth > 0) return resolve()
+          const t = setTimeout(resolve, 3000)
+          video.addEventListener('loadeddata', () => { clearTimeout(t); resolve() }, { once: true })
+        })
+
+        if (video.videoWidth === 0) {
+          out.videoElementFromRecordedFile = {
+            decoded: false,
+            mime,
+            blobBytes: blob.size,
+            error: `decode produced no frame (readyState=${video.readyState})`
+          }
+        } else {
+          const ext = device.importExternalTexture({ source: video })
+          const px = await renderExternal(device, ext)
+
+          out.videoElementFromRecordedFile = {
+            decoded: true,
+            mime,
+            blobBytes: blob.size,
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight,
+            pixel: px,
+            // VP8 is lossy, so this tolerance is deliberately wider than the
+            // canvas-sourced paths: it asserts the frame is recognizably the
+            // right color, not that it survived compression bit-exactly.
+            nearSource: SOURCE_RGB.every((v, i) => Math.abs(px[i] - v) <= 16)
+          }
+        }
+
+        video.pause()
+        video.removeAttribute('src')
+        URL.revokeObjectURL(url)
+      } catch (e) {
+        out.videoElementFromRecordedFile = {
+          decoded: false,
+          error: String((e && e.message) || e)
+        }
+      }
+
+      return out
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Projection parity
+     *
+     * pano.gl does its projection per-fragment, so transcendental precision
+     * (atan2/asin/sin/cos) is what the whole renderer rests on. This renders
+     * the same equirectangular mapping into an rgba32float target, then
+     * compares it against a float64 CPU reference and against whatever the
+     * other backend produced. It answers two questions at once: how far the
+     * GPU is from CPU truth, and whether two backends agree bit for bit.
+     * ------------------------------------------------------------------ */
+
+    const PARITY_SIZE = 256
+    const PARITY_SAMPLES_PER_AXIS = 16
+
+    const PARITY_WGSL = `
+      const TAU: f32 = 6.28318530717958647692;
+      const PI: f32 = 3.14159265358979323846;
+
+      @vertex
+      fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+        var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+        return vec4f(p[i], 0.0, 1.0);
+      }
+
+      @fragment
+      fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
+        let res = vec2f(${PARITY_SIZE}.0, ${PARITY_SIZE}.0);
+        let ndc = (frag.xy / res) * 2.0 - 1.0;
+
+        let theta = ndc.x * 1.0;
+        let phi = ndc.y * 0.7853981633974483;
+
+        let d = vec3f(cos(phi) * sin(theta), sin(phi), cos(phi) * cos(theta));
+
+        let lon = atan2(d.x, d.z);
+        let lat = asin(clamp(d.y, -1.0, 1.0));
+
+        let u = 0.5 + lon / TAU;
+        let v = 0.5 - lat / PI;
+
+        return vec4f(u, v, lon, lat);
+      }
+    `
+
+    function cpuReference (x, y) {
+      const res = PARITY_SIZE
+      // WebGPU's @builtin(position) reports pixel centers.
+      const ndcX = ((x + 0.5) / res) * 2 - 1
+      const ndcY = ((y + 0.5) / res) * 2 - 1
+
+      const theta = ndcX * 1.0
+      const phi = ndcY * 0.7853981633974483
+
+      const dx = Math.cos(phi) * Math.sin(theta)
+      const dy = Math.sin(phi)
+      const dz = Math.cos(phi) * Math.cos(theta)
+
+      const lon = Math.atan2(dx, dz)
+      const lat = Math.asin(Math.max(-1, Math.min(1, dy)))
+
+      return [0.5 + lon / (2 * Math.PI), 0.5 - lat / Math.PI, lon, lat]
+    }
+
+    function fnv1a (bytes) {
+      let h = 0x811c9dc5
+      for (let i = 0; i < bytes.length; i++) {
+        h ^= bytes[i]
+        h = Math.imul(h, 0x01000193) >>> 0
+      }
+      return h.toString(16).padStart(8, '0')
+    }
+
+    async function testProjectionParity (device) {
+      const out = { ok: false, error: null }
+      const FORMAT = 'rgba32float'
+      const W = PARITY_SIZE
+      const H = PARITY_SIZE
+      const BYTES_PER_ROW = W * 16 // 4 channels * f32
+
+      try {
+        const target = device.createTexture({
+          size: [W, H],
+          format: FORMAT,
+          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+        })
+
+        const module = device.createShaderModule({ code: PARITY_WGSL })
+        const pipeline = device.createRenderPipeline({
+          layout: 'auto',
+          vertex: { module, entryPoint: 'vs' },
+          fragment: { module, entryPoint: 'fs', targets: [{ format: FORMAT }] },
+          primitive: { topology: 'triangle-list' }
+        })
+
+        const readback = device.createBuffer({
+          size: BYTES_PER_ROW * H,
+          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+        })
+
+        const encoder = device.createCommandEncoder()
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: target.createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: 'clear',
+            storeOp: 'store'
+          }]
+        })
+
+        pass.setPipeline(pipeline)
+        pass.draw(3)
+        pass.end()
+
+        encoder.copyTextureToBuffer({ texture: target }, { buffer: readback, bytesPerRow: BYTES_PER_ROW }, { width: W, height: H })
+        device.queue.submit([encoder.finish()])
+
+        await readback.mapAsync(GPUMapMode.READ)
+        const bytes = new Uint8Array(readback.getMappedRange().slice(0))
+        readback.unmap()
+
+        const floats = new Float32Array(bytes.buffer)
+
+        // A whole-buffer hash makes cross-backend bit-equality a single
+        // comparison instead of a per-pixel walk.
+        out.bufferHash = fnv1a(bytes)
+
+        // Sample a grid rather than every pixel: the CPU reference is what
+        // costs, and a 16x16 lattice across the sphere already covers both
+        // poles, the seam and the interior.
+        let maxU = 0
+        let maxV = 0
+        let maxLon = 0
+        let maxLat = 0
+        const worst = []
+
+        for (let gy = 0; gy < PARITY_SAMPLES_PER_AXIS; gy++) {
+          for (let gx = 0; gx < PARITY_SAMPLES_PER_AXIS; gx++) {
+            const x = Math.floor((gx + 0.5) * W / PARITY_SAMPLES_PER_AXIS)
+            const y = Math.floor((gy + 0.5) * H / PARITY_SAMPLES_PER_AXIS)
+
+            const off = (y * W + x) * 4
+            const got = [floats[off], floats[off + 1], floats[off + 2], floats[off + 3]]
+            const want = cpuReference(x, y)
+
+            const dU = Math.abs(got[0] - want[0])
+            const dV = Math.abs(got[1] - want[1])
+            const dLon = Math.abs(got[2] - want[2])
+            const dLat = Math.abs(got[3] - want[3])
+
+            if (dU > maxU) maxU = dU
+            if (dV > maxV) maxV = dV
+            if (dLon > maxLon) maxLon = dLon
+            if (dLat > maxLat) maxLat = dLat
+
+            if (worst.length < 3) worst.push({ x, y, got, want })
+          }
+        }
+
+        out.maxAbsDiffU = maxU
+        out.maxAbsDiffV = maxV
+        out.maxAbsDiffLon = maxLon
+        out.maxAbsDiffLat = maxLat
+        out.samples = PARITY_SAMPLES_PER_AXIS * PARITY_SAMPLES_PER_AXIS
+        out.ok = maxU < 1e-3 && maxV < 1e-3
+      } catch (e) {
+        out.error = String((e && e.message) || e)
+      }
+
+      return out
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Uniform struct layout
+     *
+     * WebGPU has no reflection, so the JS-side writer and the WGSL struct have
+     * to agree on byte offsets by hand. The question this settles is whether
+     * consecutive scalars may sit at 4-byte alignment in the uniform address
+     * space (WGSL) or need std140-style 16-byte slots. Getting it wrong
+     * silently reads garbage rather than failing to compile, so it is worth
+     * measuring rather than recalling.
+     * ------------------------------------------------------------------ */
+
+    const LAYOUT_WGSL = `
+      struct U {
+        clip: mat4x4<f32>,
+        a: u32,
+        b: u32,
+        c: f32,
+        d: f32,
+        e: f32,
+        f: f32,
+        g: f32,
+        h: f32,
+      }
+
+      @group(0) @binding(0) var<uniform> u: U;
+
+      @vertex
+      fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+        var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+        return vec4f(p[i], 0.0, 1.0);
+      }
+
+      @fragment
+      fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
+        let col = i32(frag.x);
+        if (col == 0) { return vec4f(f32(u.a), f32(u.b), u.c, u.d); }
+        if (col == 1) { return vec4f(u.e, u.f, u.g, u.h); }
+        if (col == 2) { return vec4f(u.clip[0][0], u.clip[3][3], u.clip[1][2], 1.0); }
+        return vec4f(-999.0, -999.0, -999.0, -999.0);
+      }
+    `
+
+    async function testUniformLayout (device) {
+      const out = { ok: false, error: null }
+      const W = 16
+      const H = 1
+      const BYTES_PER_ROW = 256
+
+      // Offsets as the design assumes them: mat4 (64B) then scalars packed at
+      // 4-byte alignment.
+      const OFFSETS = { clip: 0, a: 64, b: 68, c: 72, d: 76, e: 80, f: 84, g: 88, h: 92 }
+      const EXPECTED_SIZE = 96
+
+      try {
+        const buf = new ArrayBuffer(EXPECTED_SIZE)
+        const f32 = new Float32Array(buf)
+        const u32 = new Uint32Array(buf)
+
+        // gl-matrix is column-major: element[0] is column 0 row 0, element[6]
+        // is column 1 row 2.
+        f32[0] = 2.5
+        f32[6] = 3.5
+        f32[15] = 4.5
+
+        u32[OFFSETS.a / 4] = 7
+        u32[OFFSETS.b / 4] = 11
+        f32[OFFSETS.c / 4] = 1.25
+        f32[OFFSETS.d / 4] = 2.5
+        f32[OFFSETS.e / 4] = 3.75
+        f32[OFFSETS.f / 4] = 4.0625
+        f32[OFFSETS.g / 4] = 5.125
+        f32[OFFSETS.h / 4] = 6.5
+
+        const uniform = device.createBuffer({
+          size: EXPECTED_SIZE,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        })
+
+        device.queue.writeBuffer(uniform, 0, buf)
+
+        const FORMAT = 'rgba32float'
+        const target = device.createTexture({
+          size: [W, H],
+          format: FORMAT,
+          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+        })
+
+        const module = device.createShaderModule({ code: LAYOUT_WGSL })
+        const pipeline = device.createRenderPipeline({
+          layout: 'auto',
+          vertex: { module, entryPoint: 'vs' },
+          fragment: { module, entryPoint: 'fs', targets: [{ format: FORMAT }] },
+          primitive: { topology: 'triangle-list' }
+        })
+
+        const bindGroup = device.createBindGroup({
+          layout: pipeline.getBindGroupLayout(0),
+          entries: [{ binding: 0, resource: { buffer: uniform } }]
+        })
+
+        const readback = device.createBuffer({
+          size: BYTES_PER_ROW * H,
+          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+        })
+
+        const encoder = device.createCommandEncoder()
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: target.createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: 'clear',
+            storeOp: 'store'
+          }]
+        })
+
+        pass.setPipeline(pipeline)
+        pass.setBindGroup(0, bindGroup)
+        pass.draw(3)
+        pass.end()
+
+        encoder.copyTextureToBuffer({ texture: target }, { buffer: readback, bytesPerRow: BYTES_PER_ROW }, { width: W, height: H })
+        device.queue.submit([encoder.finish()])
+
+        await readback.mapAsync(GPUMapMode.READ)
+        const floats = new Float32Array(readback.getMappedRange().slice(0))
+        readback.unmap()
+
+        const px = c => [floats[c * 4], floats[c * 4 + 1], floats[c * 4 + 2], floats[c * 4 + 3]]
+
+        out.gotA = px(0)   // expect [7, 11, 1.25, 2.5]
+        out.gotB = px(1)   // expect [3.75, 4.0625, 5.125, 6.5]
+        out.gotClip = px(2) // expect [2.5, 4.5, 3.5, 1]
+
+        const near = (a, b) => Math.abs(a - b) < 1e-5
+
+        out.scalarsPacked = near(out.gotA[0], 7) && near(out.gotA[1], 11) &&
+          near(out.gotA[2], 1.25) && near(out.gotA[3], 2.5) &&
+          near(out.gotB[0], 3.75) && near(out.gotB[1], 4.0625) &&
+          near(out.gotB[2], 5.125) && near(out.gotB[3], 6.5)
+
+        out.matrixColumnMajor = near(out.gotClip[0], 2.5) && near(out.gotClip[1], 4.5) && near(out.gotClip[2], 3.5)
+
+        out.ok = out.scalarsPacked && out.matrixColumnMajor
+      } catch (e) {
+        out.error = String((e && e.message) || e)
+      }
+
+      return out
+    }
+
+    async function testWebGPU () {
+      const result = {
+        ok: false,
+        hasNavigatorGpu: typeof navigator.gpu !== 'undefined',
+        adapter: null,
+        device: null,
+        render: null,
+        projectionParity: null,
+        externalTexture: null,
+        canvas: null,
+        capabilities: null,
+        wgslFeatures: null,
+        error: null
+      }
+
+      try {
+        if (!result.hasNavigatorGpu) {
+          result.error = 'navigator.gpu is undefined'
+          return result
+        }
+
+        if (!window.isSecureContext) {
+          result.error = 'not a secure context, WebGPU will refuse'
+          return result
+        }
+
+        const adapter = await navigator.gpu.requestAdapter()
+
+        if (!adapter) {
+          result.error = 'requestAdapter() returned null'
+          return result
+        }
+
+        result.adapter = {
+          info: adapter.info
+            ? {
+              vendor: adapter.info.vendor,
+              architecture: adapter.info.architecture,
+              device: adapter.info.device,
+              description: adapter.info.description
+            }
+            : null,
+          features: Array.from(adapter.features || []),
+          limits: adapter.limits
+            ? {
+              maxTextureDimension2D: adapter.limits.maxTextureDimension2D,
+              maxBufferSize: adapter.limits.maxBufferSize,
+              maxBindGroups: adapter.limits.maxBindGroups
+            }
+            : null
+        }
+
+        // Request every feature the adapter advertises. Probing WGSL features
+        // against a device that was requested without them produces a false
+        // negative: the shader fails with "not allowed in the current
+        // environment" rather than "unsupported by this adapter".
+        let device = null
+        let featureRequest = 'all'
+
+        try {
+          device = await adapter.requestDevice({
+            requiredFeatures: Array.from(adapter.features || [])
+          })
+        } catch (e) {
+          featureRequest = 'none (all-features request failed: ' + String((e && e.message) || e) + ')'
+          device = await adapter.requestDevice()
+        }
+
+        if (!device) {
+          result.error = 'requestDevice() returned null'
+          return result
+        }
+
+        const deviceErrors = []
+        device.addEventListener('uncapturederror', e => deviceErrors.push(e.error.message))
+
+        result.device = {
+          requestedFeatures: featureRequest,
+          features: Array.from(device.features || []),
+          // GPUExternalTexture drives zero-copy video upload; if the method is
+          // missing the video path has to fall back to copyExternalImageToTexture,
+          // which is a materially different (per-frame copy) design.
+          hasImportExternalTexture: typeof device.importExternalTexture === 'function',
+          hasCopyExternalImageToTexture: typeof device.queue.copyExternalImageToTexture === 'function'
+        }
+
+        result.wgslFeatures = {
+          immediates: await probeWGSL(device, 'immediates', `
+            var<immediate> k: f32;
+            @fragment fn fs() -> @location(0) vec4f { return vec4f(k); }
+          `),
+          f16: await probeWGSL(device, 'f16', `
+            enable f16;
+            @fragment fn fs() -> @location(0) vec4f { let h: f16 = f16(0.5); return vec4f(f32(h)); }
+          `),
+          pointerComposite: await probeWGSL(device, 'pointerComposite', `
+            struct S { v: vec4f }
+            @group(0) @binding(0) var<uniform> u: S;
+            @fragment fn fs() -> @location(0) vec4f { return u.v; }
+          `)
+        }
+
+        /* --- offscreen render + byte-exact readback --- */
+
+        const TEX_W = 64
+        const TEX_H = 64
+        const FORMAT = 'rgba8unorm'
+
+        const target = device.createTexture({
+          size: [TEX_W, TEX_H],
+          format: FORMAT,
+          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+        })
+
+        const module = device.createShaderModule({ code: WGSL })
+        const pipeline = device.createRenderPipeline({
+          layout: 'auto',
+          vertex: { module, entryPoint: 'vs' },
+          fragment: { module, entryPoint: 'fs', targets: [{ format: FORMAT }] },
+          primitive: { topology: 'triangle-list' }
+        })
+
+        const encoder = device.createCommandEncoder()
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: target.createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: 'clear',
+            storeOp: 'store'
+          }]
+        })
+
+        pass.setPipeline(pipeline)
+        pass.draw(3)
+        pass.end()
+
+        // bytesPerRow must be a multiple of 256 for copyTextureToBuffer.
+        const bytesPerRow = 256
+        const readback = device.createBuffer({
+          size: bytesPerRow * TEX_H,
+          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+        })
+
+        encoder.copyTextureToBuffer(
+          { texture: target },
+          { buffer: readback, bytesPerRow },
+          { width: TEX_W, height: TEX_H }
+        )
+
+        device.queue.submit([encoder.finish()])
+
+        await readback.mapAsync(GPUMapMode.READ)
+        const bytes = new Uint8Array(readback.getMappedRange().slice(0))
+        readback.unmap()
+
+        // Sample the center texel: row TEX_H/2, column TEX_W/2, 4 bytes RGBA.
+        const off = (TEX_H / 2) * bytesPerRow + (TEX_W / 2) * 4
+        const px = [bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]]
+
+        result.render = { pixel: px, matches: pixelMatches(px), deviceErrors }
+
+        /* --- uniform struct byte layout --- */
+
+        result.uniformLayout = await testUniformLayout(device)
+
+        /* --- projection parity against a CPU reference --- */
+
+        result.projectionParity = await testProjectionParity(device)
+
+        /* --- video / external texture path --- */
+
+        result.externalTexture = await testExternalTexture(device)
+
+        /* --- canvas / swapchain path --- */
+
+        const cv = document.createElement('canvas')
+        cv.width = 64
+        cv.height = 64
+
+        const ctx = cv.getContext('webgpu')
+
+        if (!ctx) {
+          result.canvas = { ok: false, error: 'getContext(webgpu) returned null' }
+        } else {
+          const canvasFormat = navigator.gpu.getPreferredCanvasFormat()
+          ctx.configure({ device, format: canvasFormat, alphaMode: 'opaque' })
+
+          const canvasPipeline = device.createRenderPipeline({
+            layout: 'auto',
+            vertex: { module, entryPoint: 'vs' },
+            fragment: { module, entryPoint: 'fs', targets: [{ format: canvasFormat }] },
+            primitive: { topology: 'triangle-list' }
+          })
+
+          const enc2 = device.createCommandEncoder()
+          const pass2 = enc2.beginRenderPass({
+            colorAttachments: [{
+              view: ctx.getCurrentTexture().createView(),
+              clearValue: { r: 0, g: 0, b: 0, a: 1 },
+              loadOp: 'clear',
+              storeOp: 'store'
+            }]
+          })
+
+          pass2.setPipeline(canvasPipeline)
+          pass2.draw(3)
+          pass2.end()
+          device.queue.submit([enc2.finish()])
+
+          result.canvas = { ok: true, preferredFormat: canvasFormat }
+        }
+
+        result.capabilities = {
+          floatRenderable: (() => {
+            // Whether a float32 offscreen target can be an attachment, which the
+            // HDR / linear-workflow path needs.
+            try {
+              const t = device.createTexture({
+                size: [4, 4],
+                format: 'rgba16float',
+                usage: GPUTextureUsage.RENDER_ATTACHMENT
+              })
+              const rp = device.createRenderPipeline({
+                layout: 'auto',
+                vertex: { module, entryPoint: 'vs' },
+                fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba16float' }] },
+                primitive: { topology: 'triangle-list' }
+              })
+              const e = device.createCommandEncoder()
+              const p = e.beginRenderPass({
+                colorAttachments: [{
+                  view: t.createView(),
+                  clearValue: { r: 0, g: 0, b: 0, a: 1 },
+                  loadOp: 'clear',
+                  storeOp: 'store'
+                }]
+              })
+              p.setPipeline(rp)
+              p.draw(3)
+              p.end()
+              device.queue.submit([e.finish()])
+              return true
+            } catch (err) {
+              return String((err && err.message) || err)
+            }
+          })()
+        }
+
+        await device.queue.onSubmittedWorkDone()
+
+        result.ok = result.render.matches
+        result.lateDeviceErrors = deviceErrors
+      } catch (e) {
+        result.error = String((e && e.stack) || (e && e.message) || e)
+      }
+
+      return result
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Driver
+     * ------------------------------------------------------------------ */
+
+    ;(async () => {
+      const report = {
+        userAgent: navigator.userAgent,
+        isSecureContext: window.isSecureContext,
+        crossOriginIsolated: window.crossOriginIsolated,
+        hardwareConcurrency: navigator.hardwareConcurrency,
+        webgl1: testWebGL1(),
+        webgl2: testWebGL2(),
+        webgpu: null,
+        errors
+      }
+
+      try {
+        report.webgpu = await testWebGPU()
+      } catch (e) {
+        report.webgpu = { ok: false, error: String((e && e.message) || e) }
+      }
+
+      const payload = JSON.stringify(report, null, 2)
+
+      document.title = 'spike-done'
+      document.body.setAttribute('data-report', payload)
+
+      // Exposed for drivers that read the result directly (Playwright), as an
+      // alternative to the POST-back path used by the dependency-free runner.
+      window.__spikeReport = report
+
+      try {
+        await fetch('/result', { method: 'POST', body: payload })
+      } catch (e) {
+        // Nothing else to do: the harness times out and reports no result.
+      }
+    })()
+  </script>
+</body>
+
+</html>

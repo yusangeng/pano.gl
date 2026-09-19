@@ -15,7 +15,7 @@ pano.gl 从 v0.2.2 重写为 v1.0.0 的**完整设计**。涵盖架构分层、�
 ### 本文不是什么
 
 - **不是实施计划**。计划见 `docs/superpowers/plans/`，一个阶段一份。
-- **不重复探路论证**。无头 CI 渲染可行性、数值确定性、视频路径的实测证据见 `.vibe/stage-0-feasibility.md`。本文只在需要时引用其结论。
+- **不重复探路论证**。无头 CI 渲染可行性、数值确定性、视频路径的实测证据见 `docs/superpowers/notes/stage-0-feasibility.md`。本文只在需要时引用其结论。
 
 ### 证据标注约定
 
@@ -1003,8 +1003,8 @@ CLAUDE.md 要求分支覆盖 ≥90%。但：
 
 ## 13. 附录：探路报告
 
-完整报告：`.vibe/stage-0-feasibility.md`
-探针代码：`.vibe/spike/`
+完整报告：`docs/superpowers/notes/stage-0-feasibility.md`
+探针代码：`docs/superpowers/spikes/stage-0/`
 
 核心结论复述：
 

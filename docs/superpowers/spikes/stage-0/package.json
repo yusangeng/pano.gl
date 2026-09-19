@@ -1,0 +1,9 @@
+{
+  "name": "pano-gl-spike",
+  "private": true,
+  "type": "module",
+  "description": "Stage-0 feasibility probe for the pano.gl rewrite",
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

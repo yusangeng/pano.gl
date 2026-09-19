@@ -1,0 +1,246 @@
+
+======================================================================
+CONFIG: metal-1
+======================================================================
+chrome: /Users/yusangeng/Library/Caches/ms-playwright/chromium-1228/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+flags:  (none)
+{
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+  "isSecureContext": true,
+  "crossOriginIsolated": false,
+  "hardwareConcurrency": 8,
+  "webgl1": {
+    "ok": true,
+    "context": {
+      "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+      "shadingLanguageVersion": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+      "vendor": "WebKit",
+      "renderer": "WebKit WebGL",
+      "unmaskedVendor": "Google Inc. (Apple)",
+      "unmaskedRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+      "maxTextureSize": 16384,
+      "depthBits": 24,
+      "extensions": 39
+    },
+    "render": {
+      "pixel": [
+        64,
+        128,
+        191,
+        255
+      ],
+      "matches": true
+    },
+    "error": null
+  },
+  "webgl2": {
+    "ok": true,
+    "context": {
+      "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "shadingLanguageVersion": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+      "vendor": "WebKit",
+      "renderer": "WebKit WebGL",
+      "unmaskedVendor": "Google Inc. (Apple)",
+      "unmaskedRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+      "maxTextureSize": 16384,
+      "depthBits": 24,
+      "extensions": 36
+    },
+    "render": {
+      "pixel": [
+        64,
+        128,
+        191,
+        255
+      ],
+      "matches": true
+    },
+    "floatColorBuffer": {
+      "extColorBufferFloat": true,
+      "extColorBufferHalfFloat": true,
+      "floatLinear": true
+    },
+    "error": null,
+    "defaultFramebufferDraw": true,
+    "defaultFramebufferPixel": [
+      64,
+      128,
+      191,
+      255
+    ]
+  },
+  "webgpu": {
+    "ok": true,
+    "hasNavigatorGpu": true,
+    "adapter": {
+      "info": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "device": "",
+        "description": ""
+      },
+      "features": [
+        "depth32float-stencil8",
+        "rg11b10ufloat-renderable",
+        "bgra8unorm-storage",
+        "texture-formats-tier1",
+        "texture-compression-bc",
+        "dual-source-blending",
+        "core-features-and-limits",
+        "float32-filterable",
+        "indirect-first-instance",
+        "texture-compression-astc-sliced-3d",
+        "float32-blendable",
+        "texture-compression-astc",
+        "texture-compression-etc2",
+        "depth-clip-control",
+        "texture-compression-bc-sliced-3d",
+        "timestamp-query",
+        "texture-formats-tier2",
+        "shader-f16",
+        "clip-distances",
+        "primitive-index",
+        "texture-component-swizzle",
+        "subgroups"
+      ],
+      "limits": {
+        "maxTextureDimension2D": 16384,
+        "maxBufferSize": 4294967292,
+        "maxBindGroups": 4
+      }
+    },
+    "device": {
+      "requestedFeatures": "all",
+      "features": [
+        "depth32float-stencil8",
+        "rg11b10ufloat-renderable",
+        "texture-formats-tier1",
+        "bgra8unorm-storage",
+        "texture-compression-bc",
+        "dual-source-blending",
+        "core-features-and-limits",
+        "float32-filterable",
+        "indirect-first-instance",
+        "texture-compression-astc-sliced-3d",
+        "float32-blendable",
+        "texture-compression-astc",
+        "texture-compression-etc2",
+        "depth-clip-control",
+        "texture-compression-bc-sliced-3d",
+        "timestamp-query",
+        "texture-formats-tier2",
+        "shader-f16",
+        "clip-distances",
+        "primitive-index",
+        "texture-component-swizzle",
+        "subgroups"
+      ],
+      "hasImportExternalTexture": true,
+      "hasCopyExternalImageToTexture": true
+    },
+    "render": {
+      "pixel": [
+        64,
+        128,
+        191,
+        255
+      ],
+      "matches": true,
+      "deviceErrors": []
+    },
+    "projectionParity": {
+      "ok": true,
+      "error": null,
+      "bufferHash": "12e0177d",
+      "maxAbsDiffU": 3.852773344803495e-8,
+      "maxAbsDiffV": 5.960464477539063e-8,
+      "maxAbsDiffLon": 1.2665987014076618e-7,
+      "maxAbsDiffLat": 6.940635954855168e-8,
+      "samples": 256
+    },
+    "externalTexture": {
+      "videoFrameFromCanvas": {
+        "imported": true,
+        "pixel": [
+          64,
+          128,
+          191,
+          255
+        ],
+        "sourceRgb": [
+          64,
+          128,
+          191
+        ],
+        "nearSource": true
+      },
+      "videoElementFromCaptureStream": {
+        "played": true,
+        "readyState": 4,
+        "videoWidth": 64,
+        "videoHeight": 64,
+        "pixel": [
+          63,
+          128,
+          191,
+          255
+        ],
+        "nearSource": true
+      },
+      "videoElementFromRecordedFile": {
+        "decoded": true,
+        "mime": "video/webm;codecs=vp8",
+        "blobBytes": 1721,
+        "videoWidth": 64,
+        "videoHeight": 64,
+        "pixel": [
+          72,
+          130,
+          191,
+          255
+        ],
+        "nearSource": true
+      },
+      "codecSupport": {
+        "canPlayH264": "probably",
+        "canPlayVp8": "probably",
+        "canPlayVp9": "probably",
+        "mediaRecorderVp8": true
+      }
+    },
+    "canvas": {
+      "ok": true,
+      "preferredFormat": "bgra8unorm"
+    },
+    "capabilities": {
+      "floatRenderable": true
+    },
+    "wgslFeatures": {
+      "immediates": {
+        "supported": false,
+        "reason": "Error while parsing WGSL: :2:13 error: use of variable address space 'immediate' requires the immediate_address_space language feature, which is not allowed in the current environment\n            var<immediate> k: f32;\n            ^^^^^^^^^^^^^^^^^^^^^\n\n\n - While calling [Device].CreateShaderModule([ShaderModuleDescriptor]).\n"
+      },
+      "f16": {
+        "supported": true
+      },
+      "pointerComposite": {
+        "supported": true
+      }
+    },
+    "error": null,
+    "lateDeviceErrors": []
+  },
+  "errors": []
+}
+
+--- VERDICT ---
+webgl1: PASS  
+webgl2: PASS  
+webgpu: PASS  
+webgpu adapter: {"vendor":"apple","architecture":"metal-3","device":"","description":""}
+  projection parity: hash=12e0177d maxDiffU=3.85e-8 maxDiffV=5.96e-8 maxDiffLon=1.27e-7 maxDiffLat=6.94e-8 (256 samples)
+  video (VideoFrame from canvas):  IMPORTED pixel=[64,128,191,255] near=true
+  video (HTMLVideoElement stream): PLAYED pixel=[63,128,191,255] near=true
+  video (decoded from file):       DECODED video/webm;codecs=vp8 1721B pixel=[72,130,191,255] near=true
+  codecs: {"canPlayH264":"probably","canPlayVp8":"probably","canPlayVp9":"probably","mediaRecorderVp8":true}
+  wgsl immediates=false f16=true

@@ -1,0 +1,238 @@
+
+======================================================================
+CONFIG: swiftshader-2
+======================================================================
+chrome: /Users/yusangeng/Library/Caches/ms-playwright/chromium-1228/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+flags:  --use-angle=swiftshader --use-webgpu-adapter=swiftshader --enable-unsafe-webgpu
+{
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+  "isSecureContext": true,
+  "crossOriginIsolated": false,
+  "hardwareConcurrency": 8,
+  "webgl1": {
+    "ok": true,
+    "context": {
+      "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+      "shadingLanguageVersion": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+      "vendor": "WebKit",
+      "renderer": "WebKit WebGL",
+      "unmaskedVendor": "Google Inc. (Google)",
+      "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
+      "maxTextureSize": 8192,
+      "depthBits": 24,
+      "extensions": 36
+    },
+    "render": {
+      "pixel": [
+        64,
+        128,
+        191,
+        255
+      ],
+      "matches": true
+    },
+    "error": null
+  },
+  "webgl2": {
+    "ok": true,
+    "context": {
+      "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "shadingLanguageVersion": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+      "vendor": "WebKit",
+      "renderer": "WebKit WebGL",
+      "unmaskedVendor": "Google Inc. (Google)",
+      "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
+      "maxTextureSize": 8192,
+      "depthBits": 24,
+      "extensions": 30
+    },
+    "render": {
+      "pixel": [
+        64,
+        128,
+        191,
+        255
+      ],
+      "matches": true
+    },
+    "floatColorBuffer": {
+      "extColorBufferFloat": true,
+      "extColorBufferHalfFloat": true,
+      "floatLinear": true
+    },
+    "error": null,
+    "defaultFramebufferDraw": true,
+    "defaultFramebufferPixel": [
+      64,
+      128,
+      191,
+      255
+    ]
+  },
+  "webgpu": {
+    "ok": true,
+    "hasNavigatorGpu": true,
+    "adapter": {
+      "info": {
+        "vendor": "google",
+        "architecture": "swiftshader",
+        "device": "",
+        "description": ""
+      },
+      "features": [
+        "depth32float-stencil8",
+        "rg11b10ufloat-renderable",
+        "bgra8unorm-storage",
+        "texture-compression-bc",
+        "core-features-and-limits",
+        "chromium-experimental-timestamp-query-inside-passes",
+        "float32-filterable",
+        "indirect-first-instance",
+        "texture-compression-astc-sliced-3d",
+        "float32-blendable",
+        "texture-compression-astc",
+        "texture-compression-etc2",
+        "depth-clip-control",
+        "texture-compression-bc-sliced-3d",
+        "timestamp-query",
+        "clip-distances",
+        "texture-component-swizzle",
+        "subgroups"
+      ],
+      "limits": {
+        "maxTextureDimension2D": 8192,
+        "maxBufferSize": 1073741824,
+        "maxBindGroups": 4
+      }
+    },
+    "device": {
+      "requestedFeatures": "all",
+      "features": [
+        "depth32float-stencil8",
+        "rg11b10ufloat-renderable",
+        "bgra8unorm-storage",
+        "texture-compression-bc",
+        "core-features-and-limits",
+        "chromium-experimental-timestamp-query-inside-passes",
+        "float32-filterable",
+        "indirect-first-instance",
+        "texture-compression-astc-sliced-3d",
+        "float32-blendable",
+        "texture-compression-astc",
+        "texture-compression-etc2",
+        "depth-clip-control",
+        "texture-compression-bc-sliced-3d",
+        "timestamp-query",
+        "clip-distances",
+        "texture-component-swizzle",
+        "subgroups"
+      ],
+      "hasImportExternalTexture": true,
+      "hasCopyExternalImageToTexture": true
+    },
+    "render": {
+      "pixel": [
+        64,
+        128,
+        191,
+        255
+      ],
+      "matches": true,
+      "deviceErrors": []
+    },
+    "projectionParity": {
+      "ok": true,
+      "error": null,
+      "bufferHash": "fdd8aed1",
+      "maxAbsDiffU": 0.000002688784172200087,
+      "maxAbsDiffV": 0.00001710653305053711,
+      "maxAbsDiffLon": 0.00001692771911626645,
+      "maxAbsDiffLat": 0.00005377395295758092,
+      "samples": 256
+    },
+    "externalTexture": {
+      "videoFrameFromCanvas": {
+        "imported": true,
+        "pixel": [
+          64,
+          128,
+          191,
+          255
+        ],
+        "sourceRgb": [
+          64,
+          128,
+          191
+        ],
+        "nearSource": true
+      },
+      "videoElementFromCaptureStream": {
+        "played": true,
+        "readyState": 4,
+        "videoWidth": 64,
+        "videoHeight": 64,
+        "pixel": [
+          64,
+          128,
+          191,
+          255
+        ],
+        "nearSource": true
+      },
+      "videoElementFromRecordedFile": {
+        "decoded": true,
+        "mime": "video/webm;codecs=vp8",
+        "blobBytes": 1721,
+        "videoWidth": 64,
+        "videoHeight": 64,
+        "pixel": [
+          72,
+          130,
+          191,
+          255
+        ],
+        "nearSource": true
+      },
+      "codecSupport": {
+        "canPlayH264": "probably",
+        "canPlayVp8": "probably",
+        "canPlayVp9": "probably",
+        "mediaRecorderVp8": true
+      }
+    },
+    "canvas": {
+      "ok": true,
+      "preferredFormat": "bgra8unorm"
+    },
+    "capabilities": {
+      "floatRenderable": true
+    },
+    "wgslFeatures": {
+      "immediates": {
+        "supported": true
+      },
+      "f16": {
+        "supported": false,
+        "reason": "Error while parsing WGSL: :2:20 error: extension 'f16' is not allowed in the current environment\n            enable f16;\n                   ^^^\n\n\n - While calling [Device].CreateShaderModule([ShaderModuleDescriptor]).\n"
+      },
+      "pointerComposite": {
+        "supported": true
+      }
+    },
+    "error": null,
+    "lateDeviceErrors": []
+  },
+  "errors": []
+}
+
+--- VERDICT ---
+webgl1: PASS  
+webgl2: PASS  
+webgpu: PASS  
+webgpu adapter: {"vendor":"google","architecture":"swiftshader","device":"","description":""}
+  projection parity: hash=fdd8aed1 maxDiffU=2.69e-6 maxDiffV=1.71e-5 maxDiffLon=1.69e-5 maxDiffLat=5.38e-5 (256 samples)
+  video (VideoFrame from canvas):  IMPORTED pixel=[64,128,191,255] near=true
+  video (HTMLVideoElement stream): PLAYED pixel=[64,128,191,255] near=true
+  video (decoded from file):       DECODED video/webm;codecs=vp8 1721B pixel=[72,130,191,255] near=true
+  codecs: {"canPlayH264":"probably","canPlayVp8":"probably","canPlayVp9":"probably","mediaRecorderVp8":true}
+  wgsl immediates=true f16=false
