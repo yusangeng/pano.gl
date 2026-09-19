@@ -1,0 +1,12 @@
+{
+  "name": "pano-gl-baseline-probe",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "capture": "node capture.mjs",
+    "verify": "node verify-fixtures.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

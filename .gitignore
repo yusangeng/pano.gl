@@ -45,3 +45,6 @@ doc
 wasm
 # Vibe design docs / research artifacts
 .vibe
+
+# Baseline probe deps live with the probe, not at the repo root
+tools/baseline/node_modules
