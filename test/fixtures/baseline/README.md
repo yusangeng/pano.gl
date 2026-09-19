@@ -15,9 +15,13 @@ cd tools/baseline && npm install && node capture.mjs
 - `source.png` — the panorama every capture was rendered from, committed so that
   a later pixel comparison renders the same image rather than regenerating one.
 - `index.json` — capture manifest: the observed uniform set per camera, byte
-  count and sha256 per PNG, so a changed fixture shows up in a text diff.
+  count and sha256 per PNG, and the renderer string the captures were
+  produced on, so a changed fixture shows up in a text diff.
   `fixtures.test.mjs` fails if the manifest and the bytes on disk ever
-  disagree, so the hash column is enforced, not decorative.
+  disagree, so the hash column is enforced, not decorative. `capture.mjs`
+  refuses to produce anything on a software rasterizer (SwiftShader et al),
+  and the test suite re-checks the recorded string, so the baseline cannot
+  silently change rasterizers between the capture and the gate.
 
 PNG rows are top-down, flipped at encode time because the GL origin is
 bottom-up. A renderer reading its own framebuffer from row 0 is already in the
@@ -36,10 +40,13 @@ Two things this does not cover, and neither is a defect in the harness:
 
 - **Same machine, same browser build.** `capture.mjs` pins Playwright's
   `channel: 'chromium'` so the rasteriser is the real one rather than
-  SwiftShader, but a future Chromium could legitimately round differently. If a
-  regeneration ever produces different pixels, that is the first thing to
-  suspect, and the right response is to decide deliberately whether the locked
-  baseline moves rather than to silently accept new bytes.
+  SwiftShader, and it now refuses to run at all when the browser reports a
+  software rasterizer, recording the string it saw in `index.json` so a
+  regeneration can be diffed against the frozen provenance. A future Chromium
+  could still legitimately round differently. If a regeneration ever produces
+  different pixels, that is the first thing to suspect, and the right response
+  is to decide deliberately whether the locked baseline moves rather than to
+  silently accept new bytes.
 - **GPU-dependent rounding.** A different machine's driver may not reproduce
   these bytes exactly. Anything comparing across machines needs a tolerance,
   which is what gate C already assumes between the two backends.

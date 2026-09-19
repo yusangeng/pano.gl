@@ -247,6 +247,25 @@ test('capture resolution is the one the fixtures were recorded at', async () => 
   assert.equal(INDEX.canvasSize, CANVAS_SIZE)
 })
 
+test('the baseline records a hardware rasterizer', async () => {
+  /*
+   * Provenance, pinned where verify re-executes it rather than only where
+   * capture.mjs enforced it once. channel:'chromium' is supposed to buy the
+   * real GPU, but headless Chromium silently falls back to SwiftShader when
+   * its GPU process cannot start, and 16 self-consistent captures off a
+   * software rasterizer would pass every structural check here while being a
+   * baseline of the wrong thing. The string itself stays unpinned -- a
+   * different machine legitimately reports a different GPU -- but "software"
+   * is wrong everywhere.
+   */
+  assert.ok(INDEX.renderer, 'index.json records no renderer string at all')
+  assert.doesNotMatch(
+    INDEX.renderer,
+    /swiftshader|software/i,
+    `the frozen baseline was captured on: ${INDEX.renderer}`
+  )
+})
+
 test('the dead uniforms reach no camera (pins F5 and F6)', async () => {
   /*
    * These three are declared in fshader.glsl and built by every non-linear

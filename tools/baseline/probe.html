@@ -124,6 +124,32 @@
     // diverge and the fixtures would not match the probe.
     window.__makeSource = function (size) { return makeSourceDataUrl(size) }
 
+    /*
+     * The unmasked renderer string, for the capture driver to record and gate
+     * on. `channel: 'chromium'` is supposed to buy the real rasterizer, but
+     * headless Chromium silently falls back to SwiftShader when its GPU
+     * process cannot start (CI containers, VMs) -- and a SwiftShader baseline
+     * is a baseline of a different rasterizer than any user has. The driver
+     * reads this once, before any capture, and refuses to run on software.
+     *
+     * Fresh context rather than the viewer's: same GPU process, same string,
+     * and this way the probe does not have to be mid-capture to answer. The
+     * context is released immediately -- v0.2.2's dispose is broken (L1), so
+     * every viewer ever constructed here stays alive to the end, and a
+     * context held open for one string is what tips the 16 live viewers over
+     * the browser's context limit on the last capture.
+     */
+    window.__rendererInfo = function () {
+      var c = document.createElement('canvas')
+      var gl = c.getContext('webgl')
+      if (!gl) return null
+      var dbg = gl.getExtension('WEBGL_debug_renderer_info')
+      var renderer = String(dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
+      var lose = gl.getExtension('WEBGL_lose_context')
+      if (lose) lose.loseContext()
+      return renderer
+    }
+
     // -- harness API, driven from outside via page.evaluate ------------------
     window.__probe = {
       /*
