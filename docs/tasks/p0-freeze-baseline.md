@@ -61,6 +61,8 @@ verify 写成条件式是**自举悖论**：`verify-fixtures.mjs` 是本卡自�
 
 **整改后复审**：两条变异实验反向验证（单字节翻转必红；合法纯色+同步篡改哈希只被内容神谕抓住）+ 第 4 次全量捕获带全部新断言 16/16 通过且逐字节复现。CRITICAL / INFORMATIONAL 清零，共 2 轮。
 
+**第 3 轮（交卷后送达的复审）**：两位审查员的复审钉在 `0438e3a`——即整改提交 `bbe131c` 的父提交——所报 5 条中 4 条为陈旧（内容神谕/IHDR 解码/缩放针存在性/三帧稳态断言，均已在 `bbe131c` 落地并带变异验证）；**1 条新发现实锤并整改**：harness 无硬件栅格器断言——`channel: 'chromium'` 的"load-bearing"只是注释声称，headless chromium 在 GPU 进程起不来时（CI 容器/VM）静默回落 SwiftShader，且 index.json 不记渲染器字符串，软件渲染的伪基线与真基线不可区分。整改：probe.html 经 `WEBGL_debug_renderer_info` 读 unmasked renderer（读毕即 `loseContext` 归还，避免挤爆 16 个不死 viewer 之上的上下文上限）；capture.mjs 采样于任何捕获之前，命中 `/swiftshader|software/i` 即拒绝运行，字符串记入 index.json；fixtures.test.mjs 新增断言（记录缺失或软件渲染即红），使闸 6 每次都重执此约束而非只在捕获时执行一次。实测本机 renderer 为 `ANGLE (Apple, ANGLE Metal Renderer: Apple M2)`——既有 4 次捕获确系硬件栅格化，此发现属"堵未来静默回落"而非"既有基线错了"。变异验证：植入 SwiftShader → 红；字段缺失（旧 index.json）→ 红。第 5–7 次全量捕获 16/16、数据文件逐字节复现，index.json 仅 +renderer+capturedAt。
+
 ### 测试质量结论
 
 **手段**：effective-testing 清单（维度 0–4 + 反模式 A–F）审查 `fixtures.test.mjs` + `verify-fixtures.mjs`，缺陷思维实验驱动（逐类破坏基线数据，看套件是否变红）。
