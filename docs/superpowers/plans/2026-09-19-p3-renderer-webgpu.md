@@ -6,7 +6,7 @@
 
 **Architecture:** `renderer/` 定义 `Backend` 接口，`renderer/webgpu/` 实现它。几何是一个 3 顶点的全屏三角形 —— 顶点着色器只吐 NDC，画面里的一切由片元着色器算。投影公式与 CPU 参考实现（`src/core/reference.ts`）逐行同构。
 
-**Tech Stack:** WebGPU / WGSL · gl-matrix · Playwright
+**Tech Stack:** WebGPU / WGSL · gl-matrix · vitest 浏览器模式
 
 ---
 
@@ -49,16 +49,18 @@ let p = h.xyz / h.w;          // 线性：远平面上的点，方向即视线
 | `src/renderer/webgpu/shaders/panorama.wgsl` | 顶点 + 两个片元入口 |
 | `src/renderer/webgpu/shaders/index.ts` | 把 `WGSL_CONSTANTS` 与源码拼成最终字符串 |
 | `src/renderer/webgpu/shaders/sampler.ts` | 采样器（过滤模式是像素对齐的一部分） |
-| `test/integration/tsconfig.json` | 集成测试的 program：`include` 掉集成测试与 `demo/**`，带 `vite/client`，`"exclude": []`（理由见 Task 5 Step 3） |
-| `demo/tsconfig.json` | 只服务编辑器：单独打开 `demo/` 下的文件时知道它是 Vite 页面 |
-| `test/integration/support/gpu.ts` | 集成测试共用的 GPU 工具 |
+| `test/integration/support/gpu.ts` | 集成测试共用的 GPU 工具（浏览器侧：拿 device、建 canvas、回读像素） |
 | `test/integration/uniform-layout.test.ts` | 布局往返测试 |
 | `test/integration/gate-a-pixels.test.ts` | **门禁 A** |
 | `test/integration/gate-b-projection.test.ts` | **门禁 B** |
-| `index.html`（仓库根） | **集成测试的落地页**：`page.goto('/')` 打开的就是它，只有它加载 `demo/test-entry.ts` |
-| `demo/test-entry.ts` | `window.__panoTest` 出口，只在测试构建里加载 |
-| `demo/test-entry-hooks/renderer.ts` | 本期的 hook：`renderOffscreen` / `WebGPUBackend` / `acquireDevice` |
-| `demo/test-entry-hooks/echo.ts` | 本期第二个 hook：uniform 布局探针 |
+| `test/support/baseline-browser.ts` | **P0 fixture 的浏览器 loader**：`?url` → `fetch` → `createImageBitmap`，并统一通道序 |
+
+> **本期不再产出任何桥接层。** `index.html`、`demo/test-entry.ts`、`demo/test-entry-hooks/*`、
+> `PanoTestApi`、`window.__panoTest`、`import.meta.glob` 装配、`demo/tsconfig.json` —— 一个都不建。
+> 这套东西存在的唯一理由是「Playwright 测试跑在 Node 里，够不着页面」；**浏览器模式下测试文件本身就在
+> 页面里**，`import { WebGPUBackend } from '../../src/renderer/webgpu/backend'` 直接可用。
+>
+> `test/integration/tsconfig.json` 与两个守卫由 **P1 Task 8** 建好，本期只消费、不重建。
 
 ---
 
@@ -241,9 +243,10 @@ describe('describeCapabilities', () => {
   })
 
   it('falls back to webgl2 when an adapter cannot be obtained', () => {
-    // navigator.gpu exists but requestAdapter() returned null -- exactly what
-    // Playwright's default headless binary does. This is the silent-downgrade
-    // case, and it must be visible in the reported capabilities.
+    // navigator.gpu exists but requestAdapter() returned null -- exactly the
+    // condition the `no-webgpu` project reproduces with --disable-gpu. This is
+    // the silent-downgrade case, and it must be visible in the reported
+    // capabilities.
     const caps = describeCapabilities({ ...base, adapter: null })
     expect(caps.backend).toBe('webgl2')
     expect(caps.adapter).toBeUndefined()
@@ -317,9 +320,10 @@ export const MIN_TRUSTWORTHY_TEXTURE_DIMENSION = 2048
  * Decides which backend to use and what to report about it.
  *
  * WebGPU wins whenever it is genuinely available. The adapter check is not
- * redundant with the `navigator.gpu` check: Playwright's default headless
- * binary exposes `navigator.gpu` and returns `null` from `requestAdapter()`,
- * so a page can look WebGPU-capable while having no GPU at all.
+ * redundant with the `navigator.gpu` check: a browser launched with
+ * `--disable-gpu` still exposes `navigator.gpu` and returns `null` from
+ * `requestAdapter()`, so a page can look WebGPU-capable while having no GPU at
+ * all. That is a real user configuration, not just a test fixture.
  */
 export function describeCapabilities (input: ProbeInput): SelectedCapabilities {
   if (input.hasWebGPU && input.adapter !== null) {
@@ -1265,9 +1269,9 @@ export async function withValidationScope<T> (
  * Requests an adapter and device.
  *
  * @returns `null` when the page has no WebGPU, or when the browser exposes the
- *   API but has no adapter to give -- which is exactly what Playwright's
- *   default headless binary does. Callers must treat `null` as "use WebGL2",
- *   not as an error.
+ *   API but has no adapter to give -- which is what a browser launched with
+ *   `--disable-gpu` reports. Callers must treat `null` as "use WebGL2", not as
+ *   an error.
  */
 export async function acquireDevice (): Promise<AcquiredDevice | null> {
   if (!('gpu' in navigator) || !navigator.gpu) return null
@@ -1320,7 +1324,7 @@ fine, draws nothing' failure with a different API."
 
 - [ ] **Step 1: 写集成测试工具**
 
-`test/integration/support/gpu.ts`：
+`test/integration/support/gpu.ts`。这段代码**就跑在页面里**（浏览器模式），所以没有跨进程边界、没有 wire 类型、没有 base64：
 
 ```ts
 /*
@@ -1333,29 +1337,138 @@ fine, draws nothing' failure with a different API."
  * camera plus source to pixels; a texture this helper owns exercises exactly
  * that.
  *
- * The request carries plain data, not packed uniforms, and the page side calls
- * the real `setCamera`/`setSource`/`render`. A helper that handed the shader a
- * pre-built `invClip` would skip the matrix builder, and the matrix builder is
- * half of what these tests exist to check.
+ * The request carries plain data, not packed uniforms, and this calls the real
+ * `setCamera`/`setSource`/`render`. A helper that handed the shader a pre-built
+ * `invClip` would skip the matrix builder, and the matrix builder is half of
+ * what these tests exist to check.
  */
 
-import type { Page } from '@playwright/test'
-// Type-only, so nothing from `demo/` ends up in the test bundle. The direction
-// is deliberate: the page-side implementation owns the wire shape, and a test
-// helper that declared its own copy of it would be a second source of truth for
-// a contract that has exactly one implementer.
-import type { RenderRequest, RenderResult } from '../../../demo/test-entry-hooks/renderer'
+import { WebGPUBackend } from '../../../src/renderer/webgpu/backend'
+import type { CameraState, Projection } from '../../../src/core/types'
+import type { RenderableSource } from '../../../src/renderer/backend'
 
-/** Runs a render inside the page and returns the pixels. */
-export async function renderOffscreen (
-  page: Page,
-  request: RenderRequest
-): Promise<RenderResult> {
-  return page.evaluate(async (r) => window.__panoTest.renderOffscreen(r), request)
+/** Everything one offscreen render needs. */
+export interface RenderRequest {
+  readonly width: number
+  readonly height: number
+  readonly camera: CameraState
+  readonly projection: Projection
+  /**
+   * The source, already decoded.
+   *
+   * An `ImageBitmap` rather than raw pixels, so the frame goes through the same
+   * `copyExternalImageToTexture` call a viewer makes instead of a shortcut only
+   * tests take. It is also a valid `TexImageSource`, so the same helper can
+   * serve a WebGL2 backend later with no change.
+   */
+  readonly source: ImageBitmap
+  readonly sourceWidth: number
+  readonly sourceHeight: number
 }
 
-/** Largest per-channel difference between two RGBA8 buffers. */
-export function maxChannelDiff (a: readonly number[], b: readonly number[]): number {
+/** What one offscreen render produced. */
+export interface RenderResult {
+  readonly width: number
+  readonly height: number
+  /** RGBA8, top-down, row-major. */
+  readonly rgba: Uint8Array
+}
+
+/**
+ * Renders one frame offscreen and reads the pixels back.
+ *
+ * The whole product path runs: `setCamera` builds the matrix through
+ * `buildCameraTransform`, the shader module is the shipped one, and the source
+ * is a real decoded image. The only thing this skips is the swapchain.
+ */
+export async function renderOffscreen (request: RenderRequest): Promise<RenderResult> {
+  const { width, height, camera, projection } = request
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+
+  const backend = await WebGPUBackend.create(canvas)
+  if (!backend) throw new Error('no WebGPU device available')
+
+  const device = backend.device
+  const target = device.createTexture({
+    label: 'readback',
+    size: { width, height },
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+  })
+
+  const source: RenderableSource = {
+    state: {
+      projection: 'equirectangular',
+      width: request.sourceWidth,
+      height: request.sourceHeight
+    },
+    kind: 'image',
+    element: request.source,
+    version: 1
+  }
+
+  try {
+    backend.setCamera(camera, projection)
+    backend.setSource(source)
+    backend.render(target.createView())
+    return await readTexture(device, target, width, height)
+  } finally {
+    target.destroy()
+    backend.dispose()
+  }
+}
+
+/**
+ * Copies a texture back to the CPU, top-down, RGBA8.
+ *
+ * `copyTextureToBuffer` requires `bytesPerRow` to be a multiple of 256, and four
+ * bytes per pixel only clears that when the width is a multiple of 64. The 128px
+ * fixtures happen to clear it; handling the padding anyway means the next test
+ * that renders at some other size does not fail for a reason that reads like a
+ * driver bug.
+ */
+async function readTexture (
+  device: GPUDevice,
+  texture: GPUTexture,
+  width: number,
+  height: number
+): Promise<Uint8Array> {
+  const bytesPerRow = Math.ceil((width * 4) / 256) * 256
+  const buffer = device.createBuffer({
+    label: 'readback',
+    size: bytesPerRow * height,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+  })
+
+  const encoder = device.createCommandEncoder({ label: 'readback' })
+  encoder.copyTextureToBuffer({ texture }, { buffer, bytesPerRow }, { width, height })
+  device.queue.submit([encoder.finish()])
+
+  await buffer.mapAsync(GPUMapMode.READ)
+  const src = new Uint8Array(buffer.getMappedRange())
+  // Copied out before `unmap`: the mapped range is only valid until then, and
+  // the copy is what makes the de-padding safe.
+  const out = new Uint8Array(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    const from = y * bytesPerRow
+    out.set(src.subarray(from, from + width * 4), y * width * 4)
+  }
+  buffer.unmap()
+  buffer.destroy()
+  return out
+}
+
+/**
+ * Largest per-channel difference between two RGBA8 buffers.
+ *
+ * `ArrayLike` rather than `readonly number[]`: the readback is a `Uint8Array`
+ * and a baseline decoded by `createImageBitmap` is a `Uint8ClampedArray`, and
+ * materialising either into a plain array would cost more than the comparison.
+ */
+export function maxChannelDiff (a: ArrayLike<number>, b: ArrayLike<number>): number {
   if (a.length !== b.length) {
     throw new Error(`size mismatch: ${a.length} vs ${b.length}`)
   }
@@ -1368,7 +1481,9 @@ export function maxChannelDiff (a: readonly number[], b: readonly number[]): num
 }
 ```
 
-> `window.__panoTest` 的类型来自 `demo/test-entry.ts` 的全局声明（Step 3）。**不要在这里写 `as unknown as` 再手抄一遍签名** —— 抄一遍就是第二真源，而 `PanoTestApi` 存在的全部意义就是让「页面提供了什么」和「测试拿了什么」由同一个声明约束。
+> **注意 `renderOffscreen` 里 `backend.device` 与 `render(target)` 的用法没有变** —— 它们本来就只在具体类上。
+>
+> **这里没有 `RenderRequest` 的 wire 类型，也不需要第二份声明。** 之前那份存在的理由是「页面侧拥有线格式、测试侧不能手抄」；现在两边是同一个模块系统里的同一个类型，抄不抄的问题不存在了。
 
 - [ ] **Step 2: 写后端实现**
 
@@ -1941,311 +2056,69 @@ export class WebGPUBackend implements Backend {
 >
 > 不要为了让骨架跑起来而跳过 error scope。**先跑通 Task 6 的布局往返测试，再写四个投影的接线。**
 
-- [ ] **Step 3: 写测试出口**
+- [ ] **Step 3: 写冒烟测试**
 
-`demo/test-entry.ts` —— 页面侧的测试出口。它**不是**生产入口：`src/index.ts` 一个内部符号都不挂（P1 与 P4 都要求过同一件事）。
-
-```ts
-/*
- * The page-side surface the integration tests drive.
- *
- * In `demo/` rather than `src/` because it is not part of the library: it hands
- * out internals on a global, and shipping that would make every internal name
- * part of the public contract forever.
- *
- * The object is assembled from `./test-entry-hooks/*.ts` rather than written out
- * here. Each phase that needs a new hook drops in its own file and touches
- * nothing else -- which matters because P4 and P6 both depend on this phase and
- * would otherwise both be editing this file.
- */
-
-import type { RenderRequest, RenderResult } from './test-entry-hooks/renderer'
-
-declare global {
-  /**
-   * Everything the page exposes for tests.
-   *
-   * Global rather than module-scoped, and that is the whole point: each hook
-   * file widens it with a `declare global` block of its own, and global
-   * interfaces merge across files with no specifier to get wrong. An exported
-   * `interface` would instead force every later phase to write
-   * `declare module '../test-entry'` -- a relative path that has to resolve
-   * correctly from an arbitrary file in a subdirectory, and which silently
-   * does nothing when it does not.
-   */
-  interface PanoTestApi {
-    renderOffscreen (request: RenderRequest): Promise<RenderResult>
-  }
-
-  interface Window { __panoTest: PanoTestApi }
-}
-
-// `eager` because the tests call into these synchronously after load; a lazy
-// glob would hand back promise-returning importers. `import.meta.glob` is a Vite
-// feature and this file is only ever built by Vite.
-const hookModules = import.meta.glob<{ default: Partial<PanoTestApi> }>(
-  './test-entry-hooks/*.ts',
-  { eager: true }
-)
-
-const api: PanoTestApi = Object.assign(
-  {},
-  ...Object.values(hookModules).map(m => m.default)
-) as PanoTestApi
-
-window.__panoTest = api
-```
+`test/integration/backend-smoke.test.ts` —— **直接 import，没有 `page.evaluate`，没有 `window.__panoTest`**：
 
 ```ts
-// demo/test-entry-hooks/renderer.ts
-
+import { describe, it, expect } from 'vitest'
 import { WebGPUBackend } from '../../src/renderer/webgpu/backend'
 import { acquireDevice } from '../../src/renderer/webgpu/device'
-import type { CameraState, Projection } from '../../src/core/types'
 
-// No import of `PanoTestApi`: it is a global interface (see `test-entry.ts`), so
-// it is already in scope here.
-
-/** Everything one offscreen render needs. All of it structured-cloneable. */
-export interface RenderRequest {
-  readonly width: number
-  readonly height: number
-  readonly camera: CameraState
-  readonly projection: Projection
-  /**
-   * The source as base64 PNG, not raw pixels.
-   *
-   * Two reasons. It is a third the size over the CDP wire, and a data URL lets
-   * this build a real `HTMLImageElement`, so the frame goes through the same
-   * `copyExternalImageToTexture` call a viewer makes instead of a shortcut only
-   * tests take.
-   */
-  readonly sourcePng: string
-}
-
-/** What one offscreen render produced. */
-export interface RenderResult {
-  readonly width: number
-  readonly height: number
-  /** RGBA8, top-down, row-major. */
-  readonly rgba: number[]
-}
-
-/**
- * Renders one frame offscreen and reads the pixels back.
- *
- * The whole product path runs: `setCamera` builds the matrix through
- * `buildCameraTransform`, the shader module is the shipped one, and the source
- * is a real image element. The only thing this skips is the swapchain.
+/*
+ * The setup file for this project already asserted that requestAdapter()
+ * returns non-null, so a null from `create` below is a real failure and not
+ * the "this machine has no GPU" case.
  */
-async function renderOffscreen (request: RenderRequest): Promise<RenderResult> {
-  const { width, height, camera, projection, sourcePng } = request
 
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-
-  const backend = await WebGPUBackend.create(canvas)
-  if (!backend) throw new Error('no WebGPU device available')
-
-  const image = new Image()
-  image.src = `data:image/png;base64,${sourcePng}`
-  await image.decode()
-
-  const device = backend.device
-  const target = device.createTexture({
-    label: 'readback',
-    size: { width, height },
-    format: 'rgba8unorm',
-    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
-  })
-
-  try {
-    backend.setCamera(camera, projection)
-    backend.setSource({
-      state: {
-        projection: 'equirectangular',
-        width: image.naturalWidth,
-        height: image.naturalHeight
-      },
-      kind: 'image',
-      element: image,
-      version: 1
-    })
-
-    backend.render(target.createView())
-    return await readTexture(device, target, width, height)
-  } finally {
-    target.destroy()
-    backend.dispose()
-  }
-}
-
-/**
- * Copies a texture back to the CPU, top-down, RGBA8.
- *
- * `copyTextureToBuffer` requires `bytesPerRow` to be a multiple of 256, and four
- * bytes per pixel only clears that when the width is a multiple of 64. The 128px
- * fixtures happen to clear it; handling the padding anyway means the next test
- * that renders at some other size does not fail for a reason that reads like a
- * driver bug.
- */
-async function readTexture (
-  device: GPUDevice,
-  texture: GPUTexture,
-  width: number,
-  height: number
-): Promise<number[]> {
-  const bytesPerRow = Math.ceil((width * 4) / 256) * 256
-  const buffer = device.createBuffer({
-    label: 'readback',
-    size: bytesPerRow * height,
-    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-  })
-
-  const encoder = device.createCommandEncoder({ label: 'readback' })
-  encoder.copyTextureToBuffer({ texture }, { buffer, bytesPerRow }, { width, height })
-  device.queue.submit([encoder.finish()])
-
-  await buffer.mapAsync(GPUMapMode.READ)
-  const src = new Uint8Array(buffer.getMappedRange())
-  // Copied out before `unmap`: the mapped range is only valid until then, and
-  // the copy is what makes the de-padding safe.
-  const out = new Uint8Array(width * height * 4)
-  for (let y = 0; y < height; y++) {
-    const from = y * bytesPerRow
-    out.set(src.subarray(from, from + width * 4), y * width * 4)
-  }
-  buffer.unmap()
-  buffer.destroy()
-  // A plain array, not a typed one. `page.evaluate` serialises with structured
-  // clone, and a `Uint8Array` crosses as an object keyed by index -- which is
-  // not what `maxChannelDiff` walks.
-  return Array.from(out)
-}
-
-// The widening lives next to the code that provides it. `declare global` in a
-// module is a global augmentation, so this merges into the `PanoTestApi` that
-// `test-entry.ts` opened; nothing imports anything to make it work, and a phase
-// that adds a hook cannot forget to register it in a second place.
-declare global {
-  interface PanoTestApi {
-    // Re-exported straight from `src/`, unwrapped. These two are the only
-    // `src/` internals this hook hands out -- a test that needs a backend or a
-    // raw device has no smaller surface to go through -- and the entry point
-    // only loads in test builds.
-    WebGPUBackend: typeof WebGPUBackend
-    acquireDevice: typeof acquireDevice
-  }
-}
-
-export default { renderOffscreen, WebGPUBackend, acquireDevice } satisfies Partial<PanoTestApi>
-```
-
-**这一步还要建仓库根的 `index.html` —— 集成测试的落地页。**
-
-`page.goto('/')` 是**所有**集成测试的第一行（P1 的 `gpuPage` fixture、P5 的五个 User Story、P6 的门禁 C 都这么写），而 `/` 得是一个真的加载了 `demo/test-entry.ts` 的页面，`window.__panoTest` 才会在。
-
-```html
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>pano.gl test entry</title>
-  <!--
-    The page every integration test navigates to. It is the ONLY page that loads
-    the test entry, and that is how "test-only" is enforced: not by a build flag
-    but by which page imports what. demo/index.html (the demo, P1 Task 10) and
-    this file never import each other, so window.__panoTest exists here and
-    cannot exist there.
-
-    No vite.config.ts is needed for this. Vite's root is the repo root (that is
-    where `npx vite` runs) and its publicDir default is <root>/public, which is
-    where P1 Task 11 puts the fixtures -- so '/fixtures/panorama.png' resolves
-    with no configuration at all.
-  -->
-</head>
-<body>
-  <div id="host"></div>
-  <script type="module" src="/demo/test-entry.ts"></script>
-</body>
-</html>
-```
-
-> `demo/test-entry.ts` 的完整性由本步负责（不留占位）。还有两件事也要在**本步**做好：
-> 1. **建 `test/integration/tsconfig.json`，把 `demo/` 收进集成测试的 program，并把 `typecheck` 接上它。** `Window.__panoTest` 声明在 `demo/test-entry.ts` 里，而 P1 的根 tsconfig **排除**了 `test/integration`（原因见 P1 Task 3 Step 1 的说明）—— 所以集成测试自成一个 program：
->
->    ```json
->    {
->      "extends": "../../tsconfig.json",
->      "include": ["./**/*.ts", "../../demo/**/*.ts"],
->      "types": ["@webgpu/types", "vite/client"],
->      "exclude": []
->    }
->    ```
->
->    `vite/client` 是必须的：`demo/test-entry.ts` 用了 `import.meta.glob`。
->
->    **`"exclude": []` 这一行不能省，而且它看着像废话 —— 它恰恰不是。** `extends` 继承来的 `exclude` 是**相对声明它的那个配置文件**解析的，所以根 tsconfig 的 `"exclude": ["test/integration"]` 在这个子配置里仍然指回集成测试自己，把本 program 要检查的文件全部排除掉。**用 tsc 5.9 实测过：少了这一行，子 program 里放一个故意写错的测试，`tsc -p test/integration` 照样退出码 0** —— 它只检查了 `demo/`。那是一个永远绿的空转检查，比不建这个 program 更糟。加上 `"exclude": []` 后同一个错误立刻报 `TS2339`。
->
->    **同时把根 `package.json` 的 `typecheck` 改成 `tsc --noEmit && tsc --noEmit -p test/integration`** —— 不接上这一步，新 program 建了也从不被跑。否则全局声明只在一半程序里可见，测试侧就得写 `as unknown as`，而那正是本步要消灭的东西。
->
->    另外建一个 `demo/tsconfig.json`（`include` 掉 `demo/**`，`types` 带 `vite/client`），它只服务编辑器：在 IDE 里单独打开 `demo/` 下的文件时，编辑器得知道这是个 Vite 页面。
-> 2. `index.html` 里那句 `<script type="module" src="/demo/test-entry.ts">` 用的是**根绝对路径**，不是 `./`。它保证页面从哪个 URL 打开都能解析到同一个模块 —— 测试只走 `/`，但有人手工打开 `/index.html` 时不该得到两个不同的模块实例。
-
-- [ ] **Step 4: 写冒烟测试**
-
-`test/integration/backend-smoke.test.ts`：
-
-```ts
-import { test, expect } from './support/fixtures'
-
-test('a WebGPU backend can be created and dispose cleanly', async ({ gpuPage }) => {
-  const result = await gpuPage.evaluate(async () => {
-    const { WebGPUBackend } = window.__panoTest
+describe('WebGPU backend lifecycle', () => {
+  it('can be created and disposed, twice', async () => {
     const canvas = document.createElement('canvas')
     canvas.width = 8
     canvas.height = 8
     document.body.appendChild(canvas)
-    // `create` returns null when the page has no usable WebGPU, which the
-    // fixture already skips on -- so a null here is a real failure.
-    const backend = await WebGPUBackend.create(canvas)
-    if (!backend) return { created: false }
-    backend.dispose()
-    backend.dispose()  // idempotent
-    return { created: true }
-  })
-  expect(result.created).toBe(true)
-})
 
-test('device loss is observable', async ({ gpuPage }) => {
-  // The spec's failure mode: WebGPU does not auto-recover, so a lost device
-  // that nothing listens for means a permanently black canvas and no message.
-  const fired = await gpuPage.evaluate(async () => {
-    const { acquireDevice } = window.__panoTest
-    const acquired = await acquireDevice()
-    if (!acquired) return 'no device'
-    const lost = acquired.device.lost.then(() => 'lost')
-    acquired.device.destroy()
-    return Promise.race([lost, new Promise(r => setTimeout(() => r('timeout'), 5000))])
+    const backend = await WebGPUBackend.create(canvas)
+    expect(backend).not.toBeNull()
+    backend!.dispose()
+    // Disposal is reachable from a viewer's teardown path, which can run twice
+    // when a source swap and a destroy race. It has to be idempotent.
+    backend!.dispose()
   })
-  expect(fired).toBe('lost')
+
+  it('reports device loss', async () => {
+    // The failure mode the spec calls out: WebGPU does not auto-recover, so a
+    // lost device that nothing listens for means a permanently black canvas and
+    // no message anywhere.
+    const acquired = await acquireDevice()
+    expect(acquired).not.toBeNull()
+
+    const lost = acquired!.device.lost.then(() => 'lost')
+    acquired!.device.destroy()
+    const outcome = await Promise.race([
+      lost,
+      new Promise(resolve => setTimeout(() => resolve('timeout'), 5000))
+    ])
+    expect(outcome).toBe('lost')
+  })
 })
 ```
 
-> `WebGPUBackend` 与 `acquireDevice` 的导出与 `PanoTestApi` 扩写都写在 `demo/test-entry-hooks/renderer.ts` 里（见 Step 3 末尾）：**扩展声明和提供实现的是同一个文件**。两者都从 `src/` 直接再导出，不要包一层。**这是本计划里唯一允许从 `demo/` 导出 `src/` 内部符号的地方**（连同后面的 `probeSurface`）—— 出口只有这一个，且只在测试构建里加载。
+> 删除 `document.body.appendChild(canvas)` 之外的一切收尾动作 —— 浏览器模式每个测试文件跑在自己的页面上下文里，测试之间不会互相污染，不需要手工拆 DOM。
+>
+> `acquireDevice` 在这里是**直接 import 的 `src/` 内部模块**。这正是浏览器模式带来的变化：以前要走 `window.__panoTest` 再导出一次，现在门禁测试 import 内部模块、用户故事测试 import `src/index.ts` —— 这条纪律从「由桥接层的形状隐式保证」变成「靠约定 + review 保证」。
 
-- [ ] **Step 5: 跑集成测试**
+- [ ] **Step 4: 跑集成测试**
 
 Run: `npm run test:integration -- backend-smoke`
 Expected: 2 个测试 PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add src/renderer/webgpu/backend.ts test/integration/support/gpu.ts \
-  test/integration/backend-smoke.test.ts demo/ index.html tsconfig.json
-git commit -m "feat(renderer): WebGPU backend skeleton, offscreen test entry, device loss reporting"
+  test/integration/backend-smoke.test.ts
+git commit -m "feat(renderer): WebGPU backend skeleton with device loss reporting"
 ```
 
 ---
@@ -2253,14 +2126,14 @@ git commit -m "feat(renderer): WebGPU backend skeleton, offscreen test entry, de
 ### Task 6: uniform 布局往返验证
 
 **Files:**
-- Create: `demo/test-entry-hooks/echo.ts`
+- Create: `test/integration/support/echo.ts`
 - Test: `test/integration/uniform-layout.test.ts`
 
 **这是本计划里最容易被跳过、也最不能跳过的一步。** 单元测试只能证明 TS 侧的偏移自洽；**只有往 GPU 里写一遍再读回来，才能证明这些偏移与 WGSL 对 struct 的理解一致**。
 
 - [ ] **Step 1: 写探针**
 
-`demo/test-entry-hooks/echo.ts` —— 又一个 hook 文件。放进 `test-entry-hooks/` 而不是 `test/integration/support/`，因为它**跑在页面里**（要 `navigator.gpu`），而 `test/` 那侧跑在 Node 里；`test/` 只负责驱动它。
+`test/integration/support/echo.ts`。它直接 import `src/` 的内部模块 —— **浏览器模式下没有「页面侧」和「测试侧」之分**，测试文件本身就在页面里，`acquireDevice()` 随手可得。上一版把它放在 `demo/test-entry-hooks/` 是因为它需要 `navigator.gpu` 而测试跑在 Node 里；那个前提现在不成立了。
 
 ```ts
 /*
@@ -2364,8 +2237,10 @@ function withDefaults (values: Partial<CameraUniformValues>): CameraUniformValue
 /**
  * Builds a probe bound to a fresh device.
  *
- * Returns null when the page has no usable WebGPU, which the `gpuPage` fixture
- * already skips on -- so a null reaching a test is a real failure, not a skip.
+ * Throws when the browser has no usable WebGPU. The project's setup-file guard
+ * has already asserted that `requestAdapter()` returns non-null, so reaching
+ * this line means something is genuinely wrong -- not that this machine has no
+ * GPU. A skip would hide that, which is why this is a throw.
  */
 export async function createEchoRenderer (): Promise<
   (values: Partial<CameraUniformValues>) => Promise<Record<string, unknown>>
@@ -2445,13 +2320,11 @@ export async function createEchoRenderer (): Promise<
   }
 }
 
-declare global {
-  interface PanoTestApi {
-    createEchoRenderer: typeof createEchoRenderer
-  }
-}
-
-export default { createEchoRenderer } satisfies Partial<PanoTestApi>
+/*
+ * A named export, not a default one merged onto a global. The `PanoTestApi`
+ * indirection existed so a Node-side test could reach page-side code; with the
+ * tests in the page, the test imports this module like any other.
+ */
 ```
 
 > `packCameraUniforms` 的入参类型是 `CameraUniformValues`，`invClip` 要 `mat4`。探针传的是 `Float32Array.from(...)`，**不是真的可用矩阵也不影响** —— 它只负责把 16 个数写进去再读回来，不参与任何变换。这一点在测试里表现为第二个用例可以拿 `[1..16]` 这种显然不是变换矩阵的数组当输入。
@@ -2459,7 +2332,8 @@ export default { createEchoRenderer } satisfies Partial<PanoTestApi>
 - [ ] **Step 2: 写测试**
 
 ```ts
-import { test, expect } from './support/fixtures'
+import { describe, it, expect } from 'vitest'
+import { createEchoRenderer } from './support/echo'
 
 /*
  * Writes sentinels into the camera uniform block, reads every slot back from
@@ -2476,27 +2350,24 @@ import { test, expect } from './support/fixtures'
  * scalars without per-member 16-byte slots; if a future browser changes that,
  * this test is where it shows up.
  */
-test('every uniform field round-trips through WGSL at its declared offset', async ({ gpuPage }) => {
-  // Sentinels chosen so a one-field shift produces a visibly wrong value rather
-  // than a plausible one. All five are exact in f32 and none is a round number
-  // that could coincide with a neighbour's default.
-  const values = {
-    projKind: 1234567,
-    texProjKind: 7654321,
-    povLatitude: -12.5,
-    povLongitude: 234.75,
-    zoom: 3.5
-  }
+describe('uniform layout round trip', () => {
+  it('places every field at its declared offset', async () => {
+    // Sentinels chosen so a one-field shift produces a visibly wrong value
+    // rather than a plausible one. All five are exact in f32 and none is a
+    // round number that could coincide with a neighbour's default.
+    const values = {
+      projKind: 1234567,
+      texProjKind: 7654321,
+      povLatitude: -12.5,
+      povLongitude: 234.75,
+      zoom: 3.5
+    }
 
-  const echoed = await gpuPage.evaluate(async v => {
-    const echo = await window.__panoTest.createEchoRenderer()
-    return echo(v)
-  }, values)
+    const echo = await createEchoRenderer()
+    expect(await echo(values)).toEqual(values)
+  })
 
-  expect(echoed).toEqual(values)
-})
-
-test('the inverse clip matrix round-trips without transposition', async ({ gpuPage }) => {
+  it('round-trips the inverse clip matrix without transposition', async () => {
   // gl-matrix is column-major and WGSL's mat4x4 is m[col][row]; they line up,
   // but "they line up" is exactly the kind of claim that deserves a test.
   //
@@ -2506,12 +2377,10 @@ test('the inverse clip matrix round-trips without transposition', async ({ gpuPa
   // identity or constant matrix would pass while transposed.
   const invClip = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 
-  const echoed = await gpuPage.evaluate(async m => {
-    const echo = await window.__panoTest.createEchoRenderer()
-    return echo({ invClip: m })
-  }, invClip)
-
-  expect(echoed.invClip).toEqual(invClip)
+    const echo = await createEchoRenderer()
+    const echoed = await echo({ invClip })
+    expect(echoed.invClip).toEqual(invClip)
+  })
 })
 ```
 
@@ -2528,7 +2397,7 @@ Expected: 2 个测试 PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add demo/test-entry-hooks/echo.ts test/integration/uniform-layout.test.ts
+git add test/integration/support/echo.ts test/integration/uniform-layout.test.ts
 git commit -m "test(renderer): round-trip every uniform field through WGSL
 
 Unit tests only prove the JavaScript offsets are self-consistent. There is
@@ -2556,22 +2425,181 @@ a second copy of the thing under test."
 >
 > 判据现成：`cylindrical` 的 `origin`（lat 0, lng 0, zoom 0）与 `tilt`（lat 30, lng 45, zoom 0）之间，**这个投影能看见的唯一输入差异是经度** —— 它的 `phi` 不读纬度，两个状态 zoom 都是 0，而纬度本来就被忽略。两张 PNG 相同 ⇒ `lng` 被编译成 0 ⇒ 经度对画面无影响，`lat === 0` 的状态全都可比；不同 ⇒ 经度确实在起作用，只有 `lng === 0` 的状态可比。
 
-- [ ] **Step 1: 写测试**
+- [ ] **Step 1: 写浏览器侧的 fixture loader**
+
+`test/support/baseline-browser.ts` —— P0 那批 fixture 在浏览器里的读法。Node 侧那份（`baseline-node.ts`，P2 产出）在这里一行都用不了：`node:fs`、`path`、`__dirname` 在浏览器里都不存在。
 
 ```ts
-import { test, expect } from './support/fixtures'
-import { renderOffscreen, maxChannelDiff } from './support/gpu'
-import {
-  LEGACY_EXTENT,
-  fixtureRoot,
-  legacyFovFrom,
-  loadCapture,
-  readCaptureDoc
-} from '../support/baseline'
+/*
+ * The browser-side loader for P0's fixtures.
+ *
+ * The parsing and the derivations live in `baseline.ts` and are shared with the
+ * Node-side parity test; this file is only the I/O, and in a browser the I/O is
+ * a fetch.
+ *
+ * `import.meta.glob` rather than a template-literal `import()`: Vite's `?url`
+ * suffix only resolves reliably on a static specifier, and a computed path
+ * silently degrades to a runtime fetch of a path that is not served. The glob is
+ * eager so callers get a plain lookups-by-path table instead of a promise per
+ * entry, and `captureFile` (shared with the Node loader) supplies the keys --
+ * which is what keeps the fixture layout in one place across both environments.
+ */
+
+import { captureFile, parseCaptureDoc, type CaptureDoc } from './baseline'
+
+/*
+ * `{png,json}` and not `**`, so the glob skips `bundle.js` -- a few hundred KB of
+ * v0.2.2 webpack output that is committed for the capture tool and that no test
+ * reads. Globbing it would hand Vite an asset to process on every test run for
+ * nothing.
+ *
+ * `query` rather than the older `as`: Vitest 5 runs on Vite 7, where `as` is
+ * deprecated.
+ */
+const urls = import.meta.glob('../fixtures/baseline/**/*.{png,json}', {
+  query: '?url',
+  import: 'default',
+  eager: true
+}) as Record<string, string>
+
+/** The served URL for one fixture file. Throws rather than returning undefined. */
+function fixtureUrl (path: string): string {
+  const url = urls[`../fixtures/baseline/${path}`]
+  if (!url) throw new Error(`fixture not found: ${path}`)
+  return url
+}
+
+/** Every capture state the baseline holds for a camera, read off the directory. */
+export function statesOf (camera: string): string[] {
+  const prefix = `../fixtures/baseline/${camera}/`
+  return Object.keys(urls)
+    .filter(p => p.startsWith(prefix) && p.endsWith('.png'))
+    .map(p => p.slice(prefix.length).replace(/\.png$/, ''))
+    .sort()
+}
+
+/** Every camera the baseline holds, read off the directory. */
+export function camerasOf (): string[] {
+  const seen = new Set<string>()
+  for (const p of Object.keys(urls)) {
+    const rest = p.slice('../fixtures/baseline/'.length)
+    const slash = rest.indexOf('/')
+    if (slash > 0) seen.add(rest.slice(0, slash))
+  }
+  return [...seen].sort()
+}
+
+/** Decoded pixels plus the dimensions they came at. */
+export interface DecodedImage {
+  readonly width: number
+  readonly height: number
+  /** RGBA8, top-down, row-major. */
+  readonly rgba: Uint8ClampedArray
+}
+
+/**
+ * Decodes a fixture PNG.
+ *
+ * Via `createImageBitmap` + a 2D canvas rather than an image element, because
+ * `getImageData` hands back raw bytes and `ImageBitmap` is itself a valid
+ * `copyExternalImageToTexture` source -- so the same object serves as both the
+ * comparison baseline and the renderer's input.
+ *
+ * `colorSpaceConversion: 'none'` and `premultiplyAlpha: 'none'` are both
+ * load-bearing. The defaults let the browser colour-manage the image, which
+ * silently changes pixel values; the baseline has to arrive as the bytes P0
+ * wrote or every tolerance below is measuring the browser's colour pipeline.
+ */
+export async function decodeFixture (path: string): Promise<DecodedImage> {
+  const response = await fetch(fixtureUrl(path))
+  const blob = await response.blob()
+  const bitmap = await createImageBitmap(blob, {
+    colorSpaceConversion: 'none',
+    premultiplyAlpha: 'none'
+  })
+
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('2D context unavailable')
+  ctx.drawImage(bitmap, 0, 0)
+  const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height)
+  bitmap.close()
+
+  return { width: canvas.width, height: canvas.height, rgba: data }
+}
+
+/** Reads one capture's recorded camera state and uniform stream. */
+export async function readCaptureDoc (camera: string, stateId: string): Promise<CaptureDoc> {
+  const response = await fetch(fixtureUrl(captureFile(camera, stateId, 'uniforms.json')))
+  if (!response.ok) throw new Error(`${camera}/${stateId}: ${response.status}`)
+  return parseCaptureDoc(await response.text(), camera, stateId)
+}
+
+/** A capture's metadata plus its decoded pixels. */
+export interface Capture extends CaptureDoc {
+  readonly image: DecodedImage
+}
+
+/** Reads one capture including its pixels. */
+export async function loadCapture (camera: string, stateId: string): Promise<Capture> {
+  const [doc, image] = await Promise.all([
+    readCaptureDoc(camera, stateId),
+    decodeFixture(captureFile(camera, stateId, 'png'))
+  ])
+  return { ...doc, image }
+}
+
+/** The source the P0 captures were made with, decoded. */
+export function loadSource (): Promise<DecodedImage> {
+  return decodeFixture('source.png')
+}
+```
+
+> **通道序在这里就定死了，而且两边的原始格式不同。** `getImageData` 给的是 **RGBA**；WebGPU 的 `getPreferredCanvasFormat()` 在 macOS 上是 **`bgra8unorm`**，也就是 `renderOffscreen` 回读出来的字节是 **BGRA**。
+>
+> 比对必须**显式**处理这一层，不能靠「读出来看着对」。P1 Task 8 的冒烟测试已经把 canvas 格式钉死（`expect(getPreferredCanvasFormat()).toBe('bgra8unorm')` 那条）—— 那条测试的意义就在这里：它让下面这段换序不是防御性代码，而是有依据的。
+>
+> 换序放在比对函数里（Step 3），不放在 loader 里 —— loader 的职责是如实返回 fixture 的字节。
+
+- [ ] **Step 2: 在 `gpu.ts` 里加一个通道序规整函数**
+
+追加到 `test/integration/support/gpu.ts`：
+
+```ts
+/**
+ * Reorders a BGRA8 readback into RGBA8 so it can be compared with a decoded
+ * baseline.
+ *
+ * The WebGPU canvas format on macOS is `bgra8unorm` (P1's smoke test asserts
+ * this), so byte 0 of a readback is blue. Comparing that against `getImageData`
+ * output, which is RGBA, would read the red channel out of the blue one -- a
+ * mismatch that looks like a real projection error and is not one.
+ *
+ * Returns a copy. Reordering in place would mutate the caller's buffer, and the
+ * caller is usually a test that wants to report the pre-swap values on failure.
+ */
+export function bgraToRgba (bgra: ArrayLike<number>): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(bgra.length)
+  for (let i = 0; i + 3 < bgra.length; i += 4) {
+    out[i] = bgra[i + 2]!
+    out[i + 1] = bgra[i + 1]!
+    out[i + 2] = bgra[i]!
+    out[i + 3] = bgra[i + 3]!
+  }
+  return out
+}
+```
+
+- [ ] **Step 3: 写测试**
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { renderOffscreen, maxChannelDiff, bgraToRgba } from './support/gpu'
+import { LEGACY_EXTENT, legacyFovFrom } from '../support/baseline'
+import { camerasOf, loadCapture, loadSource, statesOf } from '../support/baseline-browser'
 import type { Projection } from '../../src/core/types'
-import { readdirSync, readFileSync } from 'node:fs'
-import path from 'node:path'
-import { PNG } from 'pngjs'
 
 /*
  * Gate A: does one fullscreen triangle serve all four projections?
@@ -2591,32 +2619,29 @@ import { PNG } from 'pngjs'
  * difference between v0.2.2's shader and this one, which is not the same code.
  */
 
-/** The source the captures were made with. Committed by P0 for exactly this. */
-const sourcePng = readFileSync(path.join(fixtureRoot, 'source.png')).toString('base64')
-
-/** Which states exist is whatever the capture wrote. */
-function statesOf (camera: string): string[] {
-  return readdirSync(path.join(fixtureRoot, camera))
-    .filter(f => f.endsWith('.png'))
-    .map(f => f.replace(/\.png$/, ''))
-}
-
 /*
  * Whether the legacy `lng` initializer took effect, measured rather than assumed.
  *
- * See the note above the step: `cylindrical` at `origin` and `tilt` differ only
- * in longitude as far as this projection can tell, so identical pixels mean the
- * driver compiled that invalid file-scope initializer to zero.
+ * `cylindrical` at `origin` and `tilt` differ only in longitude as far as this
+ * projection can tell -- its phi does not read latitude, both states have zoom
+ * 0, and latitude is ignored anyway (F5). So identical pixels mean the driver
+ * compiled that invalid file-scope initializer to zero.
  */
-function longitudeIsInert (): boolean {
-  const a = PNG.sync.read(readFileSync(path.join(fixtureRoot, 'cylindrical', 'origin.png')))
-  const b = PNG.sync.read(readFileSync(path.join(fixtureRoot, 'cylindrical', 'tilt.png')))
-  return Buffer.compare(a.data, b.data) === 0
+async function longitudeIsInert (): Promise<boolean> {
+  const [a, b] = await Promise.all([
+    loadCapture('cylindrical', 'origin'),
+    loadCapture('cylindrical', 'tilt')
+  ])
+  if (a.image.rgba.length !== b.image.rgba.length) return false
+  for (let i = 0; i < a.image.rgba.length; i++) {
+    if (a.image.rgba[i] !== b.image.rgba[i]) return false
+  }
+  return true
 }
 
-const LNG_INERT = longitudeIsInert()
+const LNG_INERT = await longitudeIsInert()
 
-/**
+/*
  * The states a camera can be compared on.
  *
  * `perspective` gets all of them: the linear path puts longitude in the matrix,
@@ -2624,83 +2649,95 @@ const LNG_INERT = longitudeIsInert()
  *
  * The non-linear cameras get only the states where both defects are neutral.
  * Latitude is always neutral-or-divergent, never comparable, so it filters to
- * zero. Longitude is neutral only if the measurement above says it never
- * reached a pixel, or if this state does not use it.
+ * zero. Longitude is neutral only if the measurement above says it never reached
+ * a pixel, or if this state does not use it.
  */
-function comparableStates (camera: string): string[] {
+async function comparableStates (camera: string): Promise<string[]> {
   const all = statesOf(camera)
   if (camera === 'perspective') return all
 
-  return all.filter(stateId => {
-    const { state } = readCaptureDoc(camera, stateId)
-    return state.lat === 0 && (LNG_INERT || state.lng === 0)
-  })
+  const kept: string[] = []
+  for (const stateId of all) {
+    const { state } = await loadCapture(camera, stateId)
+    if (state.lat === 0 && (LNG_INERT || state.lng === 0)) kept.push(stateId)
+  }
+  return kept
 }
 
-test.describe('gate A: fullscreen triangle vs the v0.2.2 baseline', () => {
-  for (const camera of readdirSync(fixtureRoot, { withFileTypes: true })
-    .filter(e => e.isDirectory())
-    .map(e => e.name)) {
-    for (const stateId of comparableStates(camera)) {
-      test(`${camera} / ${stateId}`, async ({ gpuPage }) => {
-        const { png, state, captured } = loadCapture(camera, stateId)
+describe('gate A: fullscreen triangle vs the v0.2.2 baseline', () => {
+  it('compares every camera the baseline holds', async () => {
+    const source = await loadSource()
+
+    for (const camera of camerasOf()) {
+      for (const stateId of await comparableStates(camera)) {
+        const { image, state, captured } = await loadCapture(camera, stateId)
 
         // The legacy fov is read out of the matrix it built rather than guessed:
         // this gate is about whether the rest of the pipeline agrees, and a
         // wrong fov would produce a confident failure that says nothing useful.
         const projection: Projection =
           camera === 'perspective'
-            ? { kind: 'linear', fov: legacyFovFrom(captured.u_CamTransMatrix), aspect: 1 }
+            ? { kind: 'linear', fov: legacyFovFrom(captured.u_CamTransMatrix as number[]), aspect: 1 }
             : { kind: camera, zoom: 1, extent: LEGACY_EXTENT[camera] }
 
-        const result = await renderOffscreen(gpuPage, {
-          width: png.width,
-          height: png.height,
+        const bitmap = await createImageBitmap(
+          new ImageData(source.rgba.slice(), source.width, source.height)
+        )
+
+        const result = await renderOffscreen({
+          width: image.width,
+          height: image.height,
           camera: { povLatitude: state.lat, povLongitude: state.lng },
           projection,
-          sourcePng
+          source: bitmap,
+          sourceWidth: source.width,
+          sourceHeight: source.height
         })
+        bitmap.close()
 
-        expect(maxChannelDiff(result.rgba, Array.from(png.data))).toBeLessThanOrEqual(2)
-      })
+        const diff = maxChannelDiff(bgraToRgba(result.rgba), image.rgba)
+        expect(diff, `${camera} / ${stateId}: max channel difference`).toBeLessThanOrEqual(2)
+      }
     }
-  }
-})
+  })
 
-/*
- * The gate above is only as strong as the set it runs on, so assert the set
- * itself. Without this, a bug that emptied `comparableStates` would report a
- * clean run over zero tests -- and a gate that silently checks nothing is worse
- * than no gate, because it is believed.
- */
-test('the comparable set is not empty, and covers all four projections', () => {
-  const byCamera = readdirSync(fixtureRoot, { withFileTypes: true })
-    .filter(e => e.isDirectory())
-    .map(e => [e.name, comparableStates(e.name)] as const)
+  /*
+   * The gate above is only as strong as the set it runs on, so assert the set
+   * itself. Without this, a bug that emptied `comparableStates` would report a
+   * clean run over zero tests -- and a gate that silently checks nothing is
+   * worse than no gate, because it is believed.
+   */
+  it('has a non-empty comparable set covering all four projections', async () => {
+    const cameras = camerasOf()
+    expect(cameras).toEqual(['cylindrical', 'pannini', 'perspective', 'planet'])
 
-  expect(byCamera.map(([c]) => c).sort()).toEqual(
-    ['cylindrical', 'pannini', 'perspective', 'planet']
-  )
-  for (const [camera, states] of byCamera) {
-    expect(states.length, `${camera} has no comparable state`).toBeGreaterThan(0)
-  }
-  // The linear path must be compared on everything the capture holds.
-  expect(comparableStates('perspective')).toHaveLength(statesOf('perspective').length)
+    for (const camera of cameras) {
+      const states = await comparableStates(camera)
+      expect(states.length, `${camera} has no comparable state`).toBeGreaterThan(0)
+    }
+    // The linear path must be compared on everything the capture holds.
+    expect(await comparableStates('perspective')).toHaveLength(statesOf('perspective').length)
+  })
 })
 ```
 
-- [ ] **Step 2: 跑门禁 A**
+> **顶层 `await` 是允许的** —— vitest 的测试文件是 ESM，`LNG_INERT` 在收集阶段就要定下来（`comparableStates` 是同步语义的判据）。如果执行器报错，改成在 `beforeAll` 里赋值给一个 `let`，效果相同。
+>
+> **`new ImageData(rgba, w, h)` 用来把解码结果变成 `ImageBitmap`**：`renderOffscreen` 收的是 `TexImageSource`，而 `ImageData` 不是 —— 它得先变成一个真正的 `ImageBitmap`。`.slice()` 是因为 `ImageData` 要求一个长度精确的 `Uint8ClampedArray`，而共享同一块 buffer 会让 `bitmap.close()` 之后的行为变得微妙。
+
+- [ ] **Step 4: 跑门禁 A**
 
 Run: `npm run test:integration -- gate-a`
-Expected: 全 PASS，且条数是 `4 + 3×|lat=0 的非线性状态数|`（`lng` 惰性时通常为 4 + 3×1 = 7，加上那条集合断言共 8）。
+Expected: 2 条 PASS（一条覆盖全部可比状态，一条是集合断言）。两个 case 的**断言条数**上，覆盖那条会在第一个失败处停下 —— 所以看日志里的 `${camera} / ${stateId}` 标签定位是哪个相机哪个状态。
 
-**如果条数比预期少** —— 看 Step 1 那条集合断言的输出。少的原因是 `comparableStates` 过滤掉了状态，不是测试变快了。
+**如果可比状态数为 0** —— 看第二条测试的输出。原因一定是 `comparableStates` 过滤过头，不是测试变快了。
 
 **失败分流：**
 
 | 现象 | 先查 |
 |---|---|
 | 全黑或全白 | `invClip` 没填、或 bind group 没绑 |
+| **颜色整体偏（红蓝互换）** | **`bgraToRgba` 没用上或方向反了** —— 先排这个，它长得最像投影 bug |
 | 上下颠倒 | `to_uv` 的 v 方向，或 `invClip` 的 y 符号 |
 | 左右镜像 | `lookAt` 的 `-sin(θ)` 手性 |
 | 只差几个投影 | 那一个的公式转写错了 —— 拿 `src/core/reference.ts` 逐项对 |
@@ -2711,21 +2748,26 @@ Expected: 全 PASS，且条数是 `4 + 3×|lat=0 的非线性状态数|`（`lng`
 **如果 `perspective` 也失败** —— 那是 P2 的问题（矩阵对拍应该先红），别在这里纠缠。
 **如果非线性全失败** —— 那是门禁 B 的问题，先跑 Task 8。
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add test/integration/gate-a-pixels.test.ts test/support/baseline.ts
+git add test/integration/gate-a-pixels.test.ts test/integration/support/gpu.ts \
+  test/support/baseline-browser.ts
 git commit -m "test(renderer): gate A -- pixels vs the v0.2.2 baseline, comparable set derived from it
 
 The non-linear cameras cannot be compared at non-zero latitude (F5: the
 legacy ones ignored latitude, v1 deliberately does not) or, if the legacy
 file-scope lng initializer compiled, at non-zero longitude either (F10, and
 the legacy line also mixes degrees into radians). Both defects are why the
-comparable set is measured off the fixture instead of written down."
+comparable set is measured off the fixture instead of written down.
+
+The baseline arrives through createImageBitmap and is RGBA; the readback is
+BGRA because that is what getPreferredCanvasFormat() returns on macOS. The
+channel swap is explicit rather than accidental -- reading red out of the
+blue byte produces a confident, wrong diff that looks like a projection bug."
 ```
 
 ---
-
 ### Task 8: 门禁 B —— 非线性投影与纬度
 
 **Files:**
@@ -2735,11 +2777,13 @@ comparable set is measured off the fixture instead of written down."
 
 门禁 B 有两个部分：**已定义行为的精确复现**，以及**一处显式的行为变更**。
 
+第一部分要验的是「逆矩阵还原出来的表面点，跟旧实现光栅化出来的四边形落在同一个坐标范围里」。这本来需要从页面里探针取点 —— 但浏览器模式下不需要探针了：**`invClip` 的逆运算是 CPU 上一个纯函数**，`renderOffscreen` 走的就是它。真正需要 GPU 的只有第二部分（像素随纬度变化）。
+
 - [ ] **Step 1: 写已定义行为的测试**
 
-```ts
-import { test, expect } from './support/fixtures'
+**这部分是纯 CPU 的，所以它该在 `test/unit/` 里而不是集成测试里** —— 一个不需要 GPU 的性质，放进需要 GPU 的 project 只会让它跑得更慢、更容易被跳过。追加到 `test/unit/matrix.test.ts`（**P2 Task 4 建的文件**，`mat4` 与 `buildCameraTransform` 已经在它的 import 里）：
 
+```ts
 /*
  * Gate B, part 1: does the inverse-matrix surface reconstruction reproduce the
  * legacy quad's coordinate range exactly?
@@ -2751,41 +2795,77 @@ import { test, expect } from './support/fixtures'
  * the picture scales -- which looks almost right, and is the failure mode this
  * gate exists to catch.
  *
- * The assertion is on the recovered surface point, not on pixels: pixels would
- * confound an extent error with a formula error.
+ * This is CPU work, so it belongs in the unit project: it needs no adapter, and
+ * a property that can be checked without a GPU should not be gated behind one.
  */
-test.describe('gate B: surface reconstruction', () => {
+describe('gate B: surface reconstruction', () => {
   const CASES = [
     { camera: 'cylindrical', extent: [1, 1] as const },
     { camera: 'planet', extent: [4, 4] as const },
     { camera: 'pannini', extent: [4, 4] as const }
   ]
 
-  for (const { camera, extent } of CASES) {
-    test(`${camera} recovers a surface spanning ${extent[0]} x ${extent[1]} at x = 1`, async ({ gpuPage }) => {
-      const probes = await gpuPage.evaluate(
-        ([c, e]) => {
-          const t = window.__panoTest
-          return t.probeSurface(c, e)
-        },
-        [camera, extent] as const
-      )
+  /*
+   * Walks the NDC corners of the viewport through the same reconstruction the
+   * fragment shader performs: `invClip * vec4(ndc, 1, 1)` then divide by w.
+   * Written out longhand rather than reused from `reference.ts`, because a
+   * check that shares its implementation with the thing it checks cannot fail.
+   */
+  function surfaceAt (invClip: mat4, ndcX: number, ndcY: number) {
+    const x = invClip[0]! * ndcX + invClip[4]! * ndcY + invClip[12]!
+    const y = invClip[1]! * ndcX + invClip[5]! * ndcY + invClip[13]!
+    const z = invClip[2]! * ndcX + invClip[6]! * ndcY + invClip[14]!
+    const w = invClip[3]! * ndcX + invClip[7]! * ndcY + invClip[15]!
+    return { x: x / w, y: y / w, z: z / w }
+  }
 
-      // Corners of the recovered surface must sit on the extent box.
-      expect(Math.abs(probes.maxY)).toBeCloseTo(extent[1] / 2, 3)
-      expect(Math.abs(probes.maxZ)).toBeCloseTo(extent[0] / 2, 3)
+  for (const { camera, extent } of CASES) {
+    it(`${camera} recovers a surface spanning ${extent[0]} x ${extent[1]} at x = 1`, () => {
+      const clip = buildCameraTransform(
+        { povLatitude: 0, povLongitude: 0 },
+        { kind: camera, zoom: 1, extent },
+        'zero-to-one',
+        mat4.create()
+      )
+      // The shader inverts; so does this test. Inverting separately is what
+      // makes the assertion about the matrix rather than about gl-matrix.
+      const invClip = mat4.invert(mat4.create(), clip)
+      // A throw rather than an `expect`: `noUncheckedIndexedAccess` and strict
+      // null checks mean the narrowing has to be real, and a non-invertible
+      // camera transform is a bug worth naming rather than a failed assertion.
+      if (!invClip) throw new Error('the camera transform must be invertible')
+
+      const corners = [
+        surfaceAt(invClip, -1, -1), surfaceAt(invClip, 1, -1),
+        surfaceAt(invClip, -1, 1), surfaceAt(invClip, 1, 1)
+      ]
+
       // x is pinned: on the legacy quad it was the constant 1.
-      expect(probes.minX).toBeCloseTo(1, 3)
-      expect(probes.maxX).toBeCloseTo(1, 3)
+      for (const c of corners) expect(c.x).toBeCloseTo(1, 3)
+      // The recovered surface spans the extent box, centred on the origin.
+      const ys = corners.map(c => c.y)
+      const zs = corners.map(c => c.z)
+      expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(extent[1], 3)
+      expect(Math.max(...zs) - Math.min(...zs)).toBeCloseTo(extent[0], 3)
+      expect(Math.max(...ys) + Math.min(...ys)).toBeCloseTo(0, 3)
+      expect(Math.max(...zs) + Math.min(...zs)).toBeCloseTo(0, 3)
+
+      // Every corner lands on the far plane, which is where the reconstruction
+      // samples. Both depth conventions put it at ndc z = +1.
+      for (const c of corners) expect(c.z).toBeCloseTo(1, 3)
     })
   }
 })
 ```
 
-- [ ] **Step 2: 跑并修正 extent 的接线**
+> **原来是 `window.__panoTest.probeSurface`，现在没有了。** 探针存在的唯一理由是「页面上算出来的东西 Node 侧看不见」；这段换算就是三次乘法加一次除法，测试自己算一遍**反而更强** —— 它不再依赖被测代码里的任何一个函数。
+>
+> 注意这里用的是 `'zero-to-one'`：断言 `c.z ≈ 1` 在两个约定下都成立（两者的远平面都在 ndc z = +1），但显式选一个能让失败信息更好读。
 
-Run: `npm run test:integration -- gate-b`
-Expected: 3 条 PASS
+- [ ] **Step 2: 跑**
+
+Run: `npm run test:unit -- matrix`
+Expected: 之前的所有条 + 新增 3 条 PASS
 
 **失败时**：`extent` 到矩阵的映射在 `src/core/matrix.ts` 里。检查非线性分支构造的那个矩阵 —— 它把 `(1, y, z)` 映射到 NDC，其中 `ndcX = z / (W/2)`、`ndcY = y / (H/2)`、`ndcZ = 1`、`w = 1`。逆矩阵必须还原它。
 
@@ -2811,7 +2891,14 @@ fn project_cylindrical(p: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
 
 - [ ] **Step 4: 写行为变更的测试**
 
+这一段必须用 GPU（要真的渲染两帧比像素），所以在集成测试里：
+
 ```ts
+import { describe, it, expect } from 'vitest'
+import { renderOffscreen, maxChannelDiff, bgraToRgba } from './support/gpu'
+import { LEGACY_EXTENT } from '../support/baseline'
+import { loadSource, readCaptureDoc } from '../support/baseline-browser'
+
 /*
  * The one place the new renderer intentionally disagrees with v0.2.2.
  *
@@ -2824,65 +2911,93 @@ fn project_cylindrical(p: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
  *
  * This test pins the new behaviour so the fix cannot silently regress.
  */
-test.describe('latitude now affects the non-linear cameras', () => {
-  for (const camera of ['cylindrical', 'planet', 'pannini'] as const) {
-    test(`${camera} responds to povLatitude`, async ({ gpuPage }) => {
-      const diff = await gpuPage.evaluate(async c => {
-        const t = window.__panoTest
-        const a = await t.renderWith({ camera: c, povLatitude: 0 })
-        const b = await t.renderWith({ camera: c, povLatitude: 45 })
-        return t.maxDiff(a, b)
-      }, camera)
-      expect(diff).toBeGreaterThan(2)
+describe('latitude now affects the non-linear cameras', () => {
+  const CAMERAS = ['cylindrical', 'planet', 'pannini'] as const
+
+  for (const camera of CAMERAS) {
+    it(`${camera} responds to povLatitude`, async () => {
+      const source = await loadSource()
+      const bitmap = await createImageBitmap(
+        new ImageData(source.rgba.slice(), source.width, source.height)
+      )
+
+      const render = async (povLatitude: number) =>
+        renderOffscreen({
+          width: 128,
+          height: 128,
+          camera: { povLatitude, povLongitude: 0 },
+          projection: { kind: camera, zoom: 1, extent: LEGACY_EXTENT[camera] },
+          source: bitmap,
+          sourceWidth: source.width,
+          sourceHeight: source.height
+        })
+
+      const [a, b] = await Promise.all([render(0), render(45)])
+      bitmap.close()
+
+      // Two frames 45 degrees apart in latitude cannot be the same picture. The
+      // threshold is the gate A tolerance: anything above it is a real
+      // difference, not dithering.
+      expect(maxChannelDiff(bgraToRgba(a.rgba), bgraToRgba(b.rgba))).toBeGreaterThan(2)
     })
   }
 
-  test('and the baseline confirms it used to be ignored', async () => {
-    // Reads the P0 fixtures rather than re-deriving from source, so this is a
-    // record of observed behaviour, not of intent.
-    const { readFileSync } = await import('node:fs')
-    const path = await import('node:path')
-    const root = path.resolve(__dirname, '../fixtures/baseline')
-    const read = (s: string) =>
-      JSON.parse(readFileSync(path.join(root, 'cylindrical', `${s}.uniforms.json`), 'utf8'))
-    const pick = (doc: any) => {
-      const u = doc.frames.at(-1).find((x: any) => x.name === 'u_CamPOVLatitude')
-      return u?.value
-    }
-    expect(pick(read('origin'))).toBe(pick(read('tilt')))
+  it('and the baseline confirms it used to be ignored', async () => {
+    // Reads the P0 uniform stream rather than re-deriving from source, so this
+    // is a record of observed behaviour, not of intent.
+    const origin = await readCaptureDoc('cylindrical', 'origin')
+    const tilt = await readCaptureDoc('cylindrical', 'tilt')
+    // The capture drove the legacy viewer, which did write the uniform -- it is
+    // the shader that never read it. So this asserts the fixture actually
+    // varies the value the shader ignored, which is what makes the first test's
+    // "greater than tolerance" meaningful rather than a no-op comparison.
+    expect(origin.captured.u_CamPOVLatitude).toBe(0)
+    expect(tilt.captured.u_CamPOVLatitude).not.toBe(0)
   })
 })
 ```
 
+> **第二条测试的取向跟上一版相反，而且这次是对的。** 上一版断言「两个状态的 `u_CamPOVLatitude` 相等」，那是把「uniform 没变」当成了「着色器没读」的证据 —— 但 P0 的 fixture 里这两个值本来就不同（`tilt` 的 lat 是 30）。真正的证据是：**uniform 确实变了，画面却没变**，而那正是门禁 A 里 `longitudeIsInert` 之外的另一半。这里断言「uniform 变了」，把「画面没变」留给门禁 A 的可比集合去表达。
+
 - [ ] **Step 5: 跑全部**
 
-Run: `npm run test:integration`
+Run: `npm run test:unit && npm run test:integration`
 Expected: 全部 PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/renderer/webgpu/shaders/panorama.wgsl src/core/reference.ts test/integration/gate-b-projection.test.ts
+git add src/renderer/webgpu/shaders/panorama.wgsl src/core/reference.ts \
+  test/unit/matrix.test.ts test/integration/gate-b-projection.test.ts
 git commit -m "test(renderer): gate B -- surface extent, plus povLatitude for the non-linear cameras
 
 The legacy non-linear cameras ignored latitude completely: the uniform was
 declared and never read, and the inner ortho camera that supplied the
 matrix was built with latitude 0 and never updated. This is a deliberate
 behaviour change, so gate A only compares states where it is a no-op, and
-a dedicated test pins the new behaviour."
+a dedicated test pins the new behaviour.
+
+The extent half needs no GPU -- it is three multiplies and a divide on the
+inverse matrix -- so it lives in the unit project, where it cannot be
+skipped along with the adapter."
 ```
 
 ---
-
 ## 完成标准
 
-- [ ] `npm run test:integration -- gate-a` 16 条全绿
+- [ ] `npm run test:integration -- gate-a` 全绿，且**集合断言那条也在**（可比状态为空时它会红）
 - [ ] `npm run test:integration -- gate-b` 全绿
 - [ ] `npm run test:integration -- uniform-layout` 全绿
-- [ ] `npm run test:unit` 全绿，覆盖率门槛通过
+- [ ] `npm run test:unit` 全绿（含门禁 B 的 extent 那 3 条），覆盖率门槛通过
 - [ ] 后端创建失败**抛异常**，不返回半死的对象（用一条集成测试证明）
 - [ ] `device.lost` 能被观测到
 - [ ] `swapchain` 的早退发生在 `getCurrentTexture()` 之前
+
+> 门禁的容差**必须在真 GPU 和 SwiftShader 上都成立**。本地是真 GPU，CI 走
+> `--enable-unsafe-webgpu --use-webgpu-adapter=swiftshader`（P1 Task 9）。SwiftShader 是
+> float32、和 GPU 一样，**不比 CPU 的 float64 参考实现更接近** —— 它的作用是不让 CI 永远红。
+> 所以如果某条门禁只在一边绿，那是容差定错了，不是环境问题。**用 `CI=1 npm run test:integration`
+> 在本地复现 CI 的那一半**（P1 Task 9 Step 5 加的）。
 
 ## 不上榜的部分
 
@@ -2896,3 +3011,11 @@ a dedicated test pins the new behaviour."
 | `PANORAMA_WGSL` 的四个公式 | P6 的 `panorama.glsl` —— 逐行对照转写 |
 | ~~`CAMERA_UNIFORM_LAYOUT`~~ | **不给 P6** —— WebGL2 走具名 uniform，不共享布局。见 P6 的说明 |
 | `src/core/reference.ts` | P6 门禁 C 的裁判 |
+| `test/integration/support/gpu.ts` | **P6 复用** —— `RenderRequest.source` 是 `TexImageSource`，WebGL2 后端同样吃 `copyExternalImageToTexture` 的对应物。加后端时**扩这个文件，不要另起一个平行的 helper** |
+| `test/support/baseline-browser.ts` | **P6 门禁 C 复用** —— 跨后端比对要拿同一批基线 |
+| `bgraToRgba` 的存在理由 | **P6 要重新想一遍** —— WebGL2 走 `readPixels`，`gl.RGBA` 格式给的就是 RGBA。别不假思索地套用，那会把正确的通道序又换错一次 |
+
+> **给 P6 的一条纪律**：P3 之后，门禁测试 import `src/` 的内部模块是**约定允许**的，用户故事
+> 测试 import `src/index.ts` 是**约定要求**的。以前这条由 `window.__panoTest` 的形状隐式保证
+> （出口只有一份，写死了就给什么），现在没有东西在机械地拦着了 —— 只能靠 review。
+> 这个项目里唯一还在机械保证这件事的东西是 `src/index.ts` 的文件内容本身。
