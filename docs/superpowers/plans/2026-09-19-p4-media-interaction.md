@@ -6,7 +6,7 @@
 
 **Architecture:** `media/` 把 `<img>`/`<video>` 包成 `MediaSource`，对外只暴露一个带版本号的快照；`interaction/` 把指针输入识别成语义事件，自己不碰相机。
 
-**Tech Stack:** Pointer Events · `AbortController` · `OffscreenCanvas` · Playwright
+**Tech Stack:** Pointer Events · `AbortController` · `OffscreenCanvas` · vitest 浏览器模式
 
 ---
 
@@ -26,7 +26,7 @@
 2. **`SourceState` 由 `core` 定义，本层只组合它，不重新定义。** `core` 是两个后端都认可的那一层，且按设计不碰 DOM；媒体元素、帧计数器这类 DOM 侧的东西属于本层自己的类型。另起一个同形状的 `SourceState` 会是一个**结构上的近似副本**，它能编译通过，直到有人改了其中一份 —— 而且 P3 的 `Backend.setSource` 收的是 core 的 `SourceState`，P6 的 `WebGL2Backend implements Backend` 会因此对不上。
 
 **3. 本层的集成测试需要两个素材，而这两个素材不属于任何一个阶段。**
-`public/fixtures/panorama.png`（一张等距柱面全景，**四个象限颜色两两可区分**）与 `public/fixtures/clip.mp4`（一段两秒的视频，**每一帧同样四象限可分、且有肉眼可辨的运动**）。服务它们不需要任何配置：playwright 的 webServer 从仓库根起 `npx vite`，Vite 的 `publicDir` 默认值就是 `<root>/public`。但 `public/fixtures/` 下的**文件**没有任何一张计划负责产出。**由本计划产出，落在 Task 2 的 Step 7** —— P4 的 `image-source.test.ts` / `video-source.test.ts`、P5 的全部 User Story、P6 的后端对比都要用它们。
+`public/fixtures/panorama.png`（一张等距柱面全景，**四个象限颜色两两可区分**）与 `public/fixtures/clip.mp4`（一段两秒的视频，**每一帧同样四象限可分、且有肉眼可辨的运动**）。服务它们不需要任何配置：browser mode 本来就是由 Vite 供页面的，而 Vite 的 `publicDir` 默认值就是 `<root>/public`，所以 `/fixtures/panorama.png` 直接 fetch 得到。但 `public/fixtures/` 下的**文件**没有任何一张计划负责产出。**由本计划产出，落在 Task 2 的 Step 7** —— P4 的 `image-source.test.ts` / `video-source.test.ts`、P5 的全部 User Story、P6 的后端对比都要用它们。
 
 **素材规格（不是随便找两个文件就行）：**
 - 图片要能被 `countNonBlack` 判为「非黑」，也就是画面大部分不是暗的；再要**上下可区分**，否则「画面是不是倒的」这件事从像素上根本看不出来 —— 而上下颠倒正是旧版最难发现的那个 bug。
@@ -54,56 +54,23 @@
 | `test/unit/events.test.ts` | 事件系统 |
 | `test/integration/image-source.test.ts` / `video-source.test.ts` | 源的生命周期、事件、监听器计数 |
 | `test/integration/video-orientation.test.ts` | 两条上传路径的朝向一致性 |
-| `test/integration/support/upload-paths.ts` | 上一条的探针：自建 device，直接驱动两个浏览器 API |
+| `test/integration/support/upload-paths.ts` | 上一条的探针：自建 device，直接驱动两个浏览器 API（浏览器模式，直接 import） |
 | `test/integration/ptz.test.ts` | 交互端到端 |
 
 ---
 
-## 测试入口需要导出什么
+## 集成测试怎么拿到被测对象
 
-集成测试跑在真实浏览器里，通过 `window.__panoTest` 拿被测对象。这个出口由 P3 的 `demo/test-entry.ts` 提供，**从 `demo/test-entry-hooks/*.ts` 目录聚合**：每个阶段往目录里丢自己的文件，谁都不用改 `test-entry.ts`（P4 与 P6 都依赖 P3，改同一个文件必然冲突，所以那条路 P3 已经堵死了）。
-
-**所以本计划要做的是新增两个 hook 文件，而不是重新赋值 `window.__panoTest`。** 后者会把 P3 的 `renderOffscreen` 整个覆盖掉：
+**本层的集成测试不需要任何出口，直接 import 被测类就行。** `demo/test-entry.ts`、`PanoTestApi`、`test-entry-hooks/` 那一整套在 P3 里已经被删掉了 —— 它们存在的唯一理由是「Playwright 测试跑在 Node 里，够不着页面」。
 
 ```ts
-// demo/test-entry-hooks/media.ts
+// test/integration/image-source.test.ts
 import { ImageSource } from '../../src/media/image-source'
-import { VideoSource } from '../../src/media/video-source'
-
-declare global {
-  // Merges into the interface P3 opened. Global interfaces merge by name, so
-  // there is no import and no registration step to forget.
-  interface PanoTestApi {
-    // Task 3 / Task 4 的源生命周期测试
-    ImageSource: typeof ImageSource
-    VideoSource: typeof VideoSource
-  }
-}
-
-export default { ImageSource, VideoSource } satisfies Partial<PanoTestApi>
 ```
 
-```ts
-// demo/test-entry-hooks/input.ts
-import { InputController } from '../../src/interaction/input-controller'
-import { WheelDeltaMode } from '../../src/interaction/wheel-delta-mode'
+就这么一句。测试文件本身在页面里，`ImageSource` 就是同一个模块系统里的一个类，中间不需要任何一层。
 
-declare global {
-  interface PanoTestApi {
-    InputController: typeof InputController
-    // WheelDeltaMode 也要导出：gestures.ts 把 deltaMode 的数字重述了一遍
-    // （好让纯函数在 Node 里能测），那串数字要和浏览器对得上，而唯一能拿到
-    // 真 WheelEvent 的地方是浏览器里。
-    WheelDeltaMode: typeof WheelDeltaMode
-  }
-}
-
-export default { InputController, WheelDeltaMode } satisfies Partial<PanoTestApi>
-```
-
-**不要往生产入口 `src/index.ts` 上挂内部符号。** 测试要什么就从 hook 目录走（P3 也这么要求）。`test/integration/support/upload-paths.ts` 是例外：它自己在页面里建 device，**不经过这个出口**。
-
-**测试里直接写 `window.__panoTest`，不要 `as unknown as` 再抄一遍签名** —— 抄一遍就是第二真源，而全局声明存在的意义就是让「页面提供了什么」和「测试拿了什么」由同一份声明约束。P3 已把两套 tsconfig 都配好收 `demo/`，类型在这里是通的。
+**不要往生产入口 `src/index.ts` 上挂内部符号。** 集成测试 import `src/` 的内部模块是允许的；但用户故事级的测试（P5）只走 `src/index.ts` 的公开 API。这条以前由出口的形状隐式保证，现在靠约定 + review。
 
 ---
 
@@ -802,7 +769,7 @@ Expected: `h264,512,256,64`（字段顺序随 ffprobe 版本可能不同；关�
 Run: `ls -l public/fixtures/`
 Expected: **只有两个文件**。四张静帧里只有第一张落在 `public/`，另外三张写在临时目录里、跑完就删 —— 它们不是测试素材，只是生成过程的中间产物，不该进仓库。
 
-> **视频那条断言若红在「解不出来」上，先怀疑路径而不是编码器。** 立项时已用 Playwright 会装的那个 Chromium（`chromium-1243`）实测过 `canPlayType('video/mp4; codecs="avc1.42E01E"')` 返回 `probably`，且加载本脚本产出的同参数文件后 `videoWidth=256`、`readyState=4`（`HAVE_ENOUGH_DATA`）。**注意版本**：更老的缓存副本 `chromium-1169` 对同一文件回 `h264=NO` —— 若本机命中了那个副本，先 `npx playwright install chromium` 再查代码。
+> **视频那条断言若红在「解不出来」上，先怀疑路径而不是编码器。** 立项时已用 Playwright 会装的那个 Chromium（`chromium-1243`，`channel: 'chromium'` 指的就是它）实测过 `canPlayType('video/mp4; codecs="avc1.42E01E"')` 返回 `probably`，且加载本脚本产出的同参数文件后 `videoWidth=256`、`readyState=4`（`HAVE_ENOUGH_DATA`）。**注意版本**：更老的缓存副本 `chromium-1169` 对同一文件回 `h264=NO` —— 若本机命中了那个副本，先 `npx playwright install chromium` 再查代码。
 
 - [ ] **Step 7c: Commit**
 
@@ -815,7 +782,7 @@ a clone can run the suite without ffmpeg installed. The four-colour layout
 is what makes an upside-down source and a frozen pan both detectable."
 ```
 
-> **为什么素材在 P4 而不在 P1。** P1 建的是测试设施（vitest、playwright、WebGPU 守卫），而这两个文件的**规格来自它们的消费者** —— 四个象限是为了满足 P4 的朝向与上传路径断言、P5 的 PTZ 断言、P6 的后端对比。把文件放在第一个需要它们的阶段，规格和产物就在同一份文档里，不会各自漂移。P1 只需要保证 `npx vite`（playwright 的 webServer，从仓库根起）能把它服务出来 —— 那是 Vite 的 `publicDir` 默认值 `<root>/public`，不需要任何配置。
+> **为什么素材在 P4 而不在 P1。** P1 建的是测试设施（vitest 的两个 project、WebGPU 守卫），而这两个文件的**规格来自它们的消费者** —— 四个象限是为了满足 P4 的朝向与上传路径断言、P5 的 PTZ 断言、P6 的后端对比。把文件放在第一个需要它们的阶段，规格和产物就在同一份文档里，不会各自漂移。P1 只需要保证页面起得来就能把它服务出来 —— 那是 Vite 的 `publicDir` 默认值 `<root>/public`。
 
 > **不能拿仓库里已有的 demo 素材充数。** 那些是旧版为 2 的幂尺寸挑的，上下关系没有任何保证 —— 而这里要断言的恰恰是上下关系。
 
@@ -832,82 +799,68 @@ is what makes an upside-down source and a frozen pan both detectable."
 `test/integration/image-source.test.ts`：
 
 ```ts
-import { test, expect } from './support/fixtures'
+import { describe, it, expect } from 'vitest'
+import { ImageSource } from '../../src/media/image-source'
 
 /*
  * Runs in a real browser because everything here is a DOM concern: when `load`
  * fires, what `naturalWidth` is before it, whether listeners actually come off.
+ *
+ * No `page.evaluate` and no `window.__panoTest`: in vitest's browser mode this
+ * file is already in the page. The only thing that used to justify the round
+ * trip was that Playwright drove from Node.
  */
 
-test('reports a zero size before the image loads, and throws if asked to upload', async ({ gpuPage }) => {
-  // The failure this pins: a source that has not loaded looks like a 0x0 image,
-  // and a 0x0 texture is a WebGPU validation error thrown far from the cause.
-  const result = await gpuPage.evaluate(async () => {
-    const { ImageSource } = window.__panoTest
+describe('ImageSource', () => {
+  it('reports a zero size before the image loads, and throws if asked to upload', () => {
+    // The failure this pins: a source that has not loaded looks like a 0x0
+    // image, and a 0x0 texture is a WebGPU validation error thrown far from the
+    // cause.
     const src = new ImageSource('/fixtures/panorama.png')
-    const before = { w: src.naturalSize.width, h: src.naturalSize.height }
-    let threw = ''
-    try { src.frame } catch (e) { threw = String(e) }
+    expect(src.naturalSize).toEqual({ width: 0, height: 0 })
+    expect(() => src.frame).toThrow(/not loaded/i)
     src.dispose()
-    return { before, threw }
   })
-  expect(result.before).toEqual({ w: 0, h: 0 })
-  expect(result.threw).toMatch(/not loaded/i)
-})
 
-test('becomes readable once the image loads', async ({ gpuPage }) => {
-  const result = await gpuPage.evaluate(async () => {
-    const { ImageSource } = window.__panoTest
+  it('becomes readable once the image loads', async () => {
     const src = new ImageSource('/fixtures/panorama.png')
-    const loaded = new Promise(r => {
-      const off = src.on('media-load', () => { off(); r('load') })
+    await new Promise<void>(resolve => {
+      const off = src.on('media-load', () => { off(); resolve() })
     })
-    await loaded
+
     const frame = src.frame
+    expect(frame.kind).toBe('image')
+    expect(frame.state.width).toBeGreaterThan(0)
+    expect(frame.state.height).toBeGreaterThan(0)
+    expect(frame.version).toBeGreaterThan(0)
     src.dispose()
-    return {
-      kind: frame.kind,
-      w: frame.state.width,
-      h: frame.state.height,
-      version: frame.version
-    }
   })
-  expect(result.kind).toBe('image')
-  expect(result.w).toBeGreaterThan(0)
-  expect(result.h).toBeGreaterThan(0)
-  expect(result.version).toBeGreaterThan(0)
-})
 
-test('re-emits the element error as media-error rather than throwing', async ({ gpuPage }) => {
-  // A 404 must reach the application as an event. The legacy provider attached
-  // an error listener that only logged, so an application had no way to show
-  // "this image failed to load".
-  const result = await gpuPage.evaluate(async () => {
-    const { ImageSource } = window.__panoTest
+  it('re-emits the element error as media-error rather than throwing', async () => {
+    // A 404 must reach the application as an event. The legacy provider attached
+    // an error listener that only logged, so an application had no way to show
+    // "this image failed to load".
     const src = new ImageSource('/fixtures/does-not-exist.png')
-    return new Promise(resolve => {
-      const off = src.on('media-error', () => { off(); resolve('media-error'); src.dispose() })
-      setTimeout(() => resolve('timeout'), 5000)
-    })
-  })
-  expect(result).toBe('media-error')
-})
-
-test('dispose aborts every DOM listener', async ({ gpuPage }) => {
-  // Counted, not asserted by reading the source. The legacy code leaked three
-  // listeners across four files precisely because nobody could see the count.
-  const result = await gpuPage.evaluate(async () => {
-    const { ImageSource } = window.__panoTest
-    const src = new ImageSource('/fixtures/panorama.png')
-    const before = src.listenerCount
+    const outcome = await Promise.race([
+      new Promise<string>(resolve => {
+        const off = src.on('media-error', () => { off(); resolve('media-error') })
+      }),
+      new Promise<string>(resolve => setTimeout(() => resolve('timeout'), 5000))
+    ])
     src.dispose()
-    return { before, after: src.listenerCount }
+    expect(outcome).toBe('media-error')
   })
-  expect(result.before).toBeGreaterThan(0)
-  expect(result.after).toBe(0)
+
+  it('dispose aborts every DOM listener', () => {
+    // Counted, not asserted by reading the source. The legacy code leaked three
+    // listeners across four files precisely because nobody could see the count.
+    const src = new ImageSource('/fixtures/panorama.png')
+    expect(src.listenerCount).toBeGreaterThan(0)
+    src.dispose()
+    expect(src.listenerCount).toBe(0)
+  })
 })
 ```
-
 > `listenerCount` 是 `ImageSource` 自己的计数器，读它不碰 DOM，也不需要任何强转。**把它做成公开只读属性是有意的**：让「有没有漏摘监听」变成一条可断言的事实，而不是靠读源码相信。计数在 `dispose` 里随 `abort()` 归零 —— 一个 `AbortSignal` 管住全部监听器，所以归零只有一处。
 >
 > **不要把它换成包装 `addEventListener`/`removeEventListener` 的全局计数。** `AbortController` 摘监听器时不调 `removeEventListener`，那样的计数会把一个已经清干净的源报成满的。
@@ -1097,169 +1050,171 @@ git commit -m "feat(media): image source with abortable listeners and a load-sta
 `test/integration/video-source.test.ts`：
 
 ```ts
-import { test, expect } from './support/fixtures'
+import { describe, it, expect } from 'vitest'
+import { VideoSource } from '../../src/media/video-source'
 
-test('reports a zero size before metadata loads', async ({ gpuPage }) => {
-  const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = window.__panoTest
-    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    const before = src.naturalSize
-    let threw = ''
-    try { src.frame } catch (e) { threw = String(e) }
-    src.dispose()
-    return { before, threw }
+/*
+ * Direct, like the image tests: this file is in the page, so a video source is
+ * just a class. Nothing here needed a GPU either -- what it needed was a real
+ * `<video>`, and running in a browser supplies that for free.
+ */
+
+/** Waits for one named event, or gives up. Every test below needs this. */
+function once (src: VideoSource, name: 'media-load' | 'media-pause' | 'media-play' | 'media-seeked' | 'media-ended'): Promise<void> {
+  return new Promise(resolve => {
+    const off = src.on(name, () => { off(); resolve() })
   })
-  expect(result.before).toEqual({ width: 0, height: 0 })
-  expect(result.threw).toMatch(/metadata/i)
-})
+}
 
-test('version advances when the render loop ticks the source', async ({ gpuPage }) => {
-  // This is what drives per-frame re-upload. If it does not advance, a playing
-  // video renders its first frame forever.
-  //
-  // The tick comes from the render loop and not from a DOM event, because no
-  // event is fine-grained enough -- so that is what the test does. The end-to-end
-  // half (a playing video whose drawn pixels actually change) is P5's video user
-  // story; this pins the source's side of the contract.
-  //
-  // `play()` first, and that is not incidental: the tick only advances a video
-  // that is actually producing frames. See the paused test below for the other
-  // half of that guard.
-  const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = window.__panoTest
+/** A loaded, ready-to-play source. */
+async function loaded (): Promise<VideoSource> {
+  const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
+  await once(src, 'media-load')
+  return src
+}
+
+describe('VideoSource', () => {
+  it('reports a zero size before metadata loads', () => {
     const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    expect(src.naturalSize).toEqual({ width: 0, height: 0 })
+    expect(() => src.frame).toThrow(/metadata/i)
+    src.dispose()
+  })
+
+  it('advances the version when the render loop ticks the source', async () => {
+    // This is what drives per-frame re-upload. If it does not advance, a playing
+    // video renders its first frame forever.
+    //
+    // The tick comes from the render loop and not from a DOM event, because no
+    // event is fine-grained enough -- so that is what the test does. The
+    // end-to-end half (a playing video whose drawn pixels actually change) is
+    // P5's video user story; this pins the source's side of the contract.
+    //
+    // `play()` first, and that is not incidental: the tick only advances a video
+    // that is actually producing frames. See the paused test below for the other
+    // half of that guard.
+    const src = await loaded()
     await src.play()
+
     const a = src.frame.version
     for (let i = 0; i < 3; i++) src.markFramePresented()
     const b = src.frame.version
-    src.dispose()
-    return { a, b }
-  })
-  expect(result.b).toBeGreaterThan(result.a)
-})
 
-test('a paused video does not advance, so the loop can stop', async ({ gpuPage }) => {
-  // The other half of the guard, and the one that decides whether a viewer of a
-  // paused video burns a full-screen fragment shader at the display's refresh
-  // rate for as long as it is alive.
-  //
-  // The loop draws when the version moves and calls `markFramePresented` from
-  // inside a draw, so "advance on every drawn frame" is self-sustaining: draw ->
-  // bump -> draw. Nothing in v1 caps that (the legacy `MAX_FRAME_RATE = 60` is
-  // gone), so the video's own state has to be what bounds it.
-  const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = window.__panoTest
-    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    src.dispose()
+    expect(b).toBeGreaterThan(a)
+  })
+
+  it('does not advance a paused video, so the loop can stop', async () => {
+    // The other half of the guard, and the one that decides whether a viewer of
+    // a paused video burns a full-screen fragment shader at the display's
+    // refresh rate for as long as it is alive.
+    //
+    // The loop draws when the version moves and calls `markFramePresented` from
+    // inside a draw, so "advance on every drawn frame" is self-sustaining: draw
+    // -> bump -> draw. Nothing in v1 caps that (the legacy MAX_FRAME_RATE = 60
+    // is gone), so the video's own state has to be what bounds it.
+    const src = await loaded()
     await src.play()
-    await new Promise(r => { const off = src.on('media-pause', () => { off(); r(null) }); src.pause() })
+    const paused = once(src, 'media-pause')
+    src.pause()
+    await paused
+
     // Read before dispose: dispose pauses the element too, so reading it
     // afterwards would assert teardown instead of the precondition.
-    const paused = src.element.paused
+    expect(src.element.paused).toBe(true)
+
     const a = src.frame.version
     for (let i = 0; i < 3; i++) src.markFramePresented()
     const b = src.frame.version
-    src.dispose()
-    return { paused, a, b }
-  })
-  expect(result.paused).toBe(true)
-  expect(result.b).toBe(result.a)
-})
 
-test('resuming a stopped loop is driven by the play event', async ({ gpuPage }) => {
-  // Why `media-play` bumps at all. Once a paused video stops advancing, the loop
-  // stops drawing -- and `markFramePresented` is only reachable from inside a
-  // draw. So without a bump from the event, a resumed video would need a frame to
-  // get a frame: a deadlock whose symptom is "the video never comes back".
-  const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = window.__panoTest
-    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    src.dispose()
+    expect(b).toBe(a)
+  })
+
+  it('resumes a stopped loop from the play event', async () => {
+    // Why `media-play` bumps at all. Once a paused video stops advancing, the
+    // loop stops drawing -- and `markFramePresented` is only reachable from
+    // inside a draw. So without a bump from the event, a resumed video would
+    // need a frame to get a frame: a deadlock whose symptom is "the video never
+    // comes back".
+    const src = await loaded()
     await src.play()
-    await new Promise(r => { const off = src.on('media-pause', () => { off(); r(null) }); src.pause() })
+    const paused = once(src, 'media-pause')
+    src.pause()
+    await paused
     const stopped = src.frame.version
+
     // The listener goes on BEFORE play(): `play()` resolves after the event has
     // fired, so a listener attached afterwards would wait for a second play that
     // never comes, and the test would hang instead of failing.
-    const played = new Promise(r => { const off = src.on('media-play', () => { off(); r(null) }) })
+    const played = once(src, 'media-play')
     await src.play()
     await played
     const resumed = src.frame.version
-    src.dispose()
-    return { stopped, resumed }
-  })
-  expect(result.resumed).toBeGreaterThan(result.stopped)
-})
 
-test('a seek while paused reaches the screen', async ({ gpuPage }) => {
-  // Same deadlock, different trigger: `media-seeked` is the only event that
-  // reports "the displayed frame is now a different one" for a video that is not
-  // playing.
-  const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = window.__panoTest
-    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    src.dispose()
+    expect(resumed).toBeGreaterThan(stopped)
+  })
+
+  it('reaches the screen on a seek while paused', async () => {
+    // Same deadlock, different trigger: `media-seeked` is the only event that
+    // reports "the displayed frame is now a different one" for a video that is
+    // not playing.
+    const src = await loaded()
+    expect(src.element.paused).toBe(true)
     const before = src.frame.version
+
     // Halfway rather than a fixed second: the fixture only has to be a few
     // seconds long, and a seek past the end reports the end instead of a new
     // frame.
     const target = src.element.duration / 2
-    await new Promise(r => {
-      const off = src.on('media-seeked', () => { off(); r(null) })
-      src.element.currentTime = target
-    })
+    expect(target).toBeGreaterThan(0)
+    const seeked = once(src, 'media-seeked')
+    src.element.currentTime = target
+    await seeked
+
     const after = src.frame.version
     src.dispose()
-    return { before, after, target }
+    expect(after).toBeGreaterThan(before)
   })
-  expect(result.target).toBeGreaterThan(0)
-  expect(result.after).toBeGreaterThan(result.before)
-})
 
-test('the last frame of a video is drawn', async ({ gpuPage }) => {
-  // Why `media-ended` bumps too. Once the video ends, `ended` and `paused` are
-  // both true, so `markFramePresented` will never advance the version again --
-  // and the decoded final frame may not have been drawn yet, because the loop's
-  // next tick is what would have drawn it. Without this bump the video visibly
-  // stops one frame early, which reads as "the video is fine, it just ends
-  // there".
-  //
-  // The seek to just before the end is what keeps the test fast; it is deliberate
-  // that the version is read AFTER the seek has settled, so what the assertion
-  // measures is the ending and not the seek.
-  const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = window.__panoTest
-    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
-    await new Promise(r => {
-      const off = src.on('media-seeked', () => { off(); r(null) })
-      src.element.currentTime = Math.max(0, src.element.duration - 0.3)
-    })
+  it('draws the last frame of a video', async () => {
+    // Why `media-ended` bumps too. Once the video ends, `ended` and `paused` are
+    // both true, so `markFramePresented` will never advance the version again --
+    // and the decoded final frame may not have been drawn yet, because the loop's
+    // next tick is what would have drawn it. Without this bump the video visibly
+    // stops one frame early, which reads as "the video is fine, it just ends
+    // there".
+    //
+    // The seek to just before the end is what keeps the test fast; it is
+    // deliberate that the version is read AFTER the seek has settled, so what the
+    // assertion measures is the ending and not the seek.
+    const src = await loaded()
+    const seeked = once(src, 'media-seeked')
+    src.element.currentTime = Math.max(0, src.element.duration - 0.3)
+    await seeked
     const before = src.frame.version
-    const ended = new Promise(r => { const off = src.on('media-ended', () => { off(); r(true) }) })
+
+    const ended = once(src, 'media-ended')
     await src.play()
     await ended
     const after = src.frame.version
-    src.dispose()
-    return { before, after }
-  })
-  expect(result.after).toBeGreaterThan(result.before)
-})
 
-test('hands out a fresh frame instead of a cached one', async ({ gpuPage }) => {
-  // The hazard: importExternalTexture's result is destroyed when the task that
-  // made it ends, and a bind group holding it does NOT keep it alive, so a
-  // source that memoised its frame would hand the renderer a value describing a
-  // task that is already over.
-  //
-  // Asserted here as the source-side property that makes the GPU behaviour safe
-  // -- no caching. The GPU half (a stale external texture is a validation error)
-  // is a backend concern and is pinned by P3's tests.
-  const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = window.__panoTest
-    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    src.dispose()
+    expect(after).toBeGreaterThan(before)
+  })
+
+  it('hands out a fresh frame instead of a cached one', async () => {
+    // The hazard: importExternalTexture's result is destroyed when the task that
+    // made it ends, and a bind group holding it does NOT keep it alive, so a
+    // source that memoised its frame would hand the renderer a value describing a
+    // task that is already over.
+    //
+    // Asserted here as the source-side property that makes the GPU behaviour safe
+    // -- no caching. The GPU half (a stale external texture is a validation
+    // error) is a backend concern and is pinned by P3's tests.
+    const src = await loaded()
+
     // Identical calls on an unchanged video must still produce two objects: the
     // next draw is what advances the version, so a video that is playing is what
     // this test needs. Playing also keeps `markFramePresented` from short-
@@ -1270,26 +1225,21 @@ test('hands out a fresh frame instead of a cached one', async ({ gpuPage }) => {
     src.markFramePresented()
     const c = src.frame
     src.dispose()
-    return { cached: a === b, advanced: c.version > a.version, sameElement: a.element === b.element }  })
-  expect(result.cached).toBe(false)
-  expect(result.advanced).toBe(true)
-  expect(result.sameElement).toBe(true)
-})
 
-test('dispose stops the element and removes every listener', async ({ gpuPage }) => {
-  const result = await gpuPage.evaluate(async () => {
-    const { VideoSource } = window.__panoTest
-    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
-    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    expect(a).not.toBe(b)
+    expect(c.version).toBeGreaterThan(a.version)
+    expect(a.element).toBe(b.element)
+  })
+
+  it('stops the element and removes every listener on dispose', async () => {
+    const src = await loaded()
     await src.play()
     src.dispose()
-    return { paused: src.element.paused, listeners: src.listenerCount }
+    expect(src.element.paused).toBe(true)
+    expect(src.listenerCount).toBe(0)
   })
-  expect(result.paused).toBe(true)
-  expect(result.listeners).toBe(0)
 })
 ```
-
 - [ ] **Step 2: 实现**
 
 `src/media/video-source.ts`：
@@ -1531,16 +1481,16 @@ export class VideoSource extends Disposable implements MediaSource {
  * when both paths render the same frame -- which is what P3's single shared
  * flip in `to_uv` assumes cannot happen.
  *
- * Nothing here is re-exported to the library; it is test scaffolding.
+ * An ordinary module, and it runs in the page like everything else here: no
+ * driver, no serialization boundary. The one thing this still needs is its own
+ * device, because it must build pipelines the backend would never build.
  */
-
-import type { Page } from '@playwright/test'
 
 /** One upload path's output: RGBA8, top-down, row-major. */
 export interface PathRender {
   readonly width: number
   readonly height: number
-  readonly rgba: number[]
+  readonly rgba: Uint8Array
 }
 
 /*
@@ -1594,154 +1544,154 @@ fn fs (in: VOut) -> @location(0) vec4f {
 /**
  * Uploads one paused frame of `url` through each path and reads both back.
  *
- * @param page - The page, which must have WebGPU enabled.
  * @param url - Video URL, same-origin so the external texture is not tainted.
  * @param size - Square render size. 64 keeps the readback's bytesPerRow at the
  *   256-byte alignment `copyTextureToBuffer` demands.
  */
 export async function renderVideoBothPaths (
-  page: Page,
   url: string,
   size = 64
 ): Promise<{ external: PathRender, copy: PathRender }> {
-  return page.evaluate(async ({ url, size }) => {
-    const adapter = await navigator.gpu.requestAdapter()
-    if (adapter === null) throw new Error('no WebGPU adapter')
-    const device = await adapter.requestDevice()
+  const adapter = await navigator.gpu.requestAdapter()
+  if (adapter === null) throw new Error('no WebGPU adapter')
+  const device = await adapter.requestDevice()
 
-    const video = document.createElement('video')
-    video.crossOrigin = 'anonymous'
-    video.muted = true
-    video.src = url
-    // `loadeddata`, not `loadedmetadata`: metadata describes the size while
-    // `loadeddata` is the first event that guarantees there is a frame to
-    // sample. A paused frame is also what makes the two paths comparable --
-    // there is exactly one frame in play, so a difference is orientation rather
-    // than timing.
-    await new Promise((resolve, reject) => {
-      video.addEventListener('loadeddata', resolve, { once: true })
-      video.addEventListener('error', () => reject(new Error(`video failed: ${url}`)), { once: true })
-    })
-    video.pause()
-
-    const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
-    const target = device.createTexture({
-      size: [size, size],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
-    })
-    const bytesPerRow = size * 4
-    const readback = device.createBuffer({
-      size: bytesPerRow * size,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-    })
-
-    const pipeline = (fragment: string): GPURenderPipeline => {
-      const shaderModule = device.createShaderModule({ code: `${VERTEX}\n${fragment}` })
-      return device.createRenderPipeline({
-        layout: 'auto',
-        vertex: { module: shaderModule, entryPoint: 'vs' },
-        fragment: { module: shaderModule, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] },
-        primitive: { topology: 'triangle-list' }
-      })
-    }
-
-    const readTarget = async (): Promise<number[]> => {
-      const encoder = device.createCommandEncoder()
-      encoder.copyTextureToBuffer({ texture: target }, { buffer: readback, bytesPerRow }, [size, size])
-      device.queue.submit([encoder.finish()])
-      await readback.mapAsync(GPUMapMode.READ)
-      const rgba = Array.from(new Uint8Array(readback.getMappedRange()))
-      readback.unmap()
-      return rgba
-    }
-
-    const draw = (pipe: GPURenderPipeline, entries: GPUBindGroupEntry[]): void => {
-      const encoder = device.createCommandEncoder()
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [{
-          view: target.createView(),
-          clearValue: { r: 0, g: 0, b: 0, a: 1 },
-          loadOp: 'clear',
-          storeOp: 'store'
-        }]
-      })
-      pass.setPipeline(pipe)
-      pass.setBindGroup(0, device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries }))
-      pass.draw(3)
-      pass.end()
-      device.queue.submit([encoder.finish()])
-    }
-
-    // Path 1: importExternalTexture. No flipY exists on this path, so whatever
-    // row order it produces is the row order everything else has to live with.
-    //
-    // Import, bind, draw and submit happen in one synchronous stretch with no
-    // `await` between them, because the external texture is destroyed when this
-    // task ends. The awaits that follow are after the submit, which is safe.
-    const externalPipe = pipeline(FRAGMENT_EXTERNAL)
-    draw(externalPipe, [
-      { binding: 0, resource: device.importExternalTexture({ source: video }) },
-      { binding: 1, resource: sampler }
-    ])
-    const external = await readTarget()
-
-    // Path 2: copyExternalImageToTexture. `flipY: false` is the claim under test:
-    // it should agree with the external path, because that is the value P3's
-    // backend passes and the value no single shader flip can compensate for if
-    // the two APIs disagreed.
-    const copied = device.createTexture({
-      size: [size, size],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
-    })
-    device.queue.copyExternalImageToTexture({ source: video, flipY: false }, { texture: copied }, [size, size])
-    draw(pipeline(FRAGMENT_COPY), [
-      { binding: 0, resource: copied.createView() },
-      { binding: 1, resource: sampler }
-    ])
-    const copy = await readTarget()
-
-    // A uniform frame is useless as a probe -- the test would pass on a black
-    // screen -- and so is one whose top half and bottom half happen to match:
-    // "is this upside down" is a question about the top against the bottom, so
-    // the frame has to have a top and a bottom to tell apart. Hence the mean of
-    // each half rather than "are there two colours in here".
-    const halfMean = (from: number, to: number): number => {
-      let sum = 0
-      let count = 0
-      for (let y = from; y < to; y++) {
-        for (let x = 0; x < size; x++) {
-          const i = (y * size + x) * 4
-          sum += external[i]! + external[i + 1]! + external[i + 2]!
-          count += 3
-        }
-      }
-      return sum / count
-    }
-    const half = Math.floor(size / 2)
-
-    return {
-      external: { width: size, height: size, rgba: external },
-      copy: { width: size, height: size, rgba: copy },
-      split: { top: halfMean(0, half), bottom: halfMean(half, size) }
-    }
-  }, { url, size }).then((r) => {
-    if (Math.abs(r.split.top - r.split.bottom) < 8) {
-      throw new Error(
-        `the fixture frame has no top/bottom contrast (top ${r.split.top}, bottom ${r.split.bottom}); ` +
-        'orientation cannot be judged from it'
-      )
-    }
-    return { external: r.external, copy: r.copy }
+  const video = document.createElement('video')
+  video.crossOrigin = 'anonymous'
+  video.muted = true
+  video.src = url
+  // `loadeddata`, not `loadedmetadata`: metadata describes the size while
+  // `loadeddata` is the first event that guarantees there is a frame to
+  // sample. A paused frame is also what makes the two paths comparable --
+  // there is exactly one frame in play, so a difference is orientation rather
+  // than timing.
+  await new Promise((resolve, reject) => {
+    video.addEventListener('loadeddata', resolve, { once: true })
+    video.addEventListener('error', () => reject(new Error(`video failed: ${url}`)), { once: true })
   })
+  video.pause()
+
+  const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
+  const target = device.createTexture({
+    size: [size, size],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+  })
+  const bytesPerRow = size * 4
+  const readback = device.createBuffer({
+    size: bytesPerRow * size,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+  })
+
+  const pipeline = (fragment: string): GPURenderPipeline => {
+    const shaderModule = device.createShaderModule({ code: `${VERTEX}\n${fragment}` })
+    return device.createRenderPipeline({
+      layout: 'auto',
+      vertex: { module: shaderModule, entryPoint: 'vs' },
+      fragment: { module: shaderModule, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] },
+      primitive: { topology: 'triangle-list' }
+    })
+  }
+
+  const readTarget = async (): Promise<Uint8Array> => {
+    const encoder = device.createCommandEncoder()
+    encoder.copyTextureToBuffer({ texture: target }, { buffer: readback, bytesPerRow }, [size, size])
+    device.queue.submit([encoder.finish()])
+    await readback.mapAsync(GPUMapMode.READ)
+    // Copied out before `unmap`: the mapped range is only valid until then.
+    const rgba = new Uint8Array(readback.getMappedRange().slice(0))
+    readback.unmap()
+    return rgba
+  }
+
+  const draw = (pipe: GPURenderPipeline, entries: GPUBindGroupEntry[]): void => {
+    const encoder = device.createCommandEncoder()
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: target.createView(),
+        clearValue: { r: 0, g: 0, b: 0, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store'
+      }]
+    })
+    pass.setPipeline(pipe)
+    pass.setBindGroup(0, device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries }))
+    pass.draw(3)
+    pass.end()
+    device.queue.submit([encoder.finish()])
+  }
+
+  // Path 1: importExternalTexture. No flipY exists on this path, so whatever
+  // row order it produces is the row order everything else has to live with.
+  //
+  // Import, bind, draw and submit happen in one synchronous stretch with no
+  // `await` between them, because the external texture is destroyed when this
+  // task ends. The awaits that follow are after the submit, which is safe.
+  const externalPipe = pipeline(FRAGMENT_EXTERNAL)
+  draw(externalPipe, [
+    { binding: 0, resource: device.importExternalTexture({ source: video }) },
+    { binding: 1, resource: sampler }
+  ])
+  const external = await readTarget()
+
+  // Path 2: copyExternalImageToTexture. `flipY: false` is the claim under test:
+  // it should agree with the external path, because that is the value P3's
+  // backend passes and the value no single shader flip can compensate for if
+  // the two APIs disagreed.
+  const copied = device.createTexture({
+    size: [size, size],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+  })
+  device.queue.copyExternalImageToTexture({ source: video, flipY: false }, { texture: copied }, [size, size])
+  draw(pipeline(FRAGMENT_COPY), [
+    { binding: 0, resource: copied.createView() },
+    { binding: 1, resource: sampler }
+  ])
+  const copy = await readTarget()
+
+  // A uniform frame is useless as a probe -- the test would pass on a black
+  // screen -- and so is one whose top half and bottom half happen to match:
+  // "is this upside down" is a question about the top against the bottom, so
+  // the frame has to have a top and a bottom to tell apart. Hence the mean of
+  // each half rather than "are there two colours in here".
+  const halfMean = (from: number, to: number): number => {
+    let sum = 0
+    let count = 0
+    for (let y = from; y < to; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4
+        sum += external[i]! + external[i + 1]! + external[i + 2]!
+        count += 3
+      }
+    }
+    return sum / count
+  }
+  const half = Math.floor(size / 2)
+  const top = halfMean(0, half)
+  const bottom = halfMean(half, size)
+  if (Math.abs(top - bottom) < 8) {
+    throw new Error(
+      `the fixture frame has no top/bottom contrast (top ${top}, bottom ${bottom}); ` +
+      'orientation cannot be judged from it'
+    )
+  }
+
+  return {
+    external: { width: size, height: size, rgba: external },
+    copy: { width: size, height: size, rgba: copy }
+  }
 }
 ```
+
+> **这里的两个 readback 都是 RGBA，不需要换通道序。** 渲染目标是显式建的 `rgba8unorm` 纹理，
+> 不是 canvas，所以 `getPreferredCanvasFormat()` 的 BGRA 不适用。P3 的 `bgraToRgba` **不要**
+> 用在这里 —— 那会把已经正确的通道序换错一次，而且换完两边同时错、测试照过。
 
 `test/integration/video-orientation.test.ts`：
 
 ```ts
-import { test, expect } from './support/fixtures'
+import { describe, it, expect } from 'vitest'
 import { renderVideoBothPaths } from './support/upload-paths'
 
 /*
@@ -1749,10 +1699,10 @@ import { renderVideoBothPaths } from './support/upload-paths'
  *
  * Defined here rather than in a shared helper: it is six lines, it has exactly
  * one caller, and the tolerance below only means anything next to the reason for
- * it. A `support/gpu.ts` holding this one function would be a file whose only
+ * it. A shared module holding this one function would be a file whose only
  * content is a subtraction.
  */
-function maxChannelDiff (a: readonly number[], b: readonly number[]): number {
+function maxChannelDiff (a: ArrayLike<number>, b: ArrayLike<number>): number {
   if (a.length !== b.length) throw new Error('readbacks differ in size')
   let max = 0
   for (let i = 0; i < a.length; i++) max = Math.max(max, Math.abs(a[i]! - b[i]!))
@@ -1767,15 +1717,16 @@ function maxChannelDiff (a: readonly number[], b: readonly number[]): number {
  * video upside down relative to one that uses external textures -- a bug that
  * only appears on some devices and looks like a shader problem.
  */
-test('external and copy upload paths produce the same orientation', async ({ gpuPage }) => {
-  const result = await renderVideoBothPaths(gpuPage, '/fixtures/clip.mp4')
-  // Not zero: the two paths do different colour-space conversions, so a couple
-  // of levels of difference is expected. What must not happen is a whole frame
-  // being mirrored, which moves every pixel that matters.
-  expect(maxChannelDiff(result.external.rgba, result.copy.rgba)).toBeLessThanOrEqual(2)
+describe('video upload paths', () => {
+  it('produce the same orientation', async () => {
+    const { external, copy } = await renderVideoBothPaths('/fixtures/clip.mp4')
+    // Not zero: the two paths do different colour-space conversions, so a couple
+    // of levels of difference is expected. What must not happen is a whole frame
+    // being mirrored, which moves every pixel that matters.
+    expect(maxChannelDiff(external.rgba, copy.rgba)).toBeLessThanOrEqual(2)
+  })
 })
 ```
-
 - [ ] **Step 4: 跑测试**
 
 Run: `npm run test:integration -- video-source video-orientation`
@@ -2195,93 +2146,85 @@ export class InputController extends Disposable {
 `test/integration/ptz.test.ts`：
 
 ```ts
-import { test, expect } from './support/fixtures'
+import { describe, it, expect } from 'vitest'
+import { InputController } from '../../src/interaction/input-controller'
+import { WheelDeltaMode } from '../../src/interaction/gestures'
 
-test('dragging pans the camera and emits pan events', async ({ gpuPage }) => {
-  const result = await gpuPage.evaluate(async () => {
-    const { InputController } = window.__panoTest
-    const el = document.createElement('div')
-    Object.assign(el.style, { width: '400px', height: '300px', position: 'fixed', top: '0px' })
-    document.body.appendChild(el)
+/**
+ * A positioned element to drive. Each test makes its own, and the page is torn
+ * down between test files, so nothing has to be cleaned up by hand.
+ */
+function host (style: Partial<CSSStyleDeclaration> = {}): HTMLDivElement {
+  const el = document.createElement('div')
+  Object.assign(el.style, { width: '400px', height: '300px', position: 'fixed', top: '0px' }, style)
+  document.body.appendChild(el)
+  return el
+}
+
+/** One complete press-drag-release, in page coordinates. */
+function drag (el: HTMLElement, from: [number, number], to: [number, number]): void {
+  el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, clientX: from[0], clientY: from[1], bubbles: true }))
+  el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: to[0], clientY: to[1], bubbles: true }))
+  el.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: to[0], clientY: to[1], bubbles: true }))
+}
+
+describe('InputController', () => {
+  it('pans the camera and emits pan events', () => {
+    const el = host()
     const input = new InputController(el)
     const pans: Array<{ deltaX: number, deltaY: number }> = []
     input.on('pan', e => pans.push(e))
 
-    el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, clientX: 100, clientY: 100, bubbles: true }))
-    el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: 150, clientY: 130, bubbles: true }))
-    el.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: 150, clientY: 130, bubbles: true }))
+    drag(el, [100, 100], [150, 130])
     input.dispose()
-    return pans
+    expect(pans).toEqual([{ deltaX: 50, deltaY: 30 }])
   })
-  expect(result).toEqual([{ deltaX: 50, deltaY: 30 }])
-})
 
-test('PTZ = false stops the events without unbinding', async ({ gpuPage }) => {
-  // Toggling must not rebind listeners; rebinding on every toggle is itself a
-  // leak source. So the assertion is both "no events" and "re-enabling works".
-  const result = await gpuPage.evaluate(async () => {
-    const { InputController } = window.__panoTest
-    const el = document.createElement('div')
-    document.body.appendChild(el)
+  it('with PTZ = false stops the events without unbinding', () => {
+    // Toggling must not rebind listeners; rebinding on every toggle is itself a
+    // leak source. So the assertion is both "no events" and "re-enabling works".
+    const el = host()
     const input = new InputController(el)
     let count = 0
     input.on('pan', () => count++)
 
-    const send = (x: number) => {
-      el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, clientX: 0, clientY: 0, bubbles: true }))
-      el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: x, clientY: 0, bubbles: true }))
-      el.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: x, clientY: 0, bubbles: true }))
-    }
-
-    send(10)
+    drag(el, [0, 0], [10, 0])
     const afterEnabled = count
+
     input.PTZ = false
-    send(20)
+    drag(el, [0, 0], [20, 0])
     const afterDisabled = count
+
     input.PTZ = true
-    send(30)
+    drag(el, [0, 0], [30, 0])
     const afterReenabled = count
+
     input.dispose()
-    return { afterEnabled, afterDisabled, afterReenabled }
+    expect(afterEnabled).toBe(1)
+    expect(afterDisabled).toBe(1)
+    expect(afterReenabled).toBe(2)
   })
-  expect(result.afterEnabled).toBe(1)
-  expect(result.afterDisabled).toBe(1)
-  expect(result.afterReenabled).toBe(2)
-})
 
-test('the wheel constants still match the real WheelEvent', async ({ gpuPage }) => {
-  // gestures.ts restates deltaMode's numbers instead of reading the global, so
-  // that it stays testable in Node. This is the other half of that trade: the
-  // restated values are checked against the browser's.
-  const result = await gpuPage.evaluate(async () => {
-    const { WheelDeltaMode } = window.__panoTest
-    return {
-      pixel: WheelDeltaMode.PIXEL === WheelEvent.DOM_DELTA_PIXEL,
-      line: WheelDeltaMode.LINE === WheelEvent.DOM_DELTA_LINE,
-      page: WheelDeltaMode.PAGE === WheelEvent.DOM_DELTA_PAGE
-    }
+  it('carries wheel constants that still match the real WheelEvent', () => {
+    // gestures.ts restates deltaMode's numbers instead of reading the global, so
+    // that it stays testable in Node. This is the other half of that trade: the
+    // restated values are checked against the browser's.
+    expect(WheelDeltaMode.PIXEL).toBe(WheelEvent.DOM_DELTA_PIXEL)
+    expect(WheelDeltaMode.LINE).toBe(WheelEvent.DOM_DELTA_LINE)
+    expect(WheelDeltaMode.PAGE).toBe(WheelEvent.DOM_DELTA_PAGE)
   })
-  expect(result).toEqual({ pixel: true, line: true, page: true })
-})
 
-test('dispose restores touch-action', async ({ gpuPage }) => {
-  // The viewer sets touch-action: none on an element it does not own. Leaving
-  // it set would stop the host page from scrolling over that element forever.
-  const result = await gpuPage.evaluate(async () => {
-    const { InputController } = window.__panoTest
-    const el = document.createElement('div')
-    el.style.touchAction = 'pan-y'
-    document.body.appendChild(el)
+  it('restores touch-action on dispose', () => {
+    // The viewer sets touch-action: none on an element it does not own. Leaving
+    // it set would stop the host page from scrolling over that element forever.
+    const el = host({ touchAction: 'pan-y' })
     const input = new InputController(el)
-    const during = el.style.touchAction
+    expect(el.style.touchAction).toBe('none')
     input.dispose()
-    return { during, after: el.style.touchAction }
+    expect(el.style.touchAction).toBe('pan-y')
   })
-  expect(result.during).toBe('none')
-  expect(result.after).toBe('pan-y')
 })
 ```
-
 - [ ] **Step 7: 跑全部**
 
 Run: `npm run test:unit && npm run test:integration`
@@ -2313,6 +2256,7 @@ AbortController, and the element's touch-action is restored on dispose."
 - [ ] `PTZ = false` 不产生事件，且重新打开后恢复
 - [ ] `touch-action` 在 dispose 时还原
 - [ ] 不存在任何 2 的幂量化逻辑
+- [ ] 本阶段的集成测试**直接 import `src/media/` 与 `src/interaction/` 的类**，仓库里没有重新长出 `demo/test-entry.ts`、`test-entry-hooks/` 或 `window.__panoTest`
 - [ ] `public/fixtures/panorama.png` 与 `public/fixtures/clip.mp4` 已由 `scripts/gen-fixtures.mjs` 生成并提交，且 `ffprobe` 复核为 `512x256`、`64` 帧（P5 的全部 User Story、P6 的后端对比都读它们）
 
 ## 交给下游的东西
@@ -2330,6 +2274,13 @@ AbortController, and the element's touch-action is restored on dispose."
 | `InputController` 的语义事件 | P5 的 `Viewer` 把 `pan`/`zoom` 转成相机动作 |
 | `WheelZoom` 常量 | 没有下游，但**它是行为变更**：旧版鼠标滚轮与触控板共用一个除数 |
 | `public/fixtures/` 的两个素材 | P5 的全部 User Story、P6 的后端对比都从 `/fixtures/...` 取它们。**P4 之后不再有人产出它们**，所以这一条是下游能不能跑起来的硬前提 |
+| `renderVideoBothPaths` 里「两个 readback 都是 RGBA」的结论 | **P6 的补充证据**：P3 只说了「canvas 的 readback 在 macOS 上是 BGRA」，没说什么情况下不是。这里是另一半 —— 显式建的 `rgba8unorm` 纹理走 `copyTextureToBuffer` 出来就是 RGBA，跟 canvas 的 `getPreferredCanvasFormat()` 无关。判据是**读的是不是 canvas**，不是读的是哪个后端 |
+
+> **给 P5 的一条纪律**：P4 的集成测试直接 import `src/media/` 与 `src/interaction/` 的类，那是因为
+> P4 交付的**就是这两个类**。P5 交付的是 `FramelessImageViewer` / `FramelessVideoViewer`，
+> 所以 P5 的用户故事测试必须 import `src/index.ts` —— 用户故事测的是「拿走这个包的人能不能用」，
+> 绕到内部模块去断言等于把出口的形状从测试里删掉了。以前这条由 `window.__panoTest` 只有一个出口
+> 隐式保证，现在没有东西机械地拦着，只能靠 review（P3 的交接里已经写过同一句，这里是它在 P5 的落地）。
 
 ## 留给 P3 的一处依赖（本计划改不动）
 
