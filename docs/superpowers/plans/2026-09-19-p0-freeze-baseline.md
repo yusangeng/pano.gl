@@ -58,7 +58,7 @@ const bitmap = await createImageBitmap(await (await fetch(baselineUrl)).blob())
 - Create: `tools/baseline/states.mjs`
 - Modify: `.gitignore`
 
-- [ ] **Step 1: 建探针目录与依赖**
+- [x] **Step 1: 建探针目录与依赖**
 
 `tools/baseline/package.json`：
 
@@ -77,7 +77,7 @@ const bitmap = await createImageBitmap(await (await fetch(baselineUrl)).blob())
 }
 ```
 
-- [ ] **Step 2: 写状态矩阵**
+- [x] **Step 2: 写状态矩阵**
 
 `tools/baseline/states.mjs` —— 驱动与校验共用，避免两边各写一份：
 
@@ -113,7 +113,7 @@ export function captureId (camera, state) {
 }
 ```
 
-- [ ] **Step 3: 把探针产物加进 .gitignore（只忽略依赖）**
+- [x] **Step 3: 把探针产物加进 .gitignore（只忽略依赖）**
 
 `.gitignore` 末尾追加：
 
@@ -124,12 +124,12 @@ tools/baseline/node_modules
 
 **不要**忽略 `test/fixtures/baseline/` —— 那是本任务的唯一交付物。
 
-- [ ] **Step 4: 装依赖并验证**
+- [x] **Step 4: 装依赖并验证**
 
 Run: `cd tools/baseline && npm install && node -e "import('./states.mjs').then(m => console.log(m.STATES.length, m.CAMERAS.length))"`
 Expected: `4 4`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .gitignore tools/baseline/package.json tools/baseline/package-lock.json tools/baseline/states.mjs
@@ -143,19 +143,19 @@ git commit -m "chore(baseline): scaffold probe dir and camera-state matrix"
 **Files:**
 - Create: `test/fixtures/baseline/bundle.js`（由 `npm run build-debug` 产出后复制）
 
-- [ ] **Step 1: 确认工作区是干净的 v0.2.2**
+- [x] **Step 1: 确认工作区是干净的 v0.2.2**
 
 Run: `git status --short && git log --oneline -1`
 Expected: 除本任务的改动外无未提交内容；HEAD 是 `5737f6e npm version 0.2.2` 或其后的文档提交。
 
 > `docs/` 与 `.gitignore` 的改动是允许的，它们不影响 bundle 内容。
 
-- [ ] **Step 2: 构建**
+- [x] **Step 2: 构建**
 
 Run: `npm install && npm run build-debug`
 Expected: 产出 `.package/bundle.js` 与 `.package/BundleSizeDebug.html`
 
-- [ ] **Step 3: 复制进 fixture 目录**
+- [x] **Step 3: 复制进 fixture 目录**
 
 ```bash
 mkdir -p test/fixtures/baseline
@@ -176,7 +176,7 @@ has inlined GLSL: true
 
 **如果 `has inlined GLSL` 是 `false`**，说明 bundle 没有把 `.glsl` 内联进来 —— 停下，检查 `webpack/debug.js` 里 `webpack-glsl-loader` 的配置再继续。基线必须自包含。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/fixtures/baseline/bundle.js
@@ -192,7 +192,7 @@ git commit -m "chore(baseline): vendor the v0.2.2 UMD bundle for fixture reprodu
 
 这是本阶段技术含量最高的一步。**先读完整段再动手。**
 
-- [ ] **Step 1: 写探针页骨架（含猴补）**
+- [x] **Step 1: 写探针页骨架（含猴补）**
 
 `tools/baseline/probe.html`：
 
@@ -300,7 +300,7 @@ git commit -m "chore(baseline): vendor the v0.2.2 UMD bundle for fixture reprodu
 </html>
 ```
 
-- [ ] **Step 2: 写确定性素材生成器（追加到同一段脚本，`__probe` 之前）**
+- [x] **Step 2: 写确定性素材生成器（追加到同一段脚本，`__probe` 之前）**
 
 基线素材不能是外部文件 —— 那会让 fixture 依赖一个可能消失的 URL。用确定性图案：
 
@@ -333,7 +333,7 @@ git commit -m "chore(baseline): vendor the v0.2.2 UMD bundle for fixture reprodu
     }
 ```
 
-- [ ] **Step 3: 写捕获驱动函数（追加）**
+- [x] **Step 3: 写捕获驱动函数（追加）**
 
 ```js
     /*
@@ -395,7 +395,7 @@ git commit -m "chore(baseline): vendor the v0.2.2 UMD bundle for fixture reprodu
     }
 ```
 
-- [ ] **Step 4: 用占位尺寸跑通页面（先不写驱动）**
+- [x] **Step 4: 用占位尺寸跑通页面（先不写驱动）**
 
 把 `__CANVAS_SIZE__` 换成一个真实数字不是这一步的事 —— 先确认语法没问题：
 
@@ -403,7 +403,7 @@ Run: `node --check <(sed 's/__CANVAS_SIZE__/128/' tools/baseline/probe.html | se
 
 > 这条命令本来就跑不通，它只是逼你**肉眼再读一遍** `probe.html`。HTML 里的脚本没有独立的语法检查工具，这是本仓库的现实。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/baseline/probe.html
@@ -417,7 +417,7 @@ git commit -m "feat(baseline): GL-level uniform and pixel recorder for the v0.2.
 **Files:**
 - Create: `tools/baseline/capture.mjs`
 
-- [ ] **Step 1: 写驱动**
+- [x] **Step 1: 写驱动**
 
 `tools/baseline/capture.mjs`：
 
@@ -544,7 +544,7 @@ if (failed.length) {
 }
 ```
 
-- [ ] **Step 2: 把素材生成器暴露给驱动（改 `probe.html`）**
+- [x] **Step 2: 把素材生成器暴露给驱动（改 `probe.html`）**
 
 在 `probe.html` 里，`window.__probe = {...}` 之前补上：
 
@@ -557,12 +557,12 @@ if (failed.length) {
 
 并把 `__capture` 里的 `sourceUrl` 直接用传入值（它已经这么做了）。
 
-- [ ] **Step 3: 执行捕获**
+- [x] **Step 3: 执行捕获**
 
 Run: `cd tools/baseline && node capture.mjs`
 Expected：16 行 `capturing <camera>/<state> ... ok (3 frames, <N>B)`，末行 `16/16 captures ok`
 
-- [ ] **Step 4: 人工核对产物**
+- [x] **Step 4: 人工核对产物**
 
 Run:
 ```bash
@@ -575,7 +575,7 @@ Expected：每行含 `u_CamTransMatrix`、`u_CamProjType`、`u_TexProjType`、`u
 
 **如果非线性相机缺 `u_CamZoom`** —— 那是真实的发现（说明当前 `zoom` 选项被忽略，与 spec §11 的 F12 相关）。**不要修**，记进 fixture，在 spec 的缺陷清单上核对。
 
-- [ ] **Step 5: 核对 F5（非线性相机 povLatitude 无效）**
+- [x] **Step 5: 核对 F5（非线性相机 povLatitude 无效）**
 
 ```bash
 node -e "
@@ -593,7 +593,7 @@ for (const n of ['u_CamPOVLatitude','u_CamPOVLongitude','u_CamTransMatrix']) {
 
 **判读**：`u_CamPOVLatitude` 若为 `IDENTICAL` → **F5 证实**（`rotate(30, 45)` 完全没进入这个 uniform）。`u_CamTransMatrix` 应当 `differs`。
 
-- [ ] **Step 6: 核对 F10（旧着色器文件作用域的 `lng` 初始化是否生效）**
+- [x] **Step 6: 核对 F10（旧着色器文件作用域的 `lng` 初始化是否生效）**
 
 这一步**不能靠读代码定论**。`legacy/src/shader/fshader.glsl` 里 `float lng = u_CamPOVLongitude / 2.0;` 是文件作用域的非恒定初始化，在 GLSL ES 1.0 里**非法** —— 有的驱动会把它编译成 0，那样旧的非线性相机根本不会转。哪种情况发生了，只有实测知道：
 
@@ -616,7 +616,7 @@ console.log('cylindrical origin vs tilt:', Buffer.compare(read('origin'), read('
 
 把 F5 / F10 的结论一并写进 `test/fixtures/baseline/README.md`（Step 7 建），并据此在 spec §11 里把这两条从【待验证】改成【核码】或删除。
 
-- [ ] **Step 7: 写 fixture 说明**
+- [x] **Step 7: 写 fixture 说明**
 
 `test/fixtures/baseline/README.md`：
 
@@ -678,7 +678,7 @@ fewer states than the matrix gate, rather than having to rediscover it.
 
 （Step 5 与 Step 6 的结论追加到此文件末尾的「Known findings」节。）
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add tools/baseline/capture.mjs tools/baseline/probe.html test/fixtures/baseline/
@@ -693,7 +693,7 @@ git commit -m "feat(baseline): capture pixel and uniform-stream fixtures for v0.
 - Create: `tools/baseline/verify-fixtures.mjs`
 - Create: `tools/baseline/fixtures.test.mjs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `tools/baseline/fixtures.test.mjs`：
 
@@ -778,12 +778,12 @@ test('capture resolution is the one the fixtures were recorded at', async () => 
 })
 ```
 
-- [ ] **Step 2: 跑测试，确认失败**
+- [x] **Step 2: 跑测试，确认失败**
 
 Run: `cd tools/baseline && node --test fixtures.test.mjs`
 Expected: FAIL —— `ENOENT ... index.json`（本任务尚未写校验脚本，但 fixture 由 Task 4 产出，此处应当已经存在）。若 Task 4 已完成，则应当**全部 PASS**；此时改跑 Step 3 并把这一步记录为「基线已就位」。
 
-- [ ] **Step 3: 写 verify 包装脚本**
+- [x] **Step 3: 写 verify 包装脚本**
 
 `tools/baseline/verify-fixtures.mjs`：
 
@@ -810,12 +810,12 @@ if (r.status !== 0) {
 }
 ```
 
-- [ ] **Step 4: 跑校验**
+- [x] **Step 4: 跑校验**
 
 Run: `cd tools/baseline && node verify-fixtures.mjs`
 Expected: 6 个测试全 PASS，退出码 0
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/baseline/verify-fixtures.mjs tools/baseline/fixtures.test.mjs
@@ -829,15 +829,15 @@ git commit -m "test(baseline): structural verification of the captured fixtures"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-19-pano-gl-v1-design.md`
 
-- [ ] **Step 1: 用实测结论更新 spec**
+- [x] **Step 1: 用实测结论更新 spec**
 
 对 §11 的每一条：如果本阶段产生了实测证据（F5 的 `u_CamPOVLatitude`、F6 的 `u_CamGeo*`、F12 的 zoom uniform），把标注从 **【核码】** 改成 **【实测】** 并补上 fixture 路径；如果实测**证伪**了某条，删掉该行并在 §12 记录证伪过程。
 
-- [ ] **Step 2: 更新 §10.2 的 P0 行**
+- [x] **Step 2: 更新 §10.2 的 P0 行**
 
 把 P0 的验收标准从计划时态改成完成时态，附 `index.json` 的路径。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-09-19-pano-gl-v1-redesign.md
@@ -848,12 +848,12 @@ git commit -m "docs(spec): fold baseline measurements back into the defect inven
 
 ## 完成标准
 
-- [ ] `cd tools/baseline && node verify-fixtures.mjs` 退出码 0
-- [ ] `test/fixtures/baseline/index.json` 含 16 条无 error 的 capture
-- [ ] 四个相机各自的 `u_CamProjType` 与 `CameraFactory` 的注册值一致
-- [ ] `test/fixtures/baseline/README.md` 记录了 F5 的实测结论
-- [ ] `test/fixtures/baseline/bundle.js` 已提交（基线自包含）
-- [ ] spec §11 的相关条目已从【核码】升级为【实测】或删除
+- [x] `cd tools/baseline && node verify-fixtures.mjs` 退出码 0
+- [x] `test/fixtures/baseline/index.json` 含 16 条无 error 的 capture
+- [x] 四个相机各自的 `u_CamProjType` 与 `CameraFactory` 的注册值一致
+- [x] `test/fixtures/baseline/README.md` 记录了 F5 的实测结论
+- [x] `test/fixtures/baseline/bundle.js` 已提交（基线自包含）
+- [x] spec §11 的相关条目已从【核码】升级为【实测】或删除
 
 ## 交给下游的东西
 
