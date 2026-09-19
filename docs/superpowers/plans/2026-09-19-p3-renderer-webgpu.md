@@ -1461,24 +1461,17 @@ async function readTexture (
   return out
 }
 
-/**
- * Largest per-channel difference between two RGBA8 buffers.
+/*
+ * `maxChannelDiff` is NOT defined here -- it is re-exported from ./canvas,
+ * where P1 put it.
  *
- * `ArrayLike` rather than `readonly number[]`: the readback is a `Uint8Array`
- * and a baseline decoded by `createImageBitmap` is a `Uint8ClampedArray`, and
- * materialising either into a plain array would cost more than the comparison.
+ * Two definitions of "the worst channel difference" in one support directory is
+ * exactly the drift these gates exist to prevent: they would agree today and
+ * diverge on the day someone relaxed one of them. The re-export keeps this
+ * file's import surface (`{ renderOffscreen, maxChannelDiff }`) intact for the
+ * callers that were already written against it.
  */
-export function maxChannelDiff (a: ArrayLike<number>, b: ArrayLike<number>): number {
-  if (a.length !== b.length) {
-    throw new Error(`size mismatch: ${a.length} vs ${b.length}`)
-  }
-  let worst = 0
-  for (let i = 0; i < a.length; i++) {
-    const d = Math.abs(a[i]! - b[i]!)
-    if (d > worst) worst = d
-  }
-  return worst
-}
+export { maxChannelDiff } from './canvas'
 ```
 
 > **注意 `renderOffscreen` 里 `backend.device` 与 `render(target)` 的用法没有变** —— 它们本来就只在具体类上。

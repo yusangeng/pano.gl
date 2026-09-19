@@ -6,7 +6,7 @@
 
 **Architecture:** 同一个 `Backend` 接口的第二个实现。**着色器是转写的，不是生成的** —— 四个投影公式在两份源码里各写一遍，门禁 C 是它们不漂移的唯一保证。
 
-**Tech Stack:** WebGL2 / GLSL ES 3.00 · Playwright
+**Tech Stack:** WebGL2 / GLSL ES 3.00 · vitest 浏览器模式
 
 ---
 
@@ -37,12 +37,15 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 | `PANORAMA_WGSL` 的**最终**形态 | P3 Task 3 + Task 8 Step 3 | P3 的 Task 8 会给三个非线性投影的 `phi` 加 `- lat` 并同步改 `src/core/reference.ts`。**转写 Task 3 的中间版本会漏掉纬度**，门禁 C 在非零纬度上立刻红 |
 | `src/core/reference.ts` | P2，P3 Task 8 Step 3 同步 | 门禁 C 的裁判。它必须和着色器同步读到 `povLatitude`，否则裁判自己就是错的 |
 | `?raw` 着色器导入通道 | P3 Task 3 的说明 + 本计划 Task 1 | vitest 与 demo 走 Vite 的 `?raw`；**tsup 走 esbuild，没有 `?raw` 这个约定**。缺 loader 会让 `npm run test:unit` 全绿而 `npm run build` 失败 |
-| `gpuPage` fixture | P1 | 门禁 C 与后端冒烟测试都在真 WebGPU 页面里跑 |
+| P1 的 `integration` / `no-webgpu` 两个 project 与它们的守卫 | P1 Task 8 | 门禁 C 与后端冒烟测试都要求真适配器，由 `integration` 的 `require-webgpu.ts` 保证；降级测试跑在 `no-webgpu` 里，由 `require-no-webgpu.ts` 保证它**真的**没有适配器 |
 | `extent` 由调用方给 | P2 | `Projection` 的非线性分支带 `extent`（圆柱 1×1，planet/pannini 4×4）。它不在几何里，也不由后端推导 |
-| `demo/test-entry-hooks/` 的 hook 约定 | P3 Task 3 | 页面侧出口是**一期一个 hook 文件**，用 `declare global` 自己加宽 `PanoTestApi`，由 `import.meta.glob` 合并。**P6 因此不编辑 `demo/test-entry.ts`** |
-| `renderOffscreen` / `maxChannelDiff` | P3 Task 7，`test/integration/support/gpu.ts` | 门禁 C 的 WebGPU 半边与差值计算都用它们。**门禁 C 的主张是关于出厂着色器的，所以 WebGPU 侧必须走出厂路径**，而不是一个为了对上这个测试而写的 harness |
-| `RenderRequest` / `RenderResult` | P3 Task 3，`demo/test-entry-hooks/renderer.ts` | `renderOffscreenGLSL` 用**同一个**请求/响应类型。两个 harness 输入不同，比的就是 harness 而不是着色器 |
-| P5 把它的 hook 加进 `PanoTestApi` | P5「测试入口需要导出什么」节，落在 `demo/test-entry-hooks/viewer.ts` | Task 5/6 的页面调用写的是 `window.__panoTest.createImageViewer(...)` / `waitFor` / `readCanvas` / `countNonBlack` / `probe`。**P6 不写 `as unknown as`**（P3 明令禁止），所以这些成员必须已经在 `PanoTestApi` 上 |
+| 浏览器模式的测试写法 | P3 / P4 / P5 | 测试文件本身就在页面里，直接 `import` 被测代码。**没有页面侧出口、没有 hook、没有 `window.__panoTest`** —— 本计划的 Task 3/4/6 全部照此办理 |
+| `renderOffscreen` / `maxChannelDiff` / `RenderRequest` / `RenderResult` | P3 Task 3，`test/integration/support/gpu.ts` | 门禁 C 的 WebGPU 半边、请求/响应类型与差值计算都用它们。**门禁 C 的主张是关于出厂着色器的，所以 WebGPU 侧必须走出厂路径**，而不是一个为了对上这个测试而写的 harness |
+| `support/canvas.ts` | P1 Task 8 | `readCanvas` / `nextFrames` / `countNonBlack` / `maxChannelDiff`。**P6 不重写它们**，`support/gpu.ts` 已经把 `maxChannelDiff` 转口自这里 |
+| P5 的四个用户故事文件 | P5 Task 5 | Task 5 让它们在 WebGL2 下原样重跑。**一个字都不改**，改的是 project 的 `include` |
+| P5 的 `test/integration/fallback/user-story-no-webgpu.test.ts` | P5 Task 5 | Task 5/6 把它翻成 WebGL2 的正面断言，并补两种更极端的环境 |
+
+**关于依赖顺序：`support/canvas.ts` 是 P1 建的，`support/gpu.ts` 是 P3 建的，`support/spies.ts` 与 `support/viewer.ts` 是 P5 建的。** P6 只新建 `support/cross-backend.ts`，其余四个是**扩**，不是重写。
 
 **关于 `Backend` 接口：P6 不改它。** `onDeviceLost (fn: (lost: DeviceLost) => void): () => void` 已经由 P3 Task 1 声明（含「重复注册即替换、返回的退订函数只在自己仍是当前观察者时生效」的语义），P6 是**实现**方。如果开工时发现接口上没有它，停下并上报 —— 接口属于 P3。
 
@@ -102,15 +105,11 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 | `src/renderer/webgl2/shaders/index.ts` | 拼接生成的常量 + 顶点源码 + `#version` 头 |
 | `src/renderer/webgl2/context.ts` | 取上下文、编译、链接、错误检查 |
 | `src/renderer/webgl2/backend.ts` | `Backend` 的 WebGL2 实现 |
-| `demo/test-entry-hooks/webgl2.ts` | 页面侧出口：4 条冒烟 hook（Task 3）+ 2 条门禁 C hook（Task 4） |
-| `demo/test-entry-hooks/cross-backend.ts` | 页面侧出口：门禁 C 的 CPU 裁判 |
-| `test/integration/support/cross-backend.ts` | 门禁 C 的 Playwright 侧工具 |
-| `test/integration/support/backend.ts` | 「没有 WebGPU / 没有适配器 / 什么都没有」三种页面 fixture |
+| `test/integration/support/cross-backend.ts` | 门禁 C 的全部工具：源图、GLSL 离屏渲染、CPU 裁判、差值定位（Task 4） |
 | `test/integration/webgl2-smoke.test.ts` | 后端自身的冒烟 + 上下文丢失/恢复（Task 3） |
 | `test/integration/gate-c-cross-backend.test.ts` | **门禁 C**（Task 4） |
-| `test/integration/backend-downgrade.test.ts` | spec §9.7 的降级场景（Task 6） |
-
-> `support/backend.ts` **用的是 P5 文件表里已经预留的那个名字**（P5 的表格写着「后端环境掩码：让测试能关掉 WebGPU」，但 P5 的 Task 2–6 没有任何一条创建或使用它）。本计划把它建出来，不再另起一个名字 —— 两个文件做同一件事，是这份计划最容易制造的重复。
+| `test/integration/backend-downgrade.test.ts` | 「没有 `navigator.gpu`，有 WebGL2」（Task 6，跑在 `integration` project 里，靠掩码造出该环境） |
+| `test/integration/fallback/backend-unavailable.test.ts` | 「两个后端都没有」（Task 6，跑在 `no-webgpu` project 里） |
 
 **Modify：**
 
@@ -118,11 +117,13 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 |---|---|---|
 | `tsup.config.ts` | esbuild 的 `?raw` 插件（Task 1） | P1 创建，P3 已经在改同一个对象 |
 | `src/viewer/backend-factory.ts` | `createBackend` 加 WebGL2 分支（Task 3） | P5 |
-| `playwright.config.ts` | 第二个 project `chromium-webgl2`（Task 5） | P1 |
-| `test/integration/support/fixtures.ts` | 按 project 注入 `navigator.gpu` 屏蔽 + 按 project 换守卫（Task 5） | P1 |
-| `test/integration/user-story-no-webgpu.test.ts` | 删除，由 `backend-downgrade.test.ts` 取代（Task 6） | P5 |
+| `test/integration/support/spies.ts` | `countDraws` 同时包住两个后端的 `render`（Task 5） | P5 |
+| `vitest.config.ts` | `no-webgpu` project 的 `include` 扩到四个用户故事（Task 5） | P1 |
+| `test/integration/fallback/user-story-no-webgpu.test.ts` | 翻成 WebGL2 的正面断言（Task 5） | P5 |
 
 **P5 的四个用户故事文件（photo / video / camera-switch / media-failure）不需要改一个字。** 见 Task 5。
+
+> **本计划不建任何页面侧出口。** `demo/` 一个字节都不改 —— 那套 `demo/test-entry-hooks/*` / `window.__panoTest` 在 P3 换成浏览器模式时已经删掉了，P6 不把它长回来。**如果你发现自己正在写一个 hook 文件，那是走错路了**：浏览器模式下 `import` 就是全部。
 
 ---
 
@@ -959,7 +960,6 @@ later task sees a cleared buffer."
 **Files:**
 - Create: `src/renderer/webgl2/backend.ts`
 - Modify: `src/viewer/backend-factory.ts`
-- Create: `demo/test-entry-hooks/webgl2.ts`
 - Test: `test/integration/webgl2-smoke.test.ts`
 
 - [ ] **Step 1: 实现**
@@ -1345,30 +1345,35 @@ export async function createBackend (canvas: HTMLCanvasElement): Promise<Backend
 ```
 
 > **`probe()` 不用改。** 它已经在用 `describeCapabilities`，而 WebGL2 分支的 `maxTextureDimension` 钳位就在那个函数里（P3 Task 1）。`createBackend` 与 `probe` 因此对同一台机器给出同一个 `backend` —— 这正是「降级是可编程状态」的意思：应用可以在构造之前先问，且问到的就是将要发生的。
-- [ ] **Step 3: 页面侧出口**
+- [ ] **Step 3: 冒烟测试**
 
-**新的 hook 文件，不改 `demo/test-entry.ts` 的实现。** P3 把测试出口拆成了 `demo/test-entry-hooks/*.ts`，由 `import.meta.glob` 自动合并，就是为了让 P4 与 P6 各加各的而不互相编辑同一个文件：
-
-`demo/test-entry-hooks/webgl2.ts`：
+`test/integration/webgl2-smoke.test.ts`：
 
 ```ts
-/*
- * The WebGL2 backend's page-side test surface.
- *
- * A hook file rather than an edit to demo/test-entry.ts: that file merges
- * demo/test-entry-hooks/*.ts through import.meta.glob exactly so that each phase
- * adds its own surface without touching a file another phase owns.
- *
- * Task 4 appends gate C's two hooks to this same file and to the default export
- * below -- it is one file per phase, not one file per hook.
- */
-
+import { describe, expect, it } from 'vitest'
 import { WebGL2Backend } from '../../src/renderer/webgl2/backend'
 import { compileShader } from '../../src/renderer/webgl2/context'
 import type { DeviceLost, RenderableSource } from '../../src/renderer/backend'
 import type { CameraState } from '../../src/core/types'
 
-/** The pose every smoke case uses. Its values are irrelevant; its presence is not. */
+/*
+ * The WebGL2 backend's own smoke tests -- not the gates, which are about the
+ * shaders agreeing, and not the user stories, which are about what a user sees.
+ * These are about the backend as an object: does it get a context, does it
+ * refuse to construct when the shader will not compile, does it release the
+ * context it took, and does it survive a loss.
+ *
+ * Everything is imported directly. Browser mode runs this file inside the page,
+ * so there is no bridge, no page-side export, and no `window.__panoTest`: the
+ * backend under test and the test are in one module system.
+ *
+ * This file runs in the `integration` project, which has a real WebGPU adapter.
+ * That is fine and deliberate -- WebGL2 works there too, and running the
+ * backend's own tests next to the WebGPU ones keeps the fallback from being
+ * tested only in the environment where the primary path is absent.
+ */
+
+/** The pose every case uses. Its values are irrelevant; its presence is not. */
 const ORIGIN: CameraState = { povLatitude: 0, povLongitude: 0 }
 
 /** A 2x2 checkerboard as an image element: pixels known without a fixture file. */
@@ -1416,244 +1421,123 @@ function nonBlackFraction (pixels: readonly number[]): number {
   return lit / (pixels.length / 4)
 }
 
-async function webgl2Smoke () {
-  const canvas = document.createElement('canvas')
-  const backend = WebGL2Backend.create(canvas)
-  if (!backend) return { available: false }
-
-  backend.resize(64, 64, 1)
-  backend.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
-  backend.setSource(await checkerSource())
-  backend.render()
-
-  const pixels = readGl(canvas)
-  const capabilities = backend.capabilities
-  backend.dispose()
-
-  return {
-    available: true,
-    maxTextureDimension: capabilities.maxTextureDimension,
-    externalTextures: capabilities.externalTextures,
-    nonBlackFraction: nonBlackFraction(pixels)
-  }
-}
-
-/** Proves a compile failure throws at construction instead of yielding a dead backend. */
-function webgl2CompileFailure () {
-  const canvas = document.createElement('canvas')
-  const gl = canvas.getContext('webgl2')
-  if (!gl) return { available: false, message: '' }
-  try {
-    compileShader(gl, gl.FRAGMENT_SHADER, 'void main(){ this is not glsl }', 'fragment')
-    return { available: true, message: '' }
-  } catch (error) {
-    return { available: true, message: String(error) }
-  }
-}
-
-/** Creates and disposes N backends, counting how many failed to get a context. */
-function webgl2CreateDisposeLoop (count: number) {
-  let failures = 0
-  for (let i = 0; i < count; i++) {
+describe('WebGL2Backend', () => {
+  it('renders a non-empty frame', async () => {
     const canvas = document.createElement('canvas')
     const backend = WebGL2Backend.create(canvas)
-    if (!backend) { failures++; continue }
-    backend.dispose()
-  }
-  return { failures }
-}
+    expect(backend, 'WebGL2Backend.create returned null in a browser that has WebGL2').not.toBeNull()
 
-/**
- * Loses and restores a real context, end to end.
- *
- * The loss is driven by WEBGL_lose_context rather than by dispatching a
- * synthetic event, so the driver's own teardown happens. The synthetic dispatch
- * is used only to read `defaultPrevented`, which is the one thing a real loss
- * cannot report back.
- */
-async function webgl2ContextRoundTrip () {
-  const canvas = document.createElement('canvas')
-  document.body.appendChild(canvas)
-  const backend = WebGL2Backend.create(canvas)
-  if (!backend) return { available: false }
+    backend!.resize(64, 64, 1)
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
+    backend!.setSource(await checkerSource())
+    backend!.render()
 
-  const lost: DeviceLost[] = []
-  const unsubscribe = backend.onDeviceLost(l => lost.push(l))
+    const pixels = readGl(canvas)
+    const capabilities = backend!.capabilities
+    backend!.dispose()
 
-  const synthetic = new Event('webglcontextlost', { cancelable: true })
-  canvas.dispatchEvent(synthetic)
-
-  const restored = new Promise<void>(resolve => {
-    canvas.addEventListener('webglcontextrestored', () => resolve(), { once: true })
+    // Not `toBe(gl.MAX_TEXTURE_SIZE)`: the reported value goes through
+    // describeCapabilities, which clamps it into [2048, 16384] because a
+    // software adapter can report 0 and make every source look oversized.
+    expect(capabilities.maxTextureDimension).toBeGreaterThanOrEqual(2048)
+    expect(capabilities.externalTextures).toBe(false)
+    expect(nonBlackFraction(pixels)).toBeGreaterThan(0.5)
   })
 
-  backend.resize(32, 32, 1)
-  backend.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
-  backend.setSource(await checkerSource())
-  backend.render()
-  const before = nonBlackFraction(readGl(canvas))
-
-  const gl = canvas.getContext('webgl2')!
-  gl.getExtension('WEBGL_lose_context')!.loseContext()
-  await new Promise<void>(resolve => { setTimeout(resolve, 0) })
-  const lostCount = lost.length
-
-  gl.getExtension('WEBGL_lose_context')!.restoreContext()
-  await restored
-
-  // A second source object, because the first one's element was released -- which
-  // is the documented contract, and the reason a restore cannot redraw on its own.
-  backend.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
-  backend.setSource(await checkerSource())
-  backend.render()
-  const after = nonBlackFraction(readGl(canvas))
-
-  unsubscribe()
-  backend.dispose()
-  canvas.remove()
-
-  return {
-    available: true,
-    prevented: synthetic.defaultPrevented,
-    lostCount,
-    reason: lost[0]?.reason ?? '',
-    before,
-    after
-  }
-}
-
-export default {
-  webgl2Smoke,
-  webgl2CompileFailure,
-  webgl2CreateDisposeLoop,
-  webgl2ContextRoundTrip
-} satisfies Partial<PanoTestApi>
-```
-
-**`demo/test-entry.ts` 一个字节都不用改。** 加宽走 `declare global`，写在 hook 文件自己里面（P3 的意图：「a phase that adds a hook cannot forget to register it in a second place」）：
-
-```ts
-// Merges into the interface P3 opened.
-//
-// P3 declares `PanoTestApi` as a *global* interface rather than an exported one
-// precisely so that this works: global interfaces merge by name across files,
-// with no specifier to resolve and therefore nothing to get wrong. An exported
-// interface would instead need `declare module '../test-entry'` here, and a
-// relative specifier that silently augments nothing is the failure mode that
-// produces `Property 'webgl2Smoke' does not exist on type 'PanoTestApi'` at
-// every call site while this file still compiles.
-declare global {
-  interface PanoTestApi {
-    /** Smoke: create a WebGL2 backend, draw the checkerboard, read it back. */
-    webgl2Smoke (): Promise<Webgl2SmokeResult>
-    /** Smoke: compiling a deliberately broken shader must throw. */
-    webgl2CompileFailure (): { available: boolean, message: string }
-    /** Smoke: N create/dispose cycles must not exhaust the context limit. */
-    webgl2CreateDisposeLoop (count: number): { failures: number }
-    /** Smoke: lose and restore a real context. */
-    webgl2ContextRoundTrip (): Promise<Webgl2RoundTripResult>
-  }
-}
-
-/** What webgl2Smoke reports. Exported because the tests assert on its shape. */
-export interface Webgl2SmokeResult {
-  readonly available: boolean
-  readonly maxTextureDimension?: number
-  readonly externalTextures?: boolean
-  readonly nonBlackFraction?: number
-}
-
-export interface Webgl2RoundTripResult {
-  readonly available: boolean
-  readonly prevented?: boolean
-  readonly lostCount?: number
-  readonly reason?: string
-  readonly before?: number
-  readonly after?: number
-}
-```
-
-> **增补是程序级的，但增补模块本身必须先进入程序。** 用 tsc 5.9 实测过两件事：模块增补一旦生效，对**整个程序**的文件都生效（另一个文件完全不 import 这个 hook，也能看到 `webgl2Smoke`）；反过来，如果没有任何文件把它拉进程序，增补就不存在，报错指向的是**测试文件**（`Property 'webgl2Smoke' does not exist on type 'PanoTestApi'`），看起来像测试写错了，实际是声明没进程序。
->
-> 而集成测试的 program（`test/integration/tsconfig.json`，`include` 只有集成测试与 `demo/**`）里，**`demo/test-entry.ts` 进来了、`demo/test-entry-hooks/*` 没有** —— hook 模块只被 `import.meta.glob` 在运行时加载，那是 Vite 的机制、对类型系统不可见。所以**必须由 `test/` 侧主动把 hook 模块拉进来**，否则 `window.__panoTest.<hook>()` 全系列调用都编译不过。
->
-> P6 的做法：**每个用到某组 hook 的测试侧文件写一行 `import type {} from '<hook 模块>'`**。type-only import 足以应用增补（已实测），没有绑定所以不触发 unused 检查，且被 `verbatimModuleSyntax` 消除、不产生运行时依赖 —— 它纯粹是把声明拉进程序，放在调用点旁边是为了自我说明。
-
-`available: false` 的三条字段用可选而不是联合类型：测试里那一句 `expect(r.available).toBe(true)` 已经把「可用」这条路钉死了，为它再引入一个判别联合只会让每条断言都多一层收窄。
-
-> **`webgl2Smoke` 返回的 `maxTextureDimension` 是能力上报值，不是 `gl.MAX_TEXTURE_SIZE`。** 两者可能不等：`describeCapabilities` 把它钳在 `[2048, 16384]`。**测试断言的是能力上报值** —— 那是调用方和 `probe()` 看到的东西。
-
-- [ ] **Step 4: 冒烟测试**
-
-`test/integration/webgl2-smoke.test.ts`：
-
-```ts
-import { test, expect } from './support/fixtures'
-// For its module augmentation of PanoTestApi -- see Task 3 Step 3. The call sits
-// inside page.evaluate, but the closure is type-checked here, so the declaration
-// has to be in this program.
-import type {} from '../../demo/test-entry-hooks/webgl2'
-
-test('creates a WebGL2 backend and renders a non-empty frame', async ({ gpuPage }) => {
-  const r = await gpuPage.evaluate(async () => {
-    const t = window.__panoTest
-    return t.webgl2Smoke()
-  })
-  expect(r.available).toBe(true)
-  // Not `toBe(gl.MAX_TEXTURE_SIZE)`: the reported value goes through
-  // describeCapabilities, which clamps it into [2048, 16384] because a software
-  // adapter can report 0 and make every source look oversized.
-  expect(r.maxTextureDimension).toBeGreaterThanOrEqual(2048)
-  expect(r.externalTextures).toBe(false)
-  expect(r.nonBlackFraction).toBeGreaterThan(0.5)
-})
-
-test('a shader that will not compile throws rather than yielding a dead backend', async ({ gpuPage }) => {
-  // The legacy path returned null here and the viewer reported success.
-  const r = await gpuPage.evaluate(async () => {
-    const t = window.__panoTest
-    return t.webgl2CompileFailure()
-  })
-  expect(r.message).toMatch(/failed to compile/i)
-})
-
-test('repeated create/dispose does not exhaust the context limit', async ({ gpuPage }) => {
-  // Browsers cap live WebGL contexts (commonly at 16). WEBGL_lose_context is
-  // what releases one immediately; without it, the 17th viewer silently fails.
-  const r = await gpuPage.evaluate(async () => {
-    const t = window.__panoTest
-    return t.webgl2CreateDisposeLoop(20)
-  })
-  expect(r.failures).toBe(0)
-})
-
-test('a lost context is reported, and a restored one draws again', async ({ gpuPage }) => {
-  const r = await gpuPage.evaluate(async () => {
-    const t = window.__panoTest
-    return t.webgl2ContextRoundTrip()
+  it('throws rather than yielding a dead backend when the shader will not compile', () => {
+    // The legacy path returned null here and the viewer reported success. A
+    // viewer that cannot render is not a viewer, so the failure has to be loud
+    // and it has to happen where the shader is compiled.
+    const canvas = document.createElement('canvas')
+    const gl = canvas.getContext('webgl2')!
+    expect(() => {
+      compileShader(gl, gl.FRAGMENT_SHADER, 'void main(){ this is not glsl }', 'fragment')
+    }).toThrow(/failed to compile/i)
   })
 
-  // preventDefault() is what makes restoration possible at all. Without it the
-  // browser never fires webglcontextrestored and the canvas is dead with
-  // nothing reported.
-  expect(r.prevented).toBe(true)
-  expect(r.reason).toBe('context-lost')
-  // The synthetic dispatch, then the real loss: two reports, not one.
-  expect(r.lostCount).toBe(2)
-  expect(r.before).toBeGreaterThan(0.5)
-  expect(r.after).toBeGreaterThan(0.5)
+  it('repeated create/dispose does not exhaust the context limit', () => {
+    // Browsers cap live WebGL contexts (commonly at 16). WEBGL_lose_context is
+    // what releases one immediately; without it, the 17th viewer silently fails
+    // and the only symptom is a viewer that draws nothing.
+    const failures: number[] = []
+    for (let i = 0; i < 20; i++) {
+      const canvas = document.createElement('canvas')
+      const backend = WebGL2Backend.create(canvas)
+      if (backend === null) { failures.push(i); continue }
+      backend.dispose()
+    }
+    expect(failures).toEqual([])
+  })
+
+  it('a lost context is reported, and a restored one draws again', async () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const backend = WebGL2Backend.create(canvas)
+    expect(backend).not.toBeNull()
+
+    const lost: DeviceLost[] = []
+    const unsubscribe = backend!.onDeviceLost(l => lost.push(l))
+
+    const synthetic = new Event('webglcontextlost', { cancelable: true })
+    canvas.dispatchEvent(synthetic)
+
+    const restored = new Promise<void>(resolve => {
+      canvas.addEventListener('webglcontextrestored', () => resolve(), { once: true })
+    })
+
+    backend!.resize(32, 32, 1)
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
+    backend!.setSource(await checkerSource())
+    backend!.render()
+    const before = nonBlackFraction(readGl(canvas))
+
+    const gl = canvas.getContext('webgl2')!
+    gl.getExtension('WEBGL_lose_context')!.loseContext()
+    // One macrotask: the browser fires webglcontextlost asynchronously after
+    // loseContext(), so reading `lost` synchronously would read an empty array
+    // that looks like "the event never fired".
+    await new Promise<void>(resolve => { setTimeout(resolve, 0) })
+    const lostCount = lost.length
+
+    gl.getExtension('WEBGL_lose_context')!.restoreContext()
+    await restored
+
+    // A second source object, because the first one's element was released --
+    // which is the documented setSource contract, and the reason a restore
+    // cannot redraw on its own. See the non-goals.
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
+    backend!.setSource(await checkerSource())
+    backend!.render()
+    const after = nonBlackFraction(readGl(canvas))
+
+    unsubscribe()
+    backend!.dispose()
+    canvas.remove()
+
+    // preventDefault() is what makes restoration possible at all. Without it the
+    // browser never fires webglcontextrestored and the canvas is dead with
+    // nothing reported.
+    expect(synthetic.defaultPrevented).toBe(true)
+    expect(lost[0]?.reason).toBe('context-lost')
+    // The synthetic dispatch, then the real loss: two reports, not one.
+    expect(lostCount).toBe(2)
+    expect(before).toBeGreaterThan(0.5)
+    expect(after).toBeGreaterThan(0.5)
+  })
 })
 ```
 
-- [ ] **Step 5: 跑测试**
+> **`WebGL2Backend.create` 是同步的，`WebGPUBackend.create` 是 `async` 的。** 不是笔误：WebGPU 的 `requestAdapter()` / `requestDevice()` 是异步 API，WebGL2 的 `getContext('webgl2')` 不是。两个 `Backend` 实现都不因此在接口上多一个 `await` —— `createBackend()` 是 `async` 的，它在里面 `await` 那个异步的、直接调那个同步的。测试写起来是 `const backend = WebGL2Backend.create(canvas)`，不要加 `await`（加了也不会错，但会让人以为它是异步的）。
 
-Run: `npm run test:integration -- webgl2-smoke`
+- [ ] **Step 4: 跑测试**
+
+Run: `npx vitest run --project integration webgl2-smoke`
 Expected: 4 个测试 PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/renderer/webgl2/backend.ts src/viewer/backend-factory.ts test/integration/webgl2-smoke.test.ts demo/
+git add src/renderer/webgl2/ test/integration/webgl2-smoke.test.ts src/viewer/backend-factory.ts
 git commit -m "feat(renderer): WebGL2 backend as the fallback path
 
 Named uniforms rather than a shared UBO: the offset rules are not the same
@@ -1673,40 +1557,40 @@ did."
 
 **Files:**
 - Create: `test/integration/support/cross-backend.ts`
-- Modify: `demo/test-entry-hooks/webgl2.ts`（追加门禁 C 的两条）
-- Create: `demo/test-entry-hooks/cross-backend.ts`
 - Test: `test/integration/gate-c-cross-backend.test.ts`
 
 **门禁 C 的问题**：两份手写的着色器，四个投影，**它们会不会悄悄漂开？**
 
 **怎么比：两个离屏渲染器，同一张源图，同一批相机状态。** 不走两个真实的 `Backend`（那个在 Task 5 的用户故事里验），因为门禁 C 要证的是**两份着色器源码**一致，而经画布走一遍会引入 present 与读回的时序，还会让两边的输入路径不同（WebGPU 的 canvas 纹理没有 `readPixels` 等价物）。
-- [ ] **Step 1: 页面侧出口**
+- [ ] **Step 1: 门禁 C 的工具**
 
-**两个渲染器接受同样的参数、返回同样形状的结果** —— 这是门禁 C 能比的前提。落成**两个 hook 文件**，放进 P3 的 `demo/test-entry-hooks/`（`import.meta.glob` 自动合并，`demo/test-entry.ts` 的实现一个字节都不用改）。
-
-先在 Task 3 建好的 `demo/test-entry-hooks/webgl2.ts` 末尾追加下面这两个函数，并把它们并进那个文件已经导出的 default 对象（`export default { webgl2Smoke, ..., gateSourcePng, renderOffscreenGLSL }`）。**同一个文件，不是新文件** —— P3 的设计是一期一个 hook 文件。
+`test/integration/support/cross-backend.ts`。**一个文件装三样东西**：共用的源图、GLSL 离屏渲染、CPU 裁判。浏览器模式让它们可以放在一起 —— 都在页面里跑，`import` 一次就够了，不需要分成「页面侧出口」和「测试侧工具」两半。
 
 ```ts
 /*
- * The WebGL2 half of gate C, plus the source all three paths share.
+ * Gate C's tooling: the source all three paths sample, the GLSL half, and the
+ * CPU arbiter.
  *
- * A hook file rather than an edit to demo/test-entry.ts: that file merges
- * demo/test-entry-hooks/*.ts through import.meta.glob exactly so that each
- * phase can add its own surface without touching a file another phase owns.
+ * Gate C compares TWO HAND-TRANSCRIBED SHADERS, so the thing under test is the
+ * shader source, not the backend object. Both halves therefore render offscreen
+ * from the same decoded source with the same request: going through two real
+ * `Backend`s would add the present/readback timing and give the two halves
+ * different input paths (a WebGPU swapchain texture has no readPixels
+ * equivalent), and then the comparison would be measuring the harnesses.
  *
- * `renderOffscreenGLSL` is deliberately the same request/result shape as P3's
- * `renderOffscreen` in ./renderer.ts. Gate C compares the two, and two harnesses
- * with different inputs would be comparing the harnesses.
+ * The WebGPU half is P3's `renderOffscreen`, not a copy of it. The claim is
+ * about the SHIPPED shader, so that side has to go through the shipped path.
  */
 
+import { renderOffscreen, maxChannelDiff } from './gpu'
+import type { RenderRequest, RenderResult } from './gpu'
 import { mat4 } from 'gl-matrix'
-import { buildCameraTransform } from '../../src/core/matrix'
-import { cameraProjectionCode, textureProjectionCode } from '../../src/core/constants'
-import { compileShader, linkProgram } from '../../src/renderer/webgl2/context'
-import { PANORAMA_GLSL_FRAGMENT, PANORAMA_GLSL_VERTEX } from '../../src/renderer/webgl2/shaders'
-import type { RenderRequest, RenderResult } from './renderer'
-
-// ...these join the imports already at the top of webgl2.ts from Task 3...
+import { buildCameraTransform } from '../../../src/core/matrix'
+import { cameraProjectionCode, textureProjectionCode } from '../../../src/core/constants'
+import { compileShader, linkProgram } from '../../../src/renderer/webgl2/context'
+import { PANORAMA_GLSL_FRAGMENT, PANORAMA_GLSL_VERTEX } from '../../../src/renderer/webgl2/shaders'
+import { ndcToSurface, project } from '../../../src/core/reference'
+import type { CameraState, Projection } from '../../../src/core/types'
 
 /**
  * Gate C renders at 128x128 and that number is not free: WebGPU's
@@ -1714,18 +1598,18 @@ import type { RenderRequest, RenderResult } from './renderer'
  * 128 * 4 = 512. Change the size and the WebGPU half fails with a validation
  * error that says nothing about the projection formulas.
  */
-const GATE_SIZE = 128
+export const GATE_C_SIZE = 128
 
 /**
- * The source every path in gate C samples, as a PNG data URL.
+ * The source every path in gate C samples.
  *
  * One definition for all three: the WebGPU renderer, the WebGL2 renderer and the
- * CPU reference all take these exact bytes. Two sources with "the same" pattern
+ * CPU reference all take these exact pixels. Two sources with "the same" pattern
  * is how a comparison ends up measuring the difference between two generators.
  *
- * A data URL rather than raw pixels because that is what P3's renderOffscreen
- * takes, and it builds a real HTMLImageElement from it -- so the frame reaches
- * copyExternalImageToTexture the same way a viewer's does.
+ * An ImageBitmap because that is what P3's RenderRequest carries -- and because
+ * it is a valid TexImageSource, so the GLSL half uploads it with the same
+ * `texImage2D` a viewer's <img> goes through.
  *
  * Periodic in u and v on purpose. A ramp running 0..255 across the width has a
  * discontinuity at the seam, and a one-texel filtering difference there shows up
@@ -1734,18 +1618,18 @@ const GATE_SIZE = 128
  * difference, while the 8-cycle term keeps the image non-constant so a rotation
  * or a scale error cannot hide inside a flat region.
  */
-function gateSourcePng (): string {
+export async function gateSource (): Promise<{ bitmap: ImageBitmap, size: number }> {
   const canvas = document.createElement('canvas')
-  canvas.width = GATE_SIZE
-  canvas.height = GATE_SIZE
+  canvas.width = GATE_C_SIZE
+  canvas.height = GATE_C_SIZE
   const ctx = canvas.getContext('2d')!
-  const image = ctx.createImageData(GATE_SIZE, GATE_SIZE)
+  const image = ctx.createImageData(GATE_C_SIZE, GATE_C_SIZE)
 
-  for (let y = 0; y < GATE_SIZE; y++) {
-    for (let x = 0; x < GATE_SIZE; x++) {
-      const u = (x + 0.5) / GATE_SIZE
-      const v = (y + 0.5) / GATE_SIZE
-      const i = (y * GATE_SIZE + x) * 4
+  for (let y = 0; y < GATE_C_SIZE; y++) {
+    for (let x = 0; x < GATE_C_SIZE; x++) {
+      const u = (x + 0.5) / GATE_C_SIZE
+      const v = (y + 0.5) / GATE_C_SIZE
+      const i = (y * GATE_C_SIZE + x) * 4
       image.data[i] = Math.round(128 + 127 * Math.cos(2 * Math.PI * u))
       image.data[i + 1] = Math.round(128 + 127 * Math.cos(2 * Math.PI * v))
       image.data[i + 2] = Math.round(
@@ -1756,7 +1640,11 @@ function gateSourcePng (): string {
   }
 
   ctx.putImageData(image, 0, 0)
-  return canvas.toDataURL('image/png')
+  // imageOrientation: 'none' -- the v flip lives in the shader. `createImageBitmap`
+  // defaults to 'from-image', which would apply the EXIF orientation and, for a
+  // canvas source, land on the opposite convention from the one the GLSL half
+  // sets with UNPACK_FLIP_Y_WEBGL = false.
+  return { bitmap: await createImageBitmap(canvas, { imageOrientation: 'none' }), size: GATE_C_SIZE }
 }
 
 /**
@@ -1764,11 +1652,11 @@ function gateSourcePng (): string {
  *
  * Same product path as the WebGPU half: the matrix comes from
  * buildCameraTransform with this backend's depth convention, the shader is the
- * shipped one, the source is a real image element. Only the swapchain is
+ * shipped one, the source is a real decoded image. Only the swapchain is
  * skipped.
  */
-async function renderOffscreenGLSL (request: RenderRequest): Promise<RenderResult> {
-  const { width, height, camera, projection, sourcePng } = request
+export async function renderOffscreenGLSL (request: RenderRequest): Promise<RenderResult> {
+  const { width, height, camera, projection, source } = request
 
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -1784,12 +1672,15 @@ async function renderOffscreenGLSL (request: RenderRequest): Promise<RenderResul
   )
   gl.useProgram(program)
 
+  // Computed from the request, NOT read from a Backend: this harness has to be
+  // able to disagree with the backend, or it cannot catch the backend being
+  // wrong. See the note below.
+  const clip = mat4.create()
+  const invClip = mat4.create()
   // 'minus-one-to-one', where the WebGPU half passes 'zero-to-one'. This one
   // argument is the whole depth-convention difference between the backends; if
   // both halves were given the same one here, gate C would fail and the failure
   // would have nothing to do with the projection formulas.
-  const clip = mat4.create()
-  const invClip = mat4.create()
   buildCameraTransform(camera, projection, 'minus-one-to-one', clip)
   mat4.invert(invClip, clip)
 
@@ -1801,15 +1692,11 @@ async function renderOffscreenGLSL (request: RenderRequest): Promise<RenderResul
   gl.uniform1f(gl.getUniformLocation(program, 'u_zoom'), projection.kind === 'linear' ? 1 : projection.zoom)
   gl.uniform1i(gl.getUniformLocation(program, 'u_tex'), 0)
 
-  const image = new Image()
-  image.src = sourcePng
-  await image.decode()
-
   const texture = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, texture)
   // False: the v flip lives in the shader. Doing it here too would cancel it.
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
@@ -1835,53 +1722,16 @@ async function renderOffscreenGLSL (request: RenderRequest): Promise<RenderResul
   gl.deleteTexture(texture)
   gl.deleteProgram(program)
 
-  return { width, height, rgba: Array.from(topDown) }
+  return { width, height, rgba: topDown }
 }
 
-// (tasks 3's four hooks stay in this same default export)
-export default {
-  gateSourcePng,
-  renderOffscreenGLSL
-} satisfies Partial<PanoTestApi>
-```
-
-`demo/test-entry-hooks/cross-backend.ts` —— CPU 裁判，float64，**不碰任何矩阵**：
-
-```ts
-/*
- * The CPU reference, rendered as an image.
- *
- * The arbiter for gate C. When the two backends disagree, running all three and
- * finding the odd one out is what turns "they differ" into "this one is wrong".
- *
- * It inverts ndc to a surface point itself (ndcToSurface) instead of inverting
- * the float32 camera matrix the shaders use. An arbiter that shares the
- * shaders' precision and their matrix is not an independent opinion -- it would
- * agree with a wrong matrix by construction.
- *
- * float64 throughout, and its own bilinear fetch. The GPU's bilinear weights are
- * quantized to a handful of sub-texel bits, which is what the tolerance in the
- * test accounts for; the sampling model has to be the same (LINEAR +
- * CLAMP_TO_EDGE) or the comparison measures the sampler.
- */
-
-import { ndcToSurface, project } from '../../src/core/reference'
-import type { RenderRequest, RenderResult } from './renderer'
-
-async function decode (png: string): Promise<{ data: Uint8ClampedArray, size: number }> {
-  const image = new Image()
-  image.src = png
-  await image.decode()
-
-  const canvas = document.createElement('canvas')
-  canvas.width = image.naturalWidth
-  canvas.height = image.naturalHeight
-  const ctx = canvas.getContext('2d')!
-  ctx.drawImage(image, 0, 0)
-  return { data: ctx.getImageData(0, 0, canvas.width, canvas.height).data, size: canvas.width }
-}
-
-function sample (data: Uint8ClampedArray, size: number, u: number, v: number): [number, number, number] {
+/** Bilinear sample model matching the GPU's: LINEAR with CLAMP_TO_EDGE. */
+function sample (
+  data: Uint8ClampedArray,
+  size: number,
+  u: number,
+  v: number
+): [number, number, number] {
   const x = Math.min(1, Math.max(0, u)) * size - 0.5
   const y = Math.min(1, Math.max(0, v)) * size - 0.5
   const x0 = Math.floor(x)
@@ -1905,20 +1755,34 @@ function sample (data: Uint8ClampedArray, size: number, u: number, v: number): [
 }
 
 /**
- * Renders one frame on the CPU.
+ * Renders one frame on the CPU, in float64.
+ *
+ * The arbiter. When the two backends disagree, running all three and finding the
+ * odd one out is what turns "they differ" into "this one is wrong".
+ *
+ * It inverts ndc to a surface point itself (ndcToSurface) instead of inverting
+ * the float32 camera matrix the shaders use. An arbiter that shares the shaders'
+ * precision and their matrix is not an independent opinion -- it would agree
+ * with a wrong matrix by construction.
  *
  * Row 0 is the top row, matching both GPU harnesses, and the source is the same
- * PNG: all three paths must differ only in how they compute the projection.
+ * pixels: all three paths must differ only in how they compute the projection.
  */
-async function referenceImage (request: RenderRequest): Promise<RenderResult> {
-  const { width, height, camera, projection, sourcePng } = request
-  const source = await decode(sourcePng)
+export async function referenceImage (request: RenderRequest): Promise<RenderResult> {
+  const { width, height, camera, projection, source } = request
+
+  const sourceCanvas = document.createElement('canvas')
+  sourceCanvas.width = GATE_C_SIZE
+  sourceCanvas.height = GATE_C_SIZE
+  const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true })!
+  ctx.drawImage(source, 0, 0)
+  const sourceData = ctx.getImageData(0, 0, GATE_C_SIZE, GATE_C_SIZE).data
 
   // Only the linear projection is scale-invariant, and for it the extent is
   // unread. The other three carry theirs in the projection itself -- which is
   // what let the geometry subsystem disappear.
   const extent = projection.kind === 'linear' ? ([2, 2] as const) : projection.extent
-  const rgba: number[] = []
+  const rgba = new Uint8Array(width * height * 4)
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -1928,60 +1792,18 @@ async function referenceImage (request: RenderRequest): Promise<RenderResult> {
 
       const [sx, sy, sz] = ndcToSurface(ndcX, ndcY, extent)
       const { u, v } = project(sx, sy, sz, camera, projection)
-      const [r, g, b] = sample(source.data, source.size, u, v)
+      const [r, g, b] = sample(sourceData, GATE_C_SIZE, u, v)
 
-      rgba.push(Math.round(r), Math.round(g), Math.round(b), 255)
+      const i = (y * width + x) * 4
+      rgba[i] = Math.round(r)
+      rgba[i + 1] = Math.round(g)
+      rgba[i + 2] = Math.round(b)
+      rgba[i + 3] = 255
     }
   }
 
   return { width, height, rgba }
 }
-
-export default { referenceImage } satisfies Partial<PanoTestApi>
-```
-
-同样用 `declare global` 加宽（理由见 Task 3 Step 3），仍然不改 `demo/test-entry.ts`：
-
-```ts
-declare global {
-  interface PanoTestApi {
-    /** Gate C: the GLSL half. Same request and result shape as renderOffscreen. */
-    renderOffscreenGLSL (request: RenderRequest): Promise<RenderResult>
-    /** Gate C: the CPU arbiter. Same source, same shape. */
-    referenceImage (request: RenderRequest): Promise<RenderResult>
-    /** Gate C: the source all three paths sample, as a PNG data URL. */
-    gateSourcePng (): string
-  }
-}
-```
-
-**测试里的取用方式是 `window.__panoTest.renderOffscreenGLSL(...)`，不是 `(window as unknown as { __panoTest: any })`。** P3 在 `demo/test-entry-hooks/renderer.ts` 上写着「不要在这里写 `as unknown as` 再手抄一遍签名 —— 抄一遍就是第二真源，而 `PanoTestApi` 存在的全部意义就是让『页面提供了什么』和『测试拿了什么』由同一个声明约束」。P6 全文照此办理。
-
-> **`renderOffscreenGLSL` 自己 `getUniformLocation`，不经 `UNIFORM_NAMES`。** 这是有意的：门禁 C 要证的是两份**着色器源码**一致，而这个 harness 的作用是「按名字把值喂进去」。它如果复用 Task 3 的定位逻辑，那么 Task 3 少写一个 uniform 时门禁 C 会跟着一起错。少写一个会被 Task 1 的声明清单测试拦下 —— 两道防线各管各的。
-
-- [ ] **Step 2: Playwright 侧工具**
-
-`test/integration/support/cross-backend.ts`。**WebGPU 那一半直接用 P3 的 `renderOffscreen`**（`./gpu.ts`），不另写一个 —— 门禁 C 的主张是关于**出厂的那份着色器**的，所以 WebGPU 侧走的必须是出厂路径，而不是一个为了跟这个测试对上而写的 harness。差值也复用 P3 的 `maxChannelDiff`：「最坏通道差」在这套测试里只有一个定义，两个 gate 各实现一遍，就会在都绿的情况下慢慢分叉：
-
-```ts
-import type { Page } from '@playwright/test'
-import { renderOffscreen, maxChannelDiff } from './gpu'
-import type { RenderRequest } from '../../../demo/test-entry-hooks/renderer'
-// Both are here for their module augmentation of PanoTestApi, not for a binding:
-// this program's include names demo/test-entry.ts (which declares the Window
-// member) but not the hook modules, and import.meta.glob is invisible to the type
-// system -- so these two lines are what put `gateSourcePng`,
-// `renderOffscreenGLSL` and `referenceImage` on `window.__panoTest`.
-import type {} from '../../../demo/test-entry-hooks/webgl2'
-import type {} from '../../../demo/test-entry-hooks/cross-backend'
-import type { CameraState, Projection } from '../../../src/core/types'
-
-/**
- * Gate C renders at 128x128. Not free: see gateSourcePng in the page hook --
- * WebGPU's bytesPerRow rule is why, and a mismatch between the two constants is
- * a confusing failure rather than an obvious one.
- */
-export const GATE_C_SIZE = 128
 
 /** The worst per-channel difference between two rendered images. */
 export interface GateCDiff {
@@ -1996,13 +1818,11 @@ export interface GateCDiff {
 /**
  * Where the worst difference is, and both colours there.
  *
- * The worst VALUE comes from P3's maxChannelDiff, so that "worst channel
- * difference" means one thing across the whole suite; this only locates it,
- * which maxChannelDiff does not report. The location is computed here rather
- * than in the page because 128*128*4 numbers each way is a lot of CDP traffic
- * for one integer and one pixel.
+ * The worst VALUE comes from maxChannelDiff, so that "worst channel difference"
+ * means one thing across the whole suite; this only locates it, which
+ * maxChannelDiff does not report.
  */
-function locate (a: readonly number[], b: readonly number[], width: number): Omit<GateCDiff, 'max'> {
+function locate (a: ArrayLike<number>, b: ArrayLike<number>, width: number): Omit<GateCDiff, 'max'> {
   let best = 0
   let at = 0
   for (let i = 0; i < a.length; i++) {
@@ -2013,27 +1833,31 @@ function locate (a: readonly number[], b: readonly number[], width: number): Omi
   return {
     x: pixel % width,
     y: Math.floor(pixel / width),
-    a: a.slice(pixel * 4, pixel * 4 + 4),
-    b: b.slice(pixel * 4, pixel * 4 + 4)
+    a: Array.from({ length: 4 }, (_, c) => a[pixel * 4 + c]!),
+    b: Array.from({ length: 4 }, (_, c) => b[pixel * 4 + c]!)
   }
 }
 
 /** The full diagnosis for one pair of images. */
-function diagnose (a: readonly number[], b: readonly number[], width: number): GateCDiff {
+function diagnose (a: ArrayLike<number>, b: ArrayLike<number>, width: number): GateCDiff {
   return { max: maxChannelDiff(a, b), ...locate(a, b, width) }
 }
 
-/** The request all three paths are given. Identical, including the source bytes. */
-async function gateRequest (
-  page: Page,
-  camera: CameraState,
-  projection: Projection
-): Promise<RenderRequest> {
-  // One source, generated once per call and handed to all three paths. Two
-  // sources with "the same" pattern is how a comparison ends up measuring the
-  // difference between two generators.
-  const sourcePng = await page.evaluate(() => window.__panoTest.gateSourcePng())
-  return { width: GATE_C_SIZE, height: GATE_C_SIZE, camera, projection, sourcePng }
+/** The request all three paths are given. Identical, including the source pixels. */
+export async function gateRequest (camera: CameraState, projection: Projection): Promise<RenderRequest> {
+  // One source per call, handed to all three paths. Two sources with "the same"
+  // pattern is how a comparison ends up measuring the difference between two
+  // generators.
+  const { bitmap, size } = await gateSource()
+  return {
+    width: GATE_C_SIZE,
+    height: GATE_C_SIZE,
+    camera,
+    projection,
+    source: bitmap,
+    sourceWidth: size,
+    sourceHeight: size
+  }
 }
 
 /**
@@ -2041,19 +1865,13 @@ async function gateRequest (
  * difference between them.
  */
 export async function renderBothBackends (
-  page: Page,
   camera: CameraState,
   projection: Projection
 ): Promise<GateCDiff> {
-  const request = await gateRequest(page, camera, projection)
-
-  // P3's helper for the shipped path, a direct call for the new one.
-  const webgpu = await renderOffscreen(page, request)
-  const webgl2 = await page.evaluate(
-    (r) => window.__panoTest.renderOffscreenGLSL(r),
-    request
-  )
-
+  const request = await gateRequest(camera, projection)
+  const webgpu = await renderOffscreen(request)
+  const webgl2 = await renderOffscreenGLSL(request)
+  request.source.close()
   return diagnose(webgpu.rgba, webgl2.rgba, GATE_C_SIZE)
 }
 
@@ -2066,21 +1884,14 @@ export async function renderBothBackends (
  * mode the A/B comparison is blind to by construction.
  */
 export async function compareWithReference (
-  page: Page,
   camera: CameraState,
   projection: Projection
 ): Promise<{ webgpu: number, webgl2: number }> {
-  const request = await gateRequest(page, camera, projection)
-
-  const reference = await page.evaluate(
-    (r) => window.__panoTest.referenceImage(r),
-    request
-  )
-  const webgpu = await renderOffscreen(page, request)
-  const webgl2 = await page.evaluate(
-    (r) => window.__panoTest.renderOffscreenGLSL(r),
-    request
-  )
+  const request = await gateRequest(camera, projection)
+  const reference = await referenceImage(request)
+  const webgpu = await renderOffscreen(request)
+  const webgl2 = await renderOffscreenGLSL(request)
+  request.source.close()
 
   return {
     webgpu: maxChannelDiff(reference.rgba, webgpu.rgba),
@@ -2089,14 +1900,16 @@ export async function compareWithReference (
 }
 ```
 
-> `GATE_C_SIZE` 在页面里是 `GATE_SIZE` 那个常量。**两处必须相等**：`locate` 用它把下标还原成坐标，不等时坐标是错的而差值是对的 —— 那会让人照着错坐标去查一个正确的渲染。
+> **`renderOffscreenGLSL` 自己 `getUniformLocation`，不经 `UNIFORM_NAMES`。** 这是有意的：门禁 C 要证的是两份**着色器源码**一致，而这个 harness 的作用是「按名字把值喂进去」。它如果复用 Task 2 的定位逻辑，那么那边少写一个 uniform 时门禁 C 会跟着一起错。少写一个会被 Task 1 的声明清单测试拦下 —— 两道防线各管各的。
 
-- [ ] **Step 3: 写测试**
+> **`request.source.close()` 在每个用例末尾。** `ImageBitmap` 持有的显存不会被 GC 及时回收，20 个用例各漏一张 128×128 的位图不致命，但门禁 C 是要长期增长的（每加一个相机状态就多一张），所以关掉它是纪律而不是优化。
+
+- [ ] **Step 2: 写测试**
 
 `test/integration/gate-c-cross-backend.test.ts`：
 
 ```ts
-import { test, expect } from './support/fixtures'
+import { describe, expect, it } from 'vitest'
 import { renderBothBackends, compareWithReference } from './support/cross-backend'
 import type { CameraState, Projection } from '../../src/core/types'
 
@@ -2114,6 +1927,11 @@ import type { CameraState, Projection } from '../../src/core/types'
  *
  * The CPU reference in src/core/reference.ts is the arbiter when they disagree:
  * run all three, and the odd one out is the wrong one.
+ *
+ * `it` rather than `it.each` for the state matrix, because a parameterised test
+ * name is built from a string and these names are built from the projection kind
+ * and the state index -- the same information, typed, and readable in the
+ * failure output.
  */
 
 type Kind = Projection['kind']
@@ -2153,11 +1971,11 @@ const STATES: readonly State[] = [
   { povLatitude: 10, povLongitude: 300, fov: 90, zoom: 0.5 }
 ]
 
-test.describe('gate C: WebGPU vs WebGL2', () => {
+describe('gate C: WebGPU vs WebGL2', () => {
   for (const kind of CAMERAS) {
     for (const [index, s] of STATES.entries()) {
-      test(`${kind} / state ${index}`, async ({ gpuPage }) => {
-        const diff = await renderBothBackends(gpuPage, state(s), projectionFor(kind, s))
+      it(`${kind} / state ${index}`, async () => {
+        const diff = await renderBothBackends(state(s), projectionFor(kind, s))
 
         // The message carries the worst pixel and both colours, so a failure
         // here is a diagnosis rather than a number.
@@ -2170,28 +1988,29 @@ test.describe('gate C: WebGPU vs WebGL2', () => {
     }
   }
 
-  test('the CPU reference agrees with both, so a disagreement has an arbiter', async ({ gpuPage }) => {
+  it('the CPU reference agrees with both, so a disagreement has an arbiter', async () => {
     // If this test ever fails while the others pass, the two backends are
     // consistently wrong together -- which is the failure mode gate C cannot see
     // on its own.
-    const s = STATES[1]!
-    const r = await compareWithReference(gpuPage, state(s), projectionFor('linear', s))
-
+    //
     // The CPU path is float64 with its own bilinear fetch and the shaders are
     // float32 with the hardware's; hardware bilinear weights are quantized to a
     // handful of sub-texel bits, which is most of the headroom here.
+    const s = STATES[1]!
+    const r = await compareWithReference(state(s), projectionFor('linear', s))
+
     expect(r.webgpu).toBeLessThanOrEqual(3)
     expect(r.webgl2).toBeLessThanOrEqual(3)
   })
 
-  test('the poles are the documented exception', async ({ gpuPage }) => {
+  it('the poles are the documented exception', async () => {
     // Near latitude +/-90 the equirectangular mapping compresses the entire
     // longitude range into a few pixels, so a tiny difference in the computation
     // of atan lands many texels apart. The tolerance is relaxed there on
     // purpose; this test pins that it is still bounded rather than unbounded.
     for (const kind of CAMERAS) {
       const s: State = { povLatitude: 89.5, povLongitude: 0, fov: 75, zoom: 1 }
-      const diff = await renderBothBackends(gpuPage, state(s), projectionFor(kind, s))
+      const diff = await renderBothBackends(state(s), projectionFor(kind, s))
 
       // Not equal, but not garbage: a broken implementation gives a uniform
       // difference across the whole frame, not a bounded one.
@@ -2201,9 +2020,11 @@ test.describe('gate C: WebGPU vs WebGL2', () => {
 })
 ```
 
-- [ ] **Step 4: 跑门禁 C**
+> **这个文件跑在 `integration` project 里，那里有真适配器** —— `require-webgpu.ts` 守着。它**不在** `no-webgpu` 的白名单里（P1 的 `include` 只盖 `fallback/**` 与四个用户故事），因为「两份着色器一致」这件事在只有一个后端可用时无法提问。
 
-Run: `npm run test:integration -- gate-c`
+- [ ] **Step 3: 跑门禁 C**
+
+Run: `npx vitest run --project integration gate-c`
 Expected: 18 条全 PASS（16 条状态 + 裁判 + 极点）
 
 **失败分流的顺序很重要**，别跳步：
@@ -2219,10 +2040,10 @@ Expected: 18 条全 PASS（16 条状态 + 裁判 + 极点）
 
 **不要为了让门禁 C 变绿而放宽容差。** 如果 ±2 不够，先搞清楚为什么 —— 放宽到 ±8 只是把一个真实的转写错误变成一条永远绿不了又没人管的测试。
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add test/integration/gate-c-cross-backend.test.ts test/integration/support/cross-backend.ts demo/
+git add test/integration/gate-c-cross-backend.test.ts test/integration/support/cross-backend.ts
 git commit -m "test(renderer): gate C -- the two hand-written shaders must agree
 
 Comparing the backends against each other rather than each against the
@@ -2239,149 +2060,187 @@ the presentation path."
 ### Task 5: 用户故事在 WebGL2 下重跑
 
 **Files:**
-- Modify: `playwright.config.ts`
-- Modify: `test/integration/support/fixtures.ts`
+- Modify: `vitest.config.ts`（`no-webgpu` project 的 `include`）
+- Modify: `test/integration/support/spies.ts`（`countDraws` 覆盖两个后端）
+- Modify: `test/integration/fallback/user-story-no-webgpu.test.ts`（翻成正面断言）
 
 **这是后端替换的验收方式** —— 同一批用户故事，换个后端。
 
-**做法：加一个 Playwright project，不写第二个测试文件。**
+**做法：把一个 project 的 `include` 扩到四个用户故事。不写第二个测试文件。**
+
+P1 已经把两个 project 建好了，`no-webgpu` 的注释里写着它将来要长成什么样。P6 就是把那句话兑现：
 
 ```ts
-// playwright.config.ts -- P1 的 projects 数组加一项
-projects: [
-  { name: 'chromium-gpu', use: { ...devices['Desktop Chrome'], channel: 'chromium' } },
-  {
+// vitest.config.ts
+
+// -- 第一个 project，只改 exclude：把 fallback/ 排除掉保持不变。
+{
+  test: {
+    name: 'integration',
+    setupFiles: ['./test/integration/support/require-webgpu.ts'],
+    include: ['test/integration/**/*.test.ts'],
+    exclude: ['test/integration/fallback/**'],
+    // ...provider 与 instances 原样保留...
+  }
+},
+
+// -- 第二个 project，扩 include。
+{
+  test: {
+    name: 'no-webgpu',
+    setupFiles: ['./test/integration/support/require-no-webgpu.ts'],
     /*
-     * The same browser as the project above, with WebGPU hidden. Same
-     * `channel: 'chromium'` on purpose: this project exists to answer "does
-     * WebGL2 render the same thing?", and running it on a different binary
-     * would make every difference ambiguous between the two backends and the
-     * two browsers.
+     * Widened from `fallback/**` to also cover the four user stories, which is
+     * the whole point of this project: the same test text, run again with the
+     * WebGPU path gone, so "the fallback works" is a claim backed by the user
+     * stories themselves rather than by a second copy of them.
      *
-     * The four files are named rather than matched with `user-story-.*`, so that
-     * the fifth -- user-story-no-webgpu, which is about the WebGPU selection
-     * itself and asserts that construction THROWS -- is left out by
-     * construction. A wildcard plus a testIgnore would say the same thing in two
-     * places, and Task 6 deletes that fifth file: the wildcard would then be
-     * matching four files with a stale exclusion attached to nothing.
+     * A whitelist, not `test/integration/**`. The gates and the backend smoke
+     * tests all assert a real adapter and would fail here for a reason that has
+     * nothing to do with their subject; a blacklist would have to name each of
+     * them and would silently start including the next one somebody adds.
+     *
+     * The four are named rather than matched with `user-story-.*` because
+     * `fallback/user-story-no-webgpu.test.ts` is also a user story and it means
+     * something different here -- it is the file about this project's own
+     * environment. It is picked up by the `fallback/**` line above, once.
      */
-    name: 'chromium-webgl2',
-    testMatch: /user-story-(photo|video|camera-switch|media-failure)\.test\.ts/,
-    use: { ...devices['Desktop Chrome'], channel: 'chromium' }
+    include: [
+      'test/integration/fallback/**/*.test.ts',
+      'test/integration/user-story-(photo|video|camera-switch|media-failure).test.ts'
+    ],
+    // ...provider（--disable-gpu）与 instances 原样保留...
   }
-]
+}
 ```
+
+> **四个文件因此跑两次，文本一字不差。** 这是这个做法相对「把测试体抽成 helper、再写一个 spec 文件」的全部价值：不是**劝阻**重复，而是让重复不可能发生。
+
+- [ ] **Step 1: 让 `countDraws` 覆盖两个后端**
+
+`test/integration/support/spies.ts` 现在只包 `WebGPUBackend.prototype.render`。在 `no-webgpu` project 里那个方法永远不会被调用，于是 `draws()` 恒为 0 —— 一条 `expect(frames).toBe(0)` 会**空过**，一条 `expect(drew).toBeGreaterThan(0)` 会**误红**。两种都不是在测它想测的东西。
 
 ```ts
-// test/integration/support/fixtures.ts -- gpuPage 按 project 分流
-import { test as base, expect } from '@playwright/test'
+import { vi } from 'vitest'
+import { WebGPUBackend } from '../../../src/renderer/webgpu/backend'
+import { WebGL2Backend } from '../../../src/renderer/webgl2/backend'
 
-/** The project that re-runs every user story against the WebGL2 backend. */
-export const WEBGL2_PROJECT = 'chromium-webgl2'
-
-export const test = base.extend<{ gpuPage: import('@playwright/test').Page }>({
-  gpuPage: async ({ page }, use, testInfo) => {
-    const webgl2Only = testInfo.project.name === WEBGL2_PROJECT
-
-    if (webgl2Only) {
-      /*
-       * Hiding WebGPU the way a browser without it hides it: the property is
-       * removed from Navigator.prototype rather than shadowed by an own
-       * property set to undefined. The difference is load-bearing -- the probe
-       * in src/viewer/backend-factory.ts tests `'gpu' in navigator`, which stays
-       * true for a shadowing property, and the next line would then call
-       * requestAdapter() on undefined.
-       */
-      await page.addInitScript(() => {
-        delete (Navigator.prototype as { gpu?: unknown }).gpu
-      })
-    }
-
-    await page.goto('/')
-
-    const report = await page.evaluate(async () => {
-      const hasWebGL2 = document.createElement('canvas').getContext('webgl2') !== null
-
-      if (!('gpu' in navigator) || !navigator.gpu) {
-        return {
-          ok: hasWebGL2,
-          reason: hasWebGL2 ? '' : 'no WebGL2 either, so this page has no backend at all'
-        }
-      }
-
-      const adapter = await navigator.gpu.requestAdapter()
-      if (!adapter) {
-        return {
-          ok: false,
-          reason:
-            'requestAdapter() returned null. If this ran under chrome-headless-shell ' +
-            '(Playwright default) that is expected -- set channel: "chromium". ' +
-            'Check with: DEBUG=pw:browser npx playwright test'
-        }
-      }
-      return { ok: true }
-    })
-
-    expect(
-      report.ok,
-      `WebGPU unavailable: ${'reason' in report ? report.reason : 'unknown'}`
-    ).toBe(true)
-
-    if (webgl2Only) {
-      /*
-       * The environment check above is not enough on its own: a page can have
-       * the shim installed and still be running WebGPU, if the init script
-       * missed (an iframe, a worker, a navigation that outran it). Ask the
-       * library which backend it actually selected -- the answer is exactly the
-       * property this project exists to test, so a false negative here is a
-       * wasted run rather than a wrong result.
-       */
-      const backend = await page.evaluate(async () => {
-        const t = window.__panoTest
-        return (await t.probe()).backend
-      })
-      expect(backend, 'the WebGL2 project is not running WebGL2').toBe('webgl2')
-    }
-
-    await use(page)
+/**
+ * Counts every frame drawn by whichever backend the viewer selected.
+ *
+ * Both prototypes, because the same user-story file runs in two projects and
+ * only one backend exists in each. Wrapping just the WebGPU one would make the
+ * draw-count assertions in the fallback project silently vacuous -- `toBe(0)`
+ * passes against a method nobody calls -- which is worse than a red test,
+ * because it survives review.
+ *
+ * Returns a reader rather than a count: the callers snapshot it before and after
+ * an action, and two reads of one number is what lets them.
+ */
+export function countDraws (): () => number {
+  let count = 0
+  for (const backend of [WebGPUBackend, WebGL2Backend]) {
+    vi.spyOn(backend.prototype, 'render').mockImplementation(() => { count++ })
   }
+  return () => count
+}
+```
+
+> **`mockImplementation(() => { count++ })` 而不是 `vi.fn()` 再读 `mock.calls.length`。** 两个 spy 各有一本账，读的人要把两个数加起来；一个闭包里的计数器只有一个数，而「一帧画了几次」本来就只有一个答案。
+>
+> **`afterEach(() => { vi.restoreAllMocks() })` 是必须的**，P5 的 US2 与 US4 已经写了。恢复之后 `render` 回到真实现，下一个测试才画得出东西 —— 少了它，一个文件里后面的每个测试都会拿到被掏空的 `render`。
+
+- [ ] **Step 2: 把 US5 翻成正面断言**
+
+`test/integration/fallback/user-story-no-webgpu.test.ts` 现在断言 `probe()` 是 `'none'`、`create()` 抛异常 —— 那是 P6 还没落地时的诚实结果。**现在它要翻过来**，这正是那个文件存在的意义（P5 的交接表里点名了这件事）：
+
+```ts
+import { describe, expect, it, vi } from 'vitest'
+import { FramelessImageViewer } from '../../../src/index'
+import { canvasOf, makeContainer } from '../support/dom'
+import { countNonBlack, nextFrames, readCanvas } from '../support/canvas'
+
+/*
+ * US5: running where WebGPU is unavailable.
+ *
+ * No mask, no addInitScript, no control group. This file runs in the
+ * `no-webgpu` project, which launches Chromium with --disable-gpu, and
+ * `require-no-webgpu.ts` asserts in a beforeAll that the adapter really is
+ * absent AND that WebGL2 is still there -- so if the flag ever stops taking
+ * effect this file fails loudly instead of quietly re-testing the WebGPU path.
+ *
+ * The environment is the mask. That is why there is no third control test here:
+ * a project does not have the failure mode a shim does, because there is no
+ * shim to fail. (P5's version of this file asserted the honest pre-P6 outcome,
+ * that create() threw. P6 flips it -- see the completion criteria.)
+ */
+describe('US5: running where WebGPU is unavailable', () => {
+  it('probe() reports webgl2 instead of throwing', async () => {
+    // probe() must never throw: its whole reason for existing is to be callable
+    // before anything is constructed, so that a caller can decide what to do
+    // about a machine with no usable backend.
+    const caps = await FramelessImageViewer.probe()
+    expect(caps.backend).toBe('webgl2')
+    // The WebGPU-only capability is dropped along with the label. A backend
+    // reporting webgl2 with externalTextures: true sends callers down a path
+    // this backend cannot serve.
+    expect(caps.externalTextures).toBe(false)
+  })
+
+  it('the viewer renders the panorama instead of throwing', async () => {
+    // The end-to-end form of the same claim: not "the label says webgl2", but
+    // "a 360 photo appears". Before P6 this threw.
+    const container = makeContainer()
+    const viewer = await FramelessImageViewer.create({ container })
+    const losses: unknown[] = []
+    viewer.on('device-lost', e => losses.push(e))
+    const loaded: string[] = []
+    viewer.on('media-load', () => loaded.push('load'))
+    viewer.src = '/fixtures/panorama.png'
+
+    await vi.waitFor(() => expect(loaded).toContain('load'), { timeout: 5000 })
+    await nextFrames(2)
+    const image = await readCanvas(canvasOf(container))
+    const backend = viewer.capabilities.backend
+    viewer.dispose()
+
+    expect(backend).toBe('webgl2')
+    expect(countNonBlack(image)).toBeGreaterThan(0.2 * image.width * image.height)
+    // A downgrade is not a device loss, and reporting it as one would make every
+    // consumer's error path fire on a page that is working perfectly.
+    expect(losses).toHaveLength(0)
+  })
 })
-
-export { expect }
 ```
 
-**P5 的四个用户故事文件一个字都不用改。** 这是这个做法相对「再写一个 spec 文件、把测试体抽成 helper」的全部价值：不是**劝阻**重复，而是让重复不可能发生 —— 同一段测试文本，跑两次。
+- [ ] **Step 3: 跑全部**
 
-**`testMatch` 是白名单，这很关键。** `test/integration/` 下还有 `smoke.test.ts`（P1 的 WebGPU 守卫）、`gate-a-pixels` / `gate-b-projection`（P3）、`uniform-layout`（P3）、`webgl2-smoke` / `gate-c-cross-backend`（本计划）、`backend-downgrade`（Task 6）—— **它们全都不该在 `chromium-webgl2` 下跑**：`smoke.test.ts` 与门禁 C 都断言有真 WebGPU 适配器，在那个 project 里必然红，而红的原因与它们的断言无关。白名单让这件事在配置里一眼可见，而不是靠逐个 `testIgnore` 去堵。
-
-> **为什么不用 `forceBackend` 之类的夹具开关。** 那种开关是**产品代码里的测试钩子**，而它测的也不是真实的选择逻辑：一个「强制走 WebGL2」的分支会绕过 `createBackend` 的判断，而那一段判断（spec §6.5「降级是可编程状态」）恰恰是要验的东西。屏蔽 `navigator.gpu` 走的是真实路径：probe 看不见 WebGPU，于是选了 WebGL2。
-
-- [ ] **Step 1: 改 config 与 fixture**
-
-按上面的代码改 `playwright.config.ts` 与 `test/integration/support/fixtures.ts`。
-
-- [ ] **Step 2: 跑全部**
-
-Run: `npm run test:unit && npm run test:integration`
-Expected: 全 PASS。**两条 project 都要有输出** —— 只跑了一条是配置没生效，不是测试通过：
+Run: `npm test`
+Expected: 全 PASS。**四个用户故事要在两个 project 里各出现一次** —— 只出现一次是 `include` 没生效，不是测试通过：
 
 ```bash
-npx playwright test --list | grep -c "chromium-webgl2"
+npx vitest list --project no-webgpu 2>/dev/null | grep -c "user-story-"
+npx vitest list --project integration 2>/dev/null | grep -c "user-story-"
 ```
 
-Expected: 大于 0。
+Expected: 两条都大于 0。
 
-- [ ] **Step 3: Commit**
+**如果 `no-webgpu` 里红的是绘制计数**：`countDraws` 没覆盖到 `WebGL2Backend`（Step 1）。**如果红的是画面**：`preserveDrawingBuffer` 没开，于是 `readCanvas` 的 `toDataURL` 拿到的是清屏后的黑 —— 见「明确的非目标」里那一条。
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add playwright.config.ts test/integration/support/fixtures.ts
-git commit -m "test(renderer): run every user story against the WebGL2 backend
+git add vitest.config.ts test/integration/support/spies.ts test/integration/fallback/user-story-no-webgpu.test.ts
+git commit -m "test(viewer): run every user story against the WebGL2 backend
 
-A second Playwright project, not a second spec file. The user-story tests
-are the same text run twice, so there is no second copy to drift -- which is
-a stronger guarantee than extracting shared helpers would give. The WebGL2
-project hides navigator.gpu the way a browser without it does, and asserts
-that the library actually selected WebGL2 before running anything."
+Widening the no-webgpu project's include, not writing a second spec file. The
+user-story tests are the same text run twice, so there is no second copy to
+drift -- a stronger guarantee than extracting shared helpers gives. The project
+is a whitelist: the gates all assert a real adapter and would fail there for a
+reason unrelated to their subject.
+
+countDraws now wraps both backends. It wrapped only the WebGPU one, which made
+'frames === 0' pass vacuously under the fallback and 'drew > 0' fail wrongly."
 ```
 
 ---
@@ -2389,285 +2248,221 @@ that the library actually selected WebGL2 before running anything."
 ### Task 6: 降级路径（spec §9.7）
 
 **Files:**
-- Create: `test/integration/support/backend.ts`
 - Create: `test/integration/backend-downgrade.test.ts`
-- Delete: `test/integration/user-story-no-webgpu.test.ts`
+- Create: `test/integration/fallback/backend-unavailable.test.ts`
 
 spec §9.7 的「后端降级」一行要求：**屏蔽 `navigator.gpu`，断言走 WebGL2**。三种环境都要有：
 
-| 环境 | 怎么造 | 期望 |
-|---|---|---|
-| 没有 WebGPU，有 WebGL2 | `delete Navigator.prototype.gpu` | 选 WebGL2 并正常渲染 |
-| 有 WebGPU，拿不到适配器 | 让 `requestAdapter()` 返回 `null` | 同上 —— **这是 spec §9.7 里最容易漏的一条**：`navigator.gpu` 存在不等于有 GPU，Playwright 默认 headless 就是这样 |
-| 两者都没有 | 再让 `getContext('webgl2')` 返回 `null` | `createImageViewer` 抛异常，且消息说清是哪个后端不可用 |
+| 环境 | 怎么造 | 期望 | 在哪个 project |
+|---|---|---|---|
+| 没有 WebGPU，有 WebGL2 | 测试体内 `delete Navigator.prototype.gpu` | 选 WebGL2 并正常渲染 | `integration`（那里有真 WebGPU，所以屏蔽是一次真的改变） |
+| 有 WebGPU，拿不到适配器 | **`--disable-gpu`（P1 的 `no-webgpu` project）** | 同上 —— **这是 spec §9.7 里最容易漏的一条**：`navigator.gpu` 存在不等于有 GPU | `no-webgpu`，就是 Task 5 的 US5 |
+| 两者都没有 | 在 `no-webgpu` 里再让 `getContext('webgl2')` 返回 `null` | `create()` 抛异常，且消息说清是哪个后端不可用 | `no-webgpu` 的 `fallback/` |
 
-- [ ] **Step 1: 三种环境的 fixture**
+**中间那条不需要新文件** —— Task 5 的 `fallback/user-story-no-webgpu.test.ts` 就是它，而且是**真环境**（启动参数），不是掩码。这正是浏览器模式相对 Playwright 的简化：三种环境里有一种是项目自带的，另两种各是一次进程内的赋值，没有 `addInitScript`、没有「掩码装上了没有」的跨进程时序问题。
 
-`test/integration/support/backend.ts`（P5 表里预留的名字）：
+> **`--disable-features=WebGPU` 是无效的**（实测：适配器照样出现），要造这条环境只能用 `--disable-gpu`。而 `--disable-gpu` 会同时**保住 WebGL2**（走 SwiftShader），正好是这里要的那个形状。**不要**再加 `--disable-software-rasterizer`：那会把 WebGL2 一起干掉，于是测的是「两个都没有」，而不是「一个都没有」。
 
-```ts
-import { test as base, expect } from './fixtures'
-import type { Page } from '@playwright/test'
+- [ ] **Step 1: 环境一 —— 没有 `navigator.gpu`**
 
-/**
- * Pages where a specific part of the graphics stack is missing.
- *
- * All three install their shim with addInitScript, before any navigation,
- * because the probe runs as soon as the page's bundle loads. A shim installed
- * afterwards is a shim the code under test has already looked past -- and it
- * would make these tests pass for the wrong reason.
- *
- * Each fixture asserts its own premise afterwards. A fixture that silently
- * failed to remove WebGPU would turn the WebGL2 assertions into WebGPU
- * assertions that happen to pass.
- */
-
-/** WebGPU hidden the way a browser without it hides it. */
-export const webgl2OnlyTest = base.extend<{ webgl2Page: Page }>({
-  webgl2Page: async ({ page }, use) => {
-    await page.addInitScript(() => {
-      delete (Navigator.prototype as { gpu?: unknown }).gpu
-    })
-    await page.goto('/')
-
-    const state = await page.evaluate(() => ({
-      hasGpu: 'gpu' in navigator,
-      hasWebGL2: document.createElement('canvas').getContext('webgl2') !== null
-    }))
-    expect(state.hasGpu, 'navigator.gpu survived the shim').toBe(false)
-    expect(state.hasWebGL2, 'this browser has no WebGL2 either').toBe(true)
-
-    await use(page)
-  }
-})
-
-/** `navigator.gpu` exists and `requestAdapter()` returns null. */
-export const noAdapterTest = base.extend<{ noAdapterPage: Page }>({
-  noAdapterPage: async ({ page }, use) => {
-    await page.addInitScript(() => {
-      const gpu = navigator.gpu
-      if (!gpu) return
-      Object.defineProperty(gpu, 'requestAdapter', {
-        configurable: true,
-        value: async () => null
-      })
-    })
-    await page.goto('/')
-
-    const state = await page.evaluate(async () => ({
-      hasGpu: 'gpu' in navigator,
-      adapter: navigator.gpu ? await navigator.gpu.requestAdapter() : 'no gpu object',
-      hasWebGL2: document.createElement('canvas').getContext('webgl2') !== null
-    }))
-    expect(state.hasGpu, 'this environment has no navigator.gpu at all').toBe(true)
-    expect(state.adapter, 'the adapter shim did not take').toBeNull()
-    expect(state.hasWebGL2, 'this browser has no WebGL2 either').toBe(true)
-
-    await use(page)
-  }
-})
-
-/** Neither backend is available. */
-export const noBackendTest = base.extend<{ noBackendPage: Page }>({
-  noBackendPage: async ({ page }, use) => {
-    await page.addInitScript(() => {
-      delete (Navigator.prototype as { gpu?: unknown }).gpu
-
-      const original = HTMLCanvasElement.prototype.getContext
-      HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
-        // Only webgl2 is refused. Blanking every context type would also break
-        // the 2D canvas the test itself uses to read pixels back.
-        if (type === 'webgl2') return null
-        return (original as (...args: unknown[]) => unknown).call(this, type, ...rest)
-      } as typeof HTMLCanvasElement.prototype.getContext
-    })
-    await page.goto('/')
-
-    const state = await page.evaluate(() => ({
-      hasGpu: 'gpu' in navigator,
-      hasWebGL2: document.createElement('canvas').getContext('webgl2') !== null
-    }))
-    expect(state.hasGpu).toBe(false)
-    expect(state.hasWebGL2, 'the getContext shim did not take').toBe(false)
-
-    await use(page)
-  }
-})
-
-export { expect }
-```
-
-- [ ] **Step 2: 写测试**
-
-`test/integration/backend-downgrade.test.ts`：
+`test/integration/backend-downgrade.test.ts`（`integration` project）：
 
 ```ts
-import { webgl2OnlyTest as test, noAdapterTest, noBackendTest, expect } from './support/backend'
-// Module augmentations of PanoTestApi: `probe` / `createImageViewer` come from
-// P5's viewer hook, and the backend hooks from P6's. See Task 3 Step 3 for why
-// a type-only import of the hook module is what puts them on `window.__panoTest`.
-import type {} from '../../demo/test-entry-hooks/viewer'
-import type {} from '../../demo/test-entry-hooks/webgl2'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { FramelessImageViewer } from '../../src/index'
+import { canvasOf, makeContainer } from './support/dom'
+import { countNonBlack, nextFrames, readCanvas } from './support/canvas'
 
 /*
  * spec section 9.7: "block navigator.gpu and assert that it goes to WebGL2".
  *
+ * This file runs in the `integration` project, where a real WebGPU adapter
+ * exists -- so removing it here is a real change of state rather than a
+ * no-op that would pass either way. That is the whole reason this environment
+ * gets its own file and its own project, instead of being folded into the
+ * fallback one.
+ *
+ * The mask is a plain assignment in the test body, not an init script. There is
+ * no process boundary in browser mode, so there is no ordering question: the
+ * probe reads `navigator.gpu` when it is called, and it is called after this.
+ *
  * The downgrade is a programmable state (section 6.5), not a log line, so what
- * is asserted here is the reported state -- `probe()` before construction and
- * `viewer.capabilities` after it -- plus the fact that the fallback actually
- * renders. An application that wants to tell the user "your browser is using
- * the slower renderer" reads it from exactly these two places.
+ * is asserted is the reported state -- `probe()` before construction and
+ * `viewer.capabilities` after it -- plus the fact that the fallback renders. An
+ * application that wants to tell the user "your browser is using the slower
+ * renderer" reads it from exactly these two places.
  *
  * There is deliberately no `downgraded` event. The public event surface is
  * frozen (P5, src/index.ts) and a downgrade is a state, not an occurrence: it is
  * true from before the viewer exists, so there is no moment at which it could
- * fire. `device-lost` is the event for a backend that died, and that is a
- * different thing -- it is tested as such below, in webgl2-smoke.
+ * fire. `device-lost` is the event for a backend that died, which is a different
+ * thing and is tested in webgl2-smoke.
  */
 
-test.describe('WebGPU absent, WebGL2 present', () => {
-  test('probe() reports webgl2 before anything is constructed', async ({ webgl2Page }) => {
-    const caps = await webgl2Page.evaluate(async () => {
-      const t = window.__panoTest
-      return t.probe()
+const HAD_GPU = 'gpu' in Navigator.prototype
+
+afterEach(() => {
+  // Restored explicitly, not left to the next test file's fresh page: tests in
+  // one file share a page, so a mask that outlives its test would make every
+  // later test in this file run in the wrong environment -- and green.
+  if (HAD_GPU) {
+    Object.defineProperty(Navigator.prototype, 'gpu', {
+      configurable: true,
+      get: () => undefined
     })
+  }
+})
+
+describe('WebGPU absent, WebGL2 present', () => {
+  it('the premise holds: this project really had an adapter to take away', async () => {
+    // Without this, a project that had silently stopped providing WebGPU would
+    // make everything below pass while measuring nothing.
+    expect(HAD_GPU).toBe(true)
+    const adapter = await navigator.gpu.requestAdapter()
+    expect(adapter, 'the integration project has no adapter, so this file has nothing to remove').not.toBeNull()
+
+    delete (Navigator.prototype as { gpu?: unknown }).gpu
+    expect('gpu' in navigator).toBe(false)
+  })
+
+  it('probe() reports webgl2 before anything is constructed', async () => {
+    // `delete` on the prototype, not an own property set to undefined: the probe
+    // tests `'gpu' in navigator`, which stays true for a shadowing property, and
+    // the next line would then call requestAdapter() on undefined.
+    delete (Navigator.prototype as { gpu?: unknown }).gpu
+
+    const caps = await FramelessImageViewer.probe()
     expect(caps.backend).toBe('webgl2')
-    // The WebGPU-only capability must be dropped along with the label. A
-    // backend reporting webgl2 with externalTextures: true sends callers down a
-    // path this backend cannot serve.
     expect(caps.externalTextures).toBe(false)
-    expect(caps.adapter).toBeUndefined()
   })
 
-  test('the viewer renders the panorama instead of throwing', async ({ webgl2Page }) => {
-    // The end-to-end form of the same claim: not "the label says webgl2", but
-    // "a 360 photo appears". Before P6 this threw.
-    const r = await webgl2Page.evaluate(async () => {
-      const t = window.__panoTest
-      const viewer = await t.createImageViewer({ src: '/fixtures/panorama.png' })
-      const loaded = await t.waitFor(viewer, 'media-load', 5000)
-      const backend = viewer.capabilities.backend
-      const losses: unknown[] = []
-      viewer.on('device-lost', e => losses.push(e))
-      const pixels = await t.readCanvas(viewer)
-      viewer.dispose()
-      return { loaded, backend, losses: losses.length, nonBlack: t.countNonBlack(pixels) }
-    })
-    expect(r.loaded).toBe(true)
-    expect(r.backend).toBe('webgl2')
-    expect(r.nonBlack).toBeGreaterThan(0.5)
-    // A downgrade is not a device loss, and reporting it as one would make
-    // every consumer's error path fire on a page that is working perfectly.
-    expect(r.losses).toBe(0)
-  })
-})
+  it('the viewer renders the panorama instead of throwing', async () => {
+    delete (Navigator.prototype as { gpu?: unknown }).gpu
 
-noAdapterTest.describe('WebGPU present, no adapter', () => {
-  noAdapterTest('falls back to WebGL2 rather than failing', async ({ noAdapterPage }) => {
-    // Playwright's default headless binary is exactly this environment: a
-    // navigator.gpu that returns null for every adapter request (spec 9.5).
-    // Without this test the silent-downgrade hazard has no coverage at all.
-    const r = await noAdapterPage.evaluate(async () => {
-      const t = window.__panoTest
-      const caps = await t.probe()
-      const viewer = await t.createImageViewer({ src: '/fixtures/panorama.png' })
-      await t.waitFor(viewer, 'media-load', 5000)
-      const backend = viewer.capabilities.backend
-      const pixels = await t.readCanvas(viewer)
-      viewer.dispose()
-      return { probe: caps.backend, backend, nonBlack: t.countNonBlack(pixels) }
-    })
-    expect(r.probe).toBe('webgl2')
-    expect(r.backend).toBe('webgl2')
-    expect(r.nonBlack).toBeGreaterThan(0.5)
+    const container = makeContainer()
+    const viewer = await FramelessImageViewer.create({ container })
+    const losses: unknown[] = []
+    viewer.on('device-lost', e => losses.push(e))
+    const loaded: string[] = []
+    viewer.on('media-load', () => loaded.push('load'))
+    viewer.src = '/fixtures/panorama.png'
+
+    await vi.waitFor(() => expect(loaded).toContain('load'), { timeout: 5000 })
+    await nextFrames(2)
+    const image = await readCanvas(canvasOf(container))
+    const result = { backend: viewer.capabilities.backend, losses: losses.length }
+    viewer.dispose()
+
+    expect(result.backend).toBe('webgl2')
+    expect(countNonBlack(image)).toBeGreaterThan(0.2 * image.width * image.height)
+    expect(result.losses).toBe(0)
   })
 })
+```
 
-noBackendTest.describe('neither backend', () => {
-  noBackendTest('createImageViewer rejects, naming the situation', async ({ noBackendPage }) => {
-    // Constructing a viewer that can never draw is what the legacy
-    // createProgram did: it logged, returned null, and the viewer reported
-    // success. A viewer that cannot render is not a viewer.
-    const r = await noBackendPage.evaluate(async () => {
-      const t = window.__panoTest
-      const canvases = () => document.querySelectorAll('canvas').length
-      const before = canvases()
+> **`afterEach` 里重新 `defineProperty` 而不是 `delete`。** `Navigator.prototype.gpu` 在 Chromium 上是一个继承来的访问器，`delete` 掉之后没有「原来的值」可以放回去 —— 只有测试开头记下的 `HAD_GPU` 这一个事实。把它定义成一个返回 `undefined` 的 getter 让 `'gpu' in navigator` 重新为真，这对 `integration` project 里**后面的其他文件**没有影响（每个文件一个新页面），但能让这个文件里后面的测试拿到一致的状态。
 
-      const attempt = async () => {
-        try {
-          await t.createImageViewer({ src: '/fixtures/panorama.png' })
-          return ''
-        } catch (error) {
-          return String(error)
-        }
+- [ ] **Step 2: 环境三 —— 两个后端都没有**
+
+`test/integration/fallback/backend-unavailable.test.ts`（`no-webgpu` project）：
+
+```ts
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { FramelessImageViewer } from '../../../src/index'
+import { makeContainer } from '../support/dom'
+
+/*
+ * Neither backend. This is the one environment that has no real-world
+ * equivalent worth reproducing with a launch flag -- a browser that has WebGL2
+ * but no WebGPU and refuses to give a context -- so it is masked.
+ *
+ * It builds on the no-webgpu project rather than replacing it: that project
+ * already guarantees the adapter is absent (require-no-webgpu.ts asserts it), so
+ * this file only has to take WebGL2 away. Masking both here would mean the
+ * project's own guard could stop working and nothing would notice.
+ *
+ * `getContext` is patched on the prototype and only for 'webgl2'. Blanking every
+ * context type would also break the 2D canvas that P1's readCanvas uses, and the
+ * test would then fail while constructing its own tools.
+ */
+
+const original = HTMLCanvasElement.prototype.getContext
+
+beforeEach(() => {
+  HTMLCanvasElement.prototype.getContext = function (
+    this: HTMLCanvasElement,
+    type: string,
+    ...rest: unknown[]
+  ) {
+    if (type === 'webgl2') return null
+    return (original as (...args: unknown[]) => unknown).call(this, type, ...rest)
+  } as typeof HTMLCanvasElement.prototype.getContext
+})
+
+afterEach(() => {
+  HTMLCanvasElement.prototype.getContext = original
+})
+
+describe('neither backend available', () => {
+  it('create() rejects, naming the situation', async () => {
+    // Constructing a viewer that can never draw is what the legacy createProgram
+    // did: it logged, returned null, and the viewer reported success. A viewer
+    // that cannot render is not a viewer.
+    const container = makeContainer()
+    const canvases = (): number => document.querySelectorAll('canvas').length
+    const before = canvases()
+
+    const attempt = async (): Promise<string> => {
+      try {
+        await FramelessImageViewer.create({ container })
+        return ''
+      } catch (error) {
+        return String(error)
       }
+    }
 
-      const first = await attempt()
-      // A second attempt, to show the failure is a property of the environment
-      // and not of state the first one left behind.
-      const second = await attempt()
+    const first = await attempt()
+    // A second attempt, to show the failure is a property of the environment and
+    // not of state the first one left behind.
+    const second = await attempt()
 
-      return { first, second, before, after: canvases() }
-    })
-
-    expect(r.first).toMatch(/no usable rendering backend/i)
-    expect(r.second).toMatch(/no usable rendering backend/i)
-    // And it did not leave a canvas in the DOM. No viewer-count hook is
-    // asserted here: P5 exposes none, and the viewer phase owns that surface --
-    // inventing one from P6 would put a second owner on it. The canvas count is
-    // the part of "did anything leak" that is observable without a new hook.
-    expect(r.after).toBe(r.before)
+    expect(first).toMatch(/no usable rendering backend/i)
+    expect(second).toMatch(/no usable rendering backend/i)
+    // And it did not leave a canvas in the DOM. No viewer-count hook is asserted
+    // here: P5 exposes none, and the viewer phase owns that surface -- inventing
+    // one from P6 would put a second owner on it.
+    expect(canvases()).toBe(before)
   })
 
-  noBackendTest('probe() reports none rather than throwing', async ({ noBackendPage }) => {
+  it('probe() reports none rather than throwing', async () => {
     // probe() must be usable to decide what to do BEFORE constructing anything,
     // which means it cannot be the thing that throws.
-    const caps = await noBackendPage.evaluate(async () => {
-      const t = window.__panoTest
-      return t.probe()
-    })
+    const caps = await FramelessImageViewer.probe()
     expect(caps.backend).toBe('none')
   })
 })
 ```
 
-- [ ] **Step 3: 删掉 P5 的 US5 文件**
+- [ ] **Step 3: 跑**
 
-`test/integration/user-story-no-webgpu.test.ts` **整体删掉**，它的两条测试都已经被上面这一组更强地覆盖了，而它的前提是错的。它的第一条测试的注释写着：
+Run: `npx vitest run --project integration backend-downgrade && npx vitest run --project no-webgpu fallback`
+Expected: 5 个测试 PASS（3 + 2）
 
-```ts
-    // Runs in the default headless shell, where navigator.gpu exists but
-    // requestAdapter() returns null. Until P6 lands the WebGL2 backend, this is
-    // the honest outcome: a clear failure, not a black rectangle.
-```
+**如果「the premise holds」就红**：这个 project 本来就没有适配器，说明 `require-webgpu.ts` 或 `channel: 'chromium'` 没生效 —— 那比这条测试红严重得多。**如果 `create()` 没有抛**：查 `getContext` 的补丁是不是被后加载的别的库换掉了（本文件的 `beforeEach` 每次重装，所以只有同一个测试体内才可能）。
 
-**那句话对 Playwright 的默认启动成立，对本项目的配置不成立。** `playwright.config.ts` 设了 `channel: 'chromium'`（P1），正是为了让 WebGPU 可用 —— 所以 `create()` 会成功，`expect(message).toMatch(/no usable rendering backend/i)` 永远不可能满足。同理它的第二条（`probe()` 返回三个值之一）在 `channel: 'chromium'` 下只会是 `webgpu`，而那与「没有 WebGPU 的环境」无关。
-
-它想覆盖的三种环境，现在在 `backend-downgrade.test.ts` 里，一种一个 fixture，**而且每个 fixture 先断言自己的前提**（删掉 `navigator.gpu` 失败了就直接报「the shim did not take」，而不是悄悄退化成一条在 WebGPU 上也能过的测试）。`probe()` 不抛异常这一点也在那里被更强地测了：`backend === 'none'`，而不是「三个值之一」。
-
-> **这不是 P6 引入的回归，是 P5 的一处前提错误。** P5 的 Task 6 Step 6 跑 `npm run test:integration` 并写着「Expected: 全 PASS」，而这条文件在 `channel: 'chromium'` 下不可能过 —— 也就是说 P5 收尾时它要么是红的，要么被跳过而没人记下。P6 把它删掉、补上正确的版本，这就是它的收尾。**执行 P6 时如果发现这个文件已经被标成 `test.fixme` / `test.skip`，那正是这件事的痕迹，直接删掉即可。**
-
-- [ ] **Step 4: 跑**
-
-Run: `npm run test:integration -- backend-downgrade`
-Expected: 5 个测试 PASS
-
-**如果第一条就红**：检查 `delete Navigator.prototype.gpu` 是否真的生效（fixture 里的断言会直接告诉你）。**如果「没有适配器」那条红**：`Object.defineProperty` 定义了自有属性，但如果 `navigator.gpu` 是 getter 返回的新对象，每次读到的都是同一个对象才对；不是同一个就改成在 `Navigator.prototype` 上做手脚。
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add test/integration/support/backend.ts test/integration/backend-downgrade.test.ts
-git rm test/integration/user-story-no-webgpu.test.ts
-git commit -m "test(viewer): the three degraded environments, one fixture each
+git add test/integration/backend-downgrade.test.ts test/integration/fallback/backend-unavailable.test.ts
+git commit -m "test(viewer): the two degraded environments a project cannot provide
 
-Spec 9.7's downgrade row, plus the case it is easiest to miss: navigator.gpu
-exists and requestAdapter() returns null, which is Playwright's default
-headless binary and would otherwise be covered by nothing.
+Spec 9.7's downgrade row. One of the three environments is the no-webgpu
+project itself (--disable-gpu), which is a real environment rather than a shim
+and is covered by user-story-no-webgpu; the other two are a mask apiece, in the
+project where each is a real change of state.
 
-P5's user-story-no-webgpu.test.ts is deleted: its premise (the default
-headless shell has no adapter) is false under channel: 'chromium', so its
-assertion could never hold."
+The no-adapter case -- navigator.gpu exists and requestAdapter() returns null --
+is the one easiest to miss, and it is exactly what --disable-gpu produces."
 ```
 
 ---
@@ -2675,19 +2470,22 @@ assertion could never hold."
 ## 完成标准
 
 - [ ] 门禁 C 的 18 条全绿，容差未被放宽
-- [ ] P5 的四个用户故事文件 untouched，在 `chromium-webgl2` project 下全绿（同一份文本跑两次）
-- [ ] 三种降级环境各有一条测试，且每种都先断言自己的前提
+- [ ] P5 的四个用户故事文件 **untouched**，在两个 project 下各跑一遍且都绿
+- [ ] `fallback/user-story-no-webgpu.test.ts` 已从「`probe()` 是 `none`、`create()` 抛」翻成「`probe()` 是 `webgl2`、`create()` 成功并画出画面」
+- [ ] 三种降级环境各有一条测试，且**每一种在自己的 project 里都是真的状态改变**（环境一里有真适配器可以拿掉，环境二靠启动参数，环境三在环境二之上）
 - [ ] `capabilities.backend === 'webgl2'` 且 `externalTextures === false`，且这个值来自 `describeCapabilities`
+- [ ] `countDraws` 覆盖两个后端，`no-webgpu` project 下的绘制计数不空过
 - [ ] 着色器编译失败会抛异常，不返回死后端
 - [ ] 连续创建/销毁 20 个后端不耗尽上下文额度
 - [ ] `webglcontextlost` 被 `preventDefault()` 并上报 `{ reason: 'context-lost' }`；`webglcontextrestored` 后能重新画出画面
 - [ ] `npm run build` 成功，且 `dist/index.js` 里能找到 `#version 300 es`（`?raw` 通道两端都通）
-- [ ] `npm run typecheck` 干净
+- [ ] `npm run typecheck` 干净（两条 program）
 - [ ] **`src/index.ts` 的导出面与 P5 一致**（后端替换不改变公开 API）
+- [ ] **`demo/` 一个字节都没改**
 
 ## 明确的非目标
 
-- **不为 WebGL2 做性能优化。** 它是降级路径。`preserveDrawingBuffer: true` 是这条定位下的一次明确取舍：代价是每帧一次缓冲拷贝，换来的是任何在稍后任务里读画布的人（包括每一个用户故事测试）看到的不是黑屏。
+- **不为 WebGL2 做性能优化。** 它是降级路径。`preserveDrawingBuffer: true` 是这条定位下的一次明确取舍：代价是每帧一次缓冲拷贝，换来的是任何在稍后任务里读画布的人（包括每一个用户故事测试）看到的不是黑屏。**这条不是可选的** —— P5 的 `readCanvas` 走 `canvas.toDataURL`，没有它，WebGL2 下的每一条像素断言读到的都是清屏后的黑，而那看起来像「后端画错了」。
 - **不加 WebGL2 独有的能力探测维度。**
 - **不把两份着色器合并成一个生成器。** 转写 + 门禁 C 是当前的取舍；如果哪天两份漂得太频繁，再考虑生成器，那时它才是有依据的。
 - **不做上下文丢失后的自动重画。** spec §6.4 把本期限定为「检测 + 干净释放」，而 `setSource` 的契约（不得在本次任务之后保留 `source.element`）意味着恢复时已无像素可重新上传。所以恢复后的行为是：程序与 uniform 重建、纹理丢弃，**下一次交互或下一帧视频时重新画出**；静止图像会停在黑屏，直到应用做点什么。要真正的自动恢复，需要一个「请重画」的通道，那是接口的增量改动，不属于本计划。
@@ -2702,9 +2500,11 @@ P3 的「不上榜的部分」把 golden image 与跨后端交叉验证一起推
 
 ## 关于 CI：WebGPU 路径在 CI 上真的跑起来需要什么
 
-门禁 C 与后端冒烟测试都**必须**在真有 WebGPU 适配器的页面里跑（`gpuPage` 会断言这一点）。**在 CI 上这取决于 `playwright.config.ts` 里的两件事，而它属于 P1：**
+门禁 C 与后端冒烟测试都必须在**真有 WebGPU 适配器**的浏览器里跑 —— `integration` project 的 `require-webgpu.ts` 会把「没有适配器」变成一条 `beforeAll` 失败，而不是让整批测试空跑。
+
+**在 CI 上这取决于 `vitest.config.ts` 里的两件事，而它们属于 P1**（本计划一个字都不改，只是把验收要求写在这里）：
 
 1. `channel: 'chromium'` —— Playwright 默认的 `chrome-headless-shell` 没有 GPU 栈，WebGL 走 SwiftShader 而 WebGPU 拿不到适配器。少了这一行，**整条 WebGPU 侧会空跑而 CI 全绿**（spec §9.5）。
-2. **如果 CI 的 runner 上 Chromium 仍拿不到适配器**，那需要的启动参数只能写在 `use.launchOptions.args` 里。**环境变量不行**：Playwright 不读任何名为 `PLAYWRIGHT_CHROMIUM_ARGS` 的东西（P7 的 CI workflow 传了这个变量，它是无效的），启动参数只有 `launchOptions` 这一条路。
+2. **如果 CI 的 runner 上 Chromium 仍拿不到适配器**，需要的启动参数是 `--enable-unsafe-webgpu` **加** `--use-webgpu-adapter=swiftshader`，两个一起才有效（实测；单独任意一个仍然返回 null）。它们挂在 **provider 工厂**的 `launchOptions.args` 上，不在 `instances[].launch` 里 —— 后者会被 Vitest 静默忽略。**环境变量也不行**：没有任何一个环境变量能让 Chromium 拿到适配器。
 
-**验收要求写在这里，免得它变成一个「CI 绿了但其实没跑」的静默通过**：`test/integration/smoke.test.ts` 里那条「the CI browser has a real WebGPU adapter」必须真的 PASS。它红了就说明门禁 C 这一批测试没有意义，而不是说明 GPU 有问题。
+**验收要求写在这里，免得它变成一个「CI 绿了但其实没跑」的静默通过**：`test/integration/smoke.test.ts` 里那条「the browser has a real WebGPU adapter」必须真的 PASS。它红了就说明门禁 C 这一批测试没有意义，而不是说明 GPU 有问题。

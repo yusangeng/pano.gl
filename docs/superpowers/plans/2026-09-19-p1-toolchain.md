@@ -133,7 +133,7 @@ otherwise: npm run build-debug produces a byte-identical bundle."
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run --project unit",
     "test:unit:watch": "vitest --project unit",
-    "test:integration": "vitest run --project integration",
+    "test:integration": "vitest run --project integration --project no-webgpu",
     "test:coverage": "vitest run --project unit --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test scripts",
