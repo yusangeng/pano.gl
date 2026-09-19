@@ -53,14 +53,16 @@ v0.2.2 rebuilds geometry only when `camera.id` changes
 (`Renderer.setVertexBuffer`), so the first frame after a camera swap can still
 be running against the previous camera's vertex buffer. The second is steady
 state; the third is recorded as evidence that it is steady. The driver refuses a
-capture that does not produce exactly three frames, and consumers that only want
-the answer should use the last frame.
+capture that does not produce exactly three frames, or whose three frames
+disagree with each other, and consumers that only want the answer should use
+the last frame.
 
-In this harness all three frames of every capture are in fact identical in their
-uniform stream (verified), because each capture constructs a fresh viewer — so
-`currentCameraId_` starts undefined and the first render rebuilds — and the
-recorder is reset well after load. The extra frames are cheap insurance, not a
-workaround for an observed transient.
+In this harness all three frames of every capture are identical — uniforms and
+pixels both — and `capture.mjs` asserts that before writing anything, so the
+steady-state claim is enforced rather than assumed. They agree because each
+capture constructs a fresh viewer — so `currentCameraId_` starts undefined and
+the first render rebuilds — and the recorder is reset well after load. The
+extra frames are cheap insurance, not a workaround for an observed transient.
 
 ## Observed uniform set
 

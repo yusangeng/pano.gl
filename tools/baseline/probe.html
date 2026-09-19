@@ -244,10 +244,10 @@
              * still resolving successfully. A capture that reads its own state
              * cannot drift from the thing it is measuring.
              *
-             * The first frame is the one drawn after the camera change, and is
-             * the fixture; the second and third are recorded as evidence that
-             * it is the steady state rather than a one-frame transient. The
-             * driver stores the last one.
+             * All three frames are handed to the driver. The driver stores the
+             * last one as the fixture and refuses the capture unless all three
+             * agree -- evidence that nothing asserts is just three copies of
+             * an assumption.
              */
             var spins = 0
             ;(function tick () {
