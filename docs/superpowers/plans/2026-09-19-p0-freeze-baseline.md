@@ -29,6 +29,26 @@
 
 > **为什么连 bundle 一起提交**：基线不能依赖「2027 年还能装上 Babel 6 + webpack 3」。`npm run build-debug` 的产物是自包含的 UMD，提交它，这个 fixture 就永久可复现。
 
+> **探针是独立工具，继续用 Playwright 直接驱动，不进测试体系。** 它是 Node 侧的一次性采集脚本，有自己的 `tools/baseline/package.json`；被测的库跑的是 vitest 浏览器模式（P1），两者互不相干。别把探针改写成 vitest —— 它要加载的是 **v0.2.2 的 webpack bundle**，跟新工具链没有任何关系。
+
+### 下游怎么读这些 fixture（P3 起）
+
+P3 的门禁跑在 **vitest 浏览器模式**里，读基线不再经过 Node 文件系统：
+
+```ts
+// The `?url` suffix is Vite's: it hands back a served URL instead of the
+// module, which is what lets a browser test fetch binary fixtures at all.
+// test/integration/tsconfig.json carries "vite/client" so this typechecks.
+import baselineUrl from '../../../test/fixtures/baseline/linear/origin.png?url'
+
+const bitmap = await createImageBitmap(await (await fetch(baselineUrl)).blob())
+```
+
+两条要记住的：
+
+1. **测试侧不再需要 pngjs。** 浏览器自带解码器。P0 自己的 `fixtures.test.mjs` 用的是 `node --test`，而且只校验 PNG 签名，本来也没依赖解码库。
+2. **`createImageBitmap` 的通道序是 RGBA，而 WebGPU canvas 的 `getPreferredCanvasFormat()` 在 macOS 上是 `bgra8unorm`。** 也就是**基线侧和新渲染侧的原生字节序不一样**，门禁 A 比对前必须统一。P1 Task 8 的冒烟测试已经把 canvas 格式钉住了；P3 要在比对函数里显式处理，不能靠「读出来就对得上」。
+
 ---
 
 ### Task 1: 探针脚手架与状态矩阵
@@ -840,5 +860,5 @@ git commit -m "docs(spec): fold baseline measurements back into the defect inven
 | 产物 | 消费者 |
 |---|---|
 | `*.uniforms.json` 的逐帧矩阵与标量 | **P2** —— `core/` 的投影数学在没有渲染器时就能对拍 |
-| `*.png` | **P3 门禁 A** —— 全屏三角形是否服务全部四个投影 |
+| `*.png` | **P3 门禁 A** —— 全屏三角形是否服务全部四个投影。**读法见上文「下游怎么读这些 fixture」**：浏览器模式里经 `?url` + `fetch` + `createImageBitmap`，通道序 RGBA，与 WebGPU canvas 的 BGRA 不同，比对前必须统一 |
 | `index.json` 的 uniform 名清单 | **P3** —— WGSL uniform 结构体的字段来源 |

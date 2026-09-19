@@ -658,6 +658,7 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 - Create: `test/integration/tsconfig.json`
 - Modify: `vitest.config.ts`（加两个 browser project）
 - Modify: `package.json`（typecheck 变两条）
+- Modify: `.gitignore`
 - Create: `test/integration/support/require-webgpu.ts`
 - Create: `test/integration/support/require-no-webgpu.ts`
 - Create: `test/integration/smoke.test.ts`
@@ -693,6 +694,13 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 
 ```json
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/integration",
+```
+
+`.gitignore` 末尾追加（browser mode 失败时会往这里落截图和 trace，是本地诊断产物，不入库）：
+
+```gitignore
+# Vitest browser-mode failure artifacts (screenshots, traces)
+.vitest
 ```
 
 - [ ] **Step 2: 往 vitest.config.ts 里加两个 browser project**
@@ -933,7 +941,7 @@ Expected: **同样的 FAIL**。这正是这条守卫最大的价值：这个配�
 - [ ] **Step 6: Commit**
 
 ```bash
-git add vitest.config.ts test/integration/tsconfig.json test/integration/ package.json
+git add vitest.config.ts test/integration/tsconfig.json test/integration/ package.json .gitignore
 git commit -m "test: browser-mode integration tests with a WebGPU guard that fails loudly
 
 The integration tests now run in vitest's browser mode, so a test file is
