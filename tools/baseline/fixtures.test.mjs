@@ -11,9 +11,19 @@ const capture = (camera, state) => readJson(path.join(root, camera, `${state}.un
 const lastFrame = doc => doc.frames.at(-1)
 const uniform = (doc, name) => lastFrame(doc).find(u => u.name === name)
 
+/*
+ * A capture that failed is recorded in index.json as a stub carrying only
+ * { id, camera, state, error } -- no uniformNames, and no files on disk. The
+ * tests below iterate captures and read those fields, so without this filter a
+ * single failed capture would surface as a pile of TypeErrors and ENOENTs that
+ * bury the one useful message. Completeness is asserted directly by the first
+ * two tests, which is where a missing capture should fail.
+ */
+const captured = index => index.captures.filter(c => !c.error)
+
 test('every camera x state pair has a capture', async () => {
   const index = await readJson(path.join(root, 'index.json'))
-  const got = new Set(index.captures.filter(c => !c.error).map(c => c.id))
+  const got = new Set(captured(index).map(c => c.id))
   for (const camera of CAMERAS) {
     for (const state of STATES) {
       assert.ok(got.has(captureId(camera, state)), `missing capture ${captureId(camera, state)}`)
@@ -36,7 +46,7 @@ test('the captured projection kind matches the camera under test', async () => {
   // camera would otherwise produce a complete, self-consistent, wrong baseline.
   const EXPECTED = { perspective: 1, cylindrical: 2, planet: 3, pannini: 4 }
   const index = await readJson(path.join(root, 'index.json'))
-  for (const c of index.captures) {
+  for (const c of captured(index)) {
     const doc = await readJson(path.join(root, c.camera, `${c.state.id}.uniforms.json`))
     const kind = uniform(doc, 'u_CamProjType')
     assert.ok(kind, `${c.id} has no u_CamProjType`)
@@ -79,7 +89,7 @@ test('camera rotation reaches the GPU', async () => {
 
 test('pixels decode to a full RGBA frame', async () => {
   const index = await readJson(path.join(root, 'index.json'))
-  for (const c of index.captures) {
+  for (const c of captured(index)) {
     const png = await readFile(path.join(root, c.camera, `${c.state.id}.png`))
     assert.ok(png.length > 0, `${c.id}: empty png`)
     // PNG signature. A base64 slip would produce a file that is non-empty but
@@ -111,7 +121,7 @@ test('the dead uniforms reach no camera (pins F5 and F6)', async () => {
    */
   const dead = ['u_CamPOVLatitude', 'u_CamGeoWidth', 'u_CamGeoHeight']
   const index = await readJson(path.join(root, 'index.json'))
-  for (const c of index.captures) {
+  for (const c of captured(index)) {
     for (const name of dead) {
       assert.ok(!c.uniformNames.includes(name), `${c.id} unexpectedly received ${name}`)
     }
