@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile, mkdir, mkdtemp, writeFile, rm, cp } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import zlib from 'node:zlib'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,6 +15,58 @@ const readJson = async p => JSON.parse(await readFile(p, 'utf8'))
 const capture = (camera, state) => readJson(path.join(root, camera, `${state}.uniforms.json`))
 const lastFrame = doc => doc.frames.at(-1)
 const uniform = (doc, name) => lastFrame(doc).find(u => u.name === name)
+
+/*
+ * Minimal PNG decoder for the one job this suite needs: proving a fixture
+ * holds real image content rather than a valid signature over garbage.
+ * Supports exactly what Chromium's canvas encoder emits -- 8-bit RGBA,
+ * non-interlaced -- and throws on any other shape, which is the right
+ * behaviour for a verifier of frozen bytes.
+ */
+const decodePng = buf => {
+  let off = 8
+  let ihdr = null
+  const idat = []
+  while (off + 12 <= buf.length) {
+    const len = buf.readUInt32BE(off)
+    const type = buf.toString('ascii', off + 4, off + 8)
+    const data = buf.subarray(off + 8, off + 8 + len)
+    if (type === 'IHDR') ihdr = { width: data.readUInt32BE(0), height: data.readUInt32BE(4), depth: data[8], color: data[9], interlace: data[12] }
+    if (type === 'IDAT') idat.push(data)
+    if (type === 'IEND') break
+    off += 12 + len
+  }
+  if (!ihdr) throw new Error('png has no IHDR chunk')
+  if (ihdr.depth !== 8 || ihdr.color !== 6 || ihdr.interlace !== 0) {
+    throw new Error(`unsupported png shape: depth=${ihdr.depth} color=${ihdr.color} interlace=${ihdr.interlace}`)
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat))
+  const stride = ihdr.width * 4
+  const px = Buffer.alloc(ihdr.height * stride)
+  const paeth = (a, b, c) => {
+    const p = a + b - c
+    const pa = Math.abs(p - a)
+    const pb = Math.abs(p - b)
+    const pc = Math.abs(p - c)
+    return pa <= pb && pa <= pc ? a : pb <= pc ? b : c
+  }
+  for (let y = 0; y < ihdr.height; y++) {
+    const filter = raw[y * (stride + 1)]
+    const line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1))
+    for (let i = 0; i < stride; i++) {
+      const a = i >= 4 ? px[y * stride + i - 4] : 0
+      const b = y > 0 ? px[(y - 1) * stride + i] : 0
+      const c = (i >= 4 && y > 0) ? px[(y - 1) * stride + i - 4] : 0
+      let v = line[i]
+      if (filter === 1) v += a
+      else if (filter === 2) v += b
+      else if (filter === 3) v += (a + b) >> 1
+      else if (filter === 4) v += paeth(a, b, c)
+      px[y * stride + i] = v & 255
+    }
+  }
+  return { width: ihdr.width, height: ihdr.height, pixels: px }
+}
 
 /*
  * A capture that failed is recorded in index.json as a stub carrying only
@@ -102,6 +155,60 @@ test('pixels decode to a full RGBA frame', async () => {
       [0x89, 0x50, 0x4e, 0x47],
       `${c.id}: not a PNG`
     )
+    // Decode, and tie the frame's own header to the declared capture
+    // resolution -- independent of anything index.json says about it, so a
+    // cropped or resized frame cannot pass as the fixture it claims to be.
+    const { width, height } = decodePng(png)
+    assert.equal(width, CANVAS_SIZE, `${c.id}: png is ${width}px wide, expected ${CANVAS_SIZE}`)
+    assert.equal(height, CANVAS_SIZE, `${c.id}: png is ${height}px tall, expected ${CANVAS_SIZE}`)
+  }
+})
+
+test('every frame carries real image content', async () => {
+  /*
+   * The content oracle. Everything else here is structural: ids present,
+   * names plausible, hashes matching -- all of which a solid-colour frame
+   * satisfies, whether it is black from a dead context or grey from a shader
+   * that never ran. The probe's source is a longitude/latitude ramp with a
+   * 16px checker, so any faithful render has thousands of distinct colours.
+   * The floor sits an order of magnitude below the frozen baseline's measured
+   * minimum (5774, perspective/origin) and three orders above a solid frame.
+   */
+  const MIN_DISTINCT = 1000
+  for (const c of captured(INDEX)) {
+    const { pixels } = decodePng(await readFile(path.join(root, c.camera, `${c.state.id}.png`)))
+    const seen = new Set()
+    for (let i = 0; i < pixels.length; i += 4) seen.add(pixels.readUInt32BE(i))
+    assert.ok(seen.size >= MIN_DISTINCT, `${c.id}: only ${seen.size} distinct colours -- frame looks unrendered`)
+  }
+})
+
+test('the projections and poses are visually distinguishable', async () => {
+  /*
+   * Pixel-domain counter-assertions, mirroring what the rotation test does
+   * for uniforms: if every camera rendered the same picture, every
+   * downstream pixel comparison would be noise against noise. Measured on
+   * the frozen baseline -- the only byte-equal pairs anywhere in the matrix
+   * are the two degenerate zoom states the degeneracy test pins on purpose.
+   */
+  const bytes = async id => readFile(path.join(root, `${id}.png`))
+
+  const origins = CAMERAS.map(c => `${c}/origin`)
+  for (let i = 0; i < origins.length; i++) {
+    for (let j = i + 1; j < origins.length; j++) {
+      const [a, b] = await Promise.all([bytes(origins[i]), bytes(origins[j])])
+      assert.ok(!a.equals(b), `${origins[i]} and ${origins[j]} render identically`)
+    }
+  }
+
+  for (const camera of CAMERAS) {
+    const ids = ['origin', 'tilt', 'south'].map(s => `${camera}/${s}`)
+    const bufs = await Promise.all(ids.map(bytes))
+    for (let i = 0; i < bufs.length; i++) {
+      for (let j = i + 1; j < bufs.length; j++) {
+        assert.ok(!bufs[i].equals(bufs[j]), `${ids[i]} and ${ids[j]} render identically`)
+      }
+    }
   }
 })
 
@@ -190,10 +297,21 @@ test('the observed degenerate states are pinned (F5 + F11 + F12 compose)', async
   // not of the state matrix being unable to express zoom at all.
   assert.ok(!(await same('pannini', 'origin', 'zoomed')), 'pannini/zoomed collapsed onto origin')
 
-  // The clamp is one-sided: zooming out below 1 is retained for every camera.
+  /*
+   * The clamp is one-sided: zooming out below 1 is retained for every camera
+   * that receives a zoom uniform at all. Presence is asserted per camera
+   * rather than skipped: a change that makes the GLSL compiler drop u_CamZoom
+   * would otherwise delete this pin with zero failures -- the dead-uniform
+   * pin cannot notice, because it only lists uniforms that are already dead.
+   */
+  const EXPECTS_ZOOM = { perspective: false, cylindrical: true, planet: true, pannini: true }
   for (const camera of CAMERAS) {
     const zoom = uniform(await capture(camera, 'zoomed'), 'u_CamZoom')
-    if (!zoom) continue // the linear camera receives no u_CamZoom at all
+    if (!EXPECTS_ZOOM[camera]) {
+      assert.ok(!zoom, `${camera}: received u_CamZoom ${zoom && zoom.value}, but v0.2.2 never sent one`)
+      continue
+    }
+    assert.ok(zoom, `${camera}: u_CamZoom vanished from the zoomed state`)
     assert.ok(zoom.value >= 0.1 && zoom.value <= 2, `${camera}: u_CamZoom ${zoom.value} outside the clamp range`)
   }
 })

@@ -6,7 +6,7 @@
  */
 
 import { chromium } from 'playwright'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -72,6 +72,18 @@ await writeFile(
 
 const index = { canvasSize: CANVAS_SIZE, capturedAt: new Date().toISOString(), captures: [] }
 
+/*
+ * Start from a clean slate. Nothing downstream reconciles the fixture tree
+ * with index.json across runs, so a file left by a previous run -- a capture
+ * that used to succeed, a matrix entry that no longer exists -- would sit
+ * there looking exactly like a fresh product and silently satisfy a verifier
+ * that enumerates the matrix. The static files (bundle.js, README.md) live at
+ * the fixture root and are not touched; only the per-camera outputs go.
+ */
+for (const camera of CAMERAS) {
+  await rm(path.join(fixtureRoot, camera), { recursive: true, force: true })
+}
+
 for (const camera of CAMERAS) {
   for (const state of STATES) {
     const id = captureId(camera, state)
@@ -89,6 +101,21 @@ for (const camera of CAMERAS) {
        */
       if (result.frames.length !== FRAMES_PER_CAPTURE) {
         throw new Error(`expected ${FRAMES_PER_CAPTURE} frames, got ${result.frames.length}`)
+      }
+
+      /*
+       * The three frames exist to prove steady state; collecting them only
+       * means something if something asserts it. A transient first frame --
+       * eased camera, late texture effect -- would otherwise be frozen into
+       * the baseline while every structural check passes. PNG data URLs are
+       * base64 of the exact bytes, so string equality is byte equality.
+       */
+      const first = result.frames[0]
+      const steady = result.frames.every(
+        f => f.png === first.png && JSON.stringify(f.uniforms) === JSON.stringify(first.uniforms)
+      )
+      if (!steady) {
+        throw new Error('frames differ across the three-frame window -- no steady state')
       }
 
       const dir = path.join(fixtureRoot, camera)
@@ -117,6 +144,15 @@ for (const camera of CAMERAS) {
       console.log(`ok (${result.frames.length} frames, ${png.length}B)`)
     } catch (e) {
       console.log(`FAILED: ${e.message}`)
+      /*
+       * The two files of a state are written separately, so the throw can
+       * land between them -- a fresh png next to a stale uniforms.json, or
+       * either next to files from a previous successful run of a state that
+       * now fails. A failed capture must leave nothing behind that a
+       * matrix-enumerating verifier could mistake for its fixture.
+       */
+      await rm(path.join(fixtureRoot, camera, `${state.id}.png`), { force: true })
+      await rm(path.join(fixtureRoot, camera, `${state.id}.uniforms.json`), { force: true })
       index.captures.push({ id, camera, state, error: e.message })
     }
   }
