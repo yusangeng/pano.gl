@@ -32,7 +32,7 @@ spec §10.5 写的是「旧代码不被触碰」。这次移动**不违背它的
 | `src/` | **新实现的唯一根目录**，P1 时只有 `diagnostics.ts` 和 `index.ts` |
 | `test/unit/` | vitest 单元测试 |
 | `test/integration/` | Playwright 集成测试 |
-| `scripts/` | 构建期脚本（P2 起有 shader 常量生成器） |
+| `scripts/` | 构建期脚本（P2 起是 shader 常量生成器） |
 | `tsconfig.json` | strict + `noUncheckedIndexedAccess` |
 | `tsup.config.ts` | 打包配置，两套入口 |
 | `vitest.config.ts` | 单元测试 + 覆盖率阈值 |

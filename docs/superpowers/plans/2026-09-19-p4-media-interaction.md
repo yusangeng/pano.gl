@@ -10,7 +10,7 @@
 
 ---
 
-## 前置说明：两条不在计划里但必须知道的结论
+## 前置说明：三条不在计划里但必须知道的结论
 
 **1. `EventEmitter` / `Disposable` 是 foundation 层，却写在本计划里。**
 它们第一个消费者是 media，但依赖方向上是纯底层（不依赖 `core/` 以外任何东西）。**上榜时 layer 填 `foundation`，deps 为空** —— 不要让它们去等 P4 的其它卡。
@@ -25,6 +25,15 @@
 1. **`src/media/` 里不存在任何叫 `frameSize` 的选项、参数或字段**，也不要再造一个同义词（`size`、`targetSize` 之类）。「源太大该怎么办」的答案由**后端**给出 —— 后端是唯一知道 `Capabilities.maxTextureDimension` 的地方，素材层只负责把它算成上传尺寸（`planDownscale`）。
 2. **`SourceState` 由 `core` 定义，本层只组合它，不重新定义。** `core` 是两个后端都认可的那一层，且按设计不碰 DOM；媒体元素、帧计数器这类 DOM 侧的东西属于本层自己的类型。另起一个同形状的 `SourceState` 会是一个**结构上的近似副本**，它能编译通过，直到有人改了其中一份 —— 而且 P3 的 `Backend.setSource` 收的是 core 的 `SourceState`，P6 的 `WebGL2Backend implements Backend` 会因此对不上。
 
+**3. 本层的集成测试需要两个素材，而这两个素材不属于任何一个阶段。**
+`public/fixtures/panorama.png`（一张等距柱面全景，**四个象限颜色两两可区分**）与 `public/fixtures/clip.mp4`（一段两秒的视频，**每一帧同样四象限可分、且有肉眼可辨的运动**）。服务它们不需要任何配置：playwright 的 webServer 从仓库根起 `npx vite`，Vite 的 `publicDir` 默认值就是 `<root>/public`。但 `public/fixtures/` 下的**文件**没有任何一张计划负责产出。**由本计划产出，落在 Task 2 的 Step 7** —— P4 的 `image-source.test.ts` / `video-source.test.ts`、P5 的全部 User Story、P6 的后端对比都要用它们。
+
+**素材规格（不是随便找两个文件就行）：**
+- 图片要能被 `countNonBlack` 判为「非黑」，也就是画面大部分不是暗的；再要**上下可区分**，否则「画面是不是倒的」这件事从像素上根本看不出来 —— 而上下颠倒正是旧版最难发现的那个 bug。
+- 还要**左右可区分**。只有一条竖直分界的图，水平平移前后像素完全相同，「平移改变了画面」这条断言会对着一个冻住的画布通过 —— 它错得和「上下同色」一样安静。四个象限同时满足这两条，这也是生成器不用两半的原因。
+- 视频要能被 `chromium` 的默认解码器解出来（H.264 的 MP4 最稳），时长足够跑完「播放 → 暂停 → 断言不再画」这一串，且**帧与帧之间要有差异** —— 一段静止的片子会让「播放中画面在变」永远失败，而且失败得像是渲染坏了。
+- 仓库里已有的 `demo/` 素材是旧版的 2048/4096 宽图，**尺寸与本层的缩放逻辑无关**（见第 2 条）；但它们是为 2 的幂挑的，上下关系没有保证，**不要直接拿来充数**。
+
 ---
 
 ## File Structure
@@ -36,6 +45,9 @@
 | `src/media/image-source.ts` | `<img>` 实现 |
 | `src/media/video-source.ts` | `<video>` 实现；**不含**上传路径选择，那要读 device，是后端的 |
 | `src/media/downscale.ts` | 超限时的缩放，与素材类型无关 |
+| `scripts/gen-fixtures.mjs` | 生成下面两个素材的脚本；产物提交，脚本只在改素材时跑 |
+| `public/fixtures/panorama.png` | 集成测试读的全景图，四象限四色 |
+| `public/fixtures/clip.mp4` | 集成测试读的两秒视频，每 0.25s 换一帧画面 |
 | `src/interaction/input-controller.ts` | 指针监听、`AbortController`、语义事件 |
 | `src/interaction/gestures.ts` | 拖拽 / 滚轮 / 双指捏合的纯函数识别 |
 | `test/unit/gestures.test.ts` | 手势识别（纯函数，好测） |
@@ -398,6 +410,9 @@ resistance."
 **Files:**
 - Create: `src/media/source.ts`
 - Create: `src/media/downscale.ts`
+- Create: `scripts/gen-fixtures.mjs`
+- Create: `public/fixtures/panorama.png`
+- Create: `public/fixtures/clip.mp4`
 - Test: `test/unit/downscale.test.ts`
 
 - [ ] **Step 1: 写失败测试**
@@ -651,6 +666,159 @@ a gl.RGB/LINEAR/no-CLAMP_TO_EDGE upload. WebGPU has no such requirement, so
 this only scales when the device limit is actually exceeded."
 ```
 
+- [ ] **Step 7: 生成两个 fixture 素材**
+
+前置说明第 3 条说的两个文件，在这里落地 —— 这是第一个需要它们的任务。
+
+**为什么提交产物而不是让大家现场生成。** 生成视频要 ffmpeg，而 ffmpeg 不是 npm 生态里的东西 —— 让每个 clone 的人先装 ffmpeg 才能跑测试，正是这次迁移要摆脱的那类依赖（P0 把 v0.2.2 的 bundle 存进仓库是同一个理由）。脚本留在仓库里，改素材时用它；产物也进仓库。
+
+**为什么素材要有这些性质。** 「上下两半可区分」不是审美要求：旧版最难看出来的一个 bug 就是画面上下颠倒，而一张上下同色的图倒过来和正着长得一模一样，谁都发现不了。同理，「左右也要可区分」是给 PTZ 断言用的 —— 只有一条竖直分界的图，水平平移前后像素完全相同，那条测试会对着一个冻住的画布通过。所以是**四个象限**，不是两半。
+
+- [ ] **Step 7a: 写生成器**
+
+`scripts/gen-fixtures.mjs`：
+
+```js
+/*
+ * Regenerates the two fixtures the integration suites read. Both outputs are
+ * committed, so this runs only when the fixtures themselves need to change --
+ * cloning the repo and running the suite never requires ffmpeg.
+ *
+ *   node scripts/gen-fixtures.mjs
+ *
+ * Requires ffmpeg on PATH. Nothing in package.json depends on it.
+ */
+
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const outDir = path.join(root, 'public', 'fixtures')
+const png = path.join(outDir, 'panorama.png')
+const mp4 = path.join(outDir, 'clip.mp4')
+
+const W = 512
+const H = 256
+
+/*
+ * Four quadrants, not two.
+ *
+ * Four colours because two different assertions have to hold at once: up and
+ * down must differ (the orientation checks) and a horizontal pan must change
+ * pixels (the PTZ checks). A single vertical split would make every pan a no-op.
+ *
+ * ffmpeg routes these hex values through YUV, so what lands in the file is the
+ * converted value, not the literal below. They stay distinct and stable, which
+ * is all the tests need -- do not assert exact channel values anywhere.
+ */
+const QUADRANTS = ['0xCC2222', '0x22CC22', '0x2222CC', '0xCCCC22']
+
+const quad = (color) => ['-f', 'lavfi', '-i', `color=c=${color}:s=${W / 2}x${H / 2}`]
+
+const ffmpeg = (args) =>
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args])
+
+/** Renders one frame from four quadrant colours, in TL, TR, BL, BR order. */
+const frame = (file, [tl, tr, bl, br]) =>
+  ffmpeg([
+    ...quad(tl), ...quad(tr), ...quad(bl), ...quad(br),
+    '-filter_complex',
+    '[0:v][1:v]hstack[top];[2:v][3:v]hstack[bottom];[top][bottom]vstack[out]',
+    '-map', '[out]', '-frames:v', '1', file
+  ])
+
+/** The palette rotated left by `n`. */
+const rotated = (n) => QUADRANTS.map((_colour, i) => QUADRANTS[(i + n) % 4])
+
+/*
+ * The clip cycles through four rotations of the palette, not two.
+ *
+ * The tests sample it at wall-clock intervals rather than at known frame
+ * indices, so what has to hold is not "do consecutive frames differ" but "do two
+ * samples 500ms apart differ, whatever phase they start at". With a two-image
+ * alternation held 8 frames each, a sample taken 15 frames later lands back on
+ * the same image for most phases, and the assertion reads zero difference on a
+ * perfectly healthy video -- a flake that looks exactly like a broken renderer.
+ * Four images push that alias out to a whole 32-frame cycle (~1.07s), and every
+ * gap from 8 to 24 frames (267-800ms) then has zero aliasing at every phase.
+ */
+const CYCLE = QUADRANTS.map((_colour, n) => rotated(n))
+
+mkdirSync(outDir, { recursive: true })
+const tmp = mkdtempSync(path.join(tmpdir(), 'pano-fixtures-'))
+
+try {
+  const stills = CYCLE.map((quadrants, i) => {
+    const file = i === 0 ? png : path.join(tmp, `frame-${i}.png`)
+    frame(file, quadrants)
+    return file
+  })
+
+  // Two passes over the cycle, so the clip loops without a seam and no sampling
+  // interval shorter than a full cycle can land on the same image twice.
+  const segments = []
+  for (let i = 0; i < CYCLE.length * 2; i++) segments.push(stills[i % CYCLE.length])
+
+  const inputs = segments.flatMap((file) => [
+    // 0.25s at 30fps is 8 whole frames, which is the hold this design assumes.
+    '-loop', '1', '-t', '0.25', '-r', '30', '-i', file
+  ])
+  const labels = segments.map((_file, i) => `[${i}:v]`).join('')
+
+  ffmpeg([
+    ...inputs,
+    '-filter_complex', `${labels}concat=n=${segments.length}:v=1[out]`,
+    '-map', '[out]',
+    // yuv420p is the only chroma layout every browser decodes without argument.
+    '-pix_fmt', 'yuv420p',
+    '-c:v', 'libx264',
+    // Without faststart the moov atom sits at the end of the file and the
+    // browser has to fetch the whole thing before it reports a duration.
+    '-movflags', '+faststart',
+    mp4
+  ])
+} finally {
+  rmSync(tmp, { recursive: true, force: true })
+}
+
+for (const file of [png, mp4]) {
+  const { size } = statSync(file)
+  if (size === 0) throw new Error(`ffmpeg produced an empty ${file}`)
+  console.log(`${path.relative(root, file)}  ${size} bytes`)
+}
+```
+
+- [ ] **Step 7b: 生成**
+
+Run: `node scripts/gen-fixtures.mjs`
+Expected: 两行输出，各几 KB（实测 `panorama.png` 1839 字节、`clip.mp4` 约 4.9KB —— 纯色图压缩率极高，**大小不是断言，别写进测试**）
+
+Run: `ffprobe -v error -select_streams v -show_entries stream=width,height,nb_frames,codec_name -of csv=p=0 public/fixtures/clip.mp4`
+Expected: `h264,512,256,64`（字段顺序随 ffprobe 版本可能不同；关键是 `512`、`256`、**`64`** —— 64 帧 = 8 段 × 8 帧 = 2.13 秒，正好让片子循环得起来）
+
+Run: `ls -l public/fixtures/`
+Expected: **只有两个文件**。四张静帧里只有第一张落在 `public/`，另外三张写在临时目录里、跑完就删 —— 它们不是测试素材，只是生成过程的中间产物，不该进仓库。
+
+> **视频那条断言若红在「解不出来」上，先怀疑路径而不是编码器。** 立项时已用 Playwright 会装的那个 Chromium（`chromium-1243`）实测过 `canPlayType('video/mp4; codecs="avc1.42E01E"')` 返回 `probably`，且加载本脚本产出的同参数文件后 `videoWidth=256`、`readyState=4`（`HAVE_ENOUGH_DATA`）。**注意版本**：更老的缓存副本 `chromium-1169` 对同一文件回 `h264=NO` —— 若本机命中了那个副本，先 `npx playwright install chromium` 再查代码。
+
+- [ ] **Step 7c: Commit**
+
+```bash
+git add scripts/gen-fixtures.mjs public/fixtures/
+git commit -m "test(fixtures): generate the panorama and clip the media suites read
+
+Two files, three invocations, no hand-editing: committing the outputs means
+a clone can run the suite without ffmpeg installed. The four-colour layout
+is what makes an upside-down source and a frozen pan both detectable."
+```
+
+> **为什么素材在 P4 而不在 P1。** P1 建的是测试设施（vitest、playwright、WebGPU 守卫），而这两个文件的**规格来自它们的消费者** —— 四个象限是为了满足 P4 的朝向与上传路径断言、P5 的 PTZ 断言、P6 的后端对比。把文件放在第一个需要它们的阶段，规格和产物就在同一份文档里，不会各自漂移。P1 只需要保证 `npx vite`（playwright 的 webServer，从仓库根起）能把它服务出来 —— 那是 Vite 的 `publicDir` 默认值 `<root>/public`，不需要任何配置。
+
+> **不能拿仓库里已有的 demo 素材充数。** 那些是旧版为 2 的幂尺寸挑的，上下关系没有任何保证 —— 而这里要断言的恰恰是上下关系。
+
 ---
 
 ### Task 3: `ImageSource`
@@ -731,16 +899,18 @@ test('dispose aborts every DOM listener', async ({ gpuPage }) => {
   const result = await gpuPage.evaluate(async () => {
     const { ImageSource } = window.__panoTest
     const src = new ImageSource('/fixtures/panorama.png')
-    const before = (src as any).__listenerCount()
+    const before = src.listenerCount
     src.dispose()
-    return { before, after: (src as any).__listenerCount() }
+    return { before, after: src.listenerCount }
   })
   expect(result.before).toBeGreaterThan(0)
   expect(result.after).toBe(0)
 })
 ```
 
-> `__listenerCount()` 是 `ImageSource` 自己的计数器，不是读 DOM。**加一个私有计数是有意的**：让「有没有漏摘」变成一条可断言的事实。`AbortController` 清掉监听器，计数器由 `signal.aborted` 的监听递减。
+> `listenerCount` 是 `ImageSource` 自己的计数器，读它不碰 DOM，也不需要任何强转。**把它做成公开只读属性是有意的**：让「有没有漏摘监听」变成一条可断言的事实，而不是靠读源码相信。计数在 `dispose` 里随 `abort()` 归零 —— 一个 `AbortSignal` 管住全部监听器，所以归零只有一处。
+>
+> **不要把它换成包装 `addEventListener`/`removeEventListener` 的全局计数。** `AbortController` 摘监听器时不调 `removeEventListener`，那样的计数会把一个已经清干净的源报成满的。
 
 - [ ] **Step 2: 实现**
 
@@ -800,14 +970,29 @@ export class ImageSource extends Disposable implements MediaSource {
   #listen (domName: string, eventName: keyof MediaEvents & string): void {
     this.#listenerCount++
     this.#element.addEventListener(domName, (evt) => {
-      // Every media event bumps the version. The renderer does not care which
-      // one fired; it cares whether the pixels might have changed.
+      // Only `load` bumps the version, because only `load` means the pixels
+      // changed -- an image's pixels change exactly once. Bumping on every event
+      // would make `error` look like new content, and the render loop's whole
+      // dirty check is "has this version moved".
       if (eventName === 'media-load') this.#version++
       this.#events.emit(eventName, {
         target: this,
         error: eventName === 'media-error' ? new Error(`failed to load ${this.#element.src}`) : undefined
       })
     }, { signal: this.#abort.signal })
+  }
+
+  /**
+   * How many DOM listeners this source currently holds.
+   *
+   * Public and read-only on purpose: "did dispose actually remove everything" is
+   * otherwise unobservable, and the legacy codebase leaked listeners in four
+   * files for exactly that reason. Every listener here goes through one
+   * `AbortSignal`, so `dispose` aborts the controller and the count goes to zero
+   * in one place -- see `dispose`.
+   */
+  get listenerCount (): number {
+    return this.#listenerCount
   }
 
   /** Subscribes to this source's re-emitted media events. */
@@ -936,6 +1121,10 @@ test('version advances when the render loop ticks the source', async ({ gpuPage 
   // event is fine-grained enough -- so that is what the test does. The end-to-end
   // half (a playing video whose drawn pixels actually change) is P5's video user
   // story; this pins the source's side of the contract.
+  //
+  // `play()` first, and that is not incidental: the tick only advances a video
+  // that is actually producing frames. See the paused test below for the other
+  // half of that guard.
   const result = await gpuPage.evaluate(async () => {
     const { VideoSource } = window.__panoTest
     const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
@@ -948,6 +1137,114 @@ test('version advances when the render loop ticks the source', async ({ gpuPage 
     return { a, b }
   })
   expect(result.b).toBeGreaterThan(result.a)
+})
+
+test('a paused video does not advance, so the loop can stop', async ({ gpuPage }) => {
+  // The other half of the guard, and the one that decides whether a viewer of a
+  // paused video burns a full-screen fragment shader at the display's refresh
+  // rate for as long as it is alive.
+  //
+  // The loop draws when the version moves and calls `markFramePresented` from
+  // inside a draw, so "advance on every drawn frame" is self-sustaining: draw ->
+  // bump -> draw. Nothing in v1 caps that (the legacy `MAX_FRAME_RATE = 60` is
+  // gone), so the video's own state has to be what bounds it.
+  const result = await gpuPage.evaluate(async () => {
+    const { VideoSource } = window.__panoTest
+    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
+    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    await src.play()
+    await new Promise(r => { const off = src.on('media-pause', () => { off(); r(null) }); src.pause() })
+    // Read before dispose: dispose pauses the element too, so reading it
+    // afterwards would assert teardown instead of the precondition.
+    const paused = src.element.paused
+    const a = src.frame.version
+    for (let i = 0; i < 3; i++) src.markFramePresented()
+    const b = src.frame.version
+    src.dispose()
+    return { paused, a, b }
+  })
+  expect(result.paused).toBe(true)
+  expect(result.b).toBe(result.a)
+})
+
+test('resuming a stopped loop is driven by the play event', async ({ gpuPage }) => {
+  // Why `media-play` bumps at all. Once a paused video stops advancing, the loop
+  // stops drawing -- and `markFramePresented` is only reachable from inside a
+  // draw. So without a bump from the event, a resumed video would need a frame to
+  // get a frame: a deadlock whose symptom is "the video never comes back".
+  const result = await gpuPage.evaluate(async () => {
+    const { VideoSource } = window.__panoTest
+    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
+    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    await src.play()
+    await new Promise(r => { const off = src.on('media-pause', () => { off(); r(null) }); src.pause() })
+    const stopped = src.frame.version
+    // The listener goes on BEFORE play(): `play()` resolves after the event has
+    // fired, so a listener attached afterwards would wait for a second play that
+    // never comes, and the test would hang instead of failing.
+    const played = new Promise(r => { const off = src.on('media-play', () => { off(); r(null) }) })
+    await src.play()
+    await played
+    const resumed = src.frame.version
+    src.dispose()
+    return { stopped, resumed }
+  })
+  expect(result.resumed).toBeGreaterThan(result.stopped)
+})
+
+test('a seek while paused reaches the screen', async ({ gpuPage }) => {
+  // Same deadlock, different trigger: `media-seeked` is the only event that
+  // reports "the displayed frame is now a different one" for a video that is not
+  // playing.
+  const result = await gpuPage.evaluate(async () => {
+    const { VideoSource } = window.__panoTest
+    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
+    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    const before = src.frame.version
+    // Halfway rather than a fixed second: the fixture only has to be a few
+    // seconds long, and a seek past the end reports the end instead of a new
+    // frame.
+    const target = src.element.duration / 2
+    await new Promise(r => {
+      const off = src.on('media-seeked', () => { off(); r(null) })
+      src.element.currentTime = target
+    })
+    const after = src.frame.version
+    src.dispose()
+    return { before, after, target }
+  })
+  expect(result.target).toBeGreaterThan(0)
+  expect(result.after).toBeGreaterThan(result.before)
+})
+
+test('the last frame of a video is drawn', async ({ gpuPage }) => {
+  // Why `media-ended` bumps too. Once the video ends, `ended` and `paused` are
+  // both true, so `markFramePresented` will never advance the version again --
+  // and the decoded final frame may not have been drawn yet, because the loop's
+  // next tick is what would have drawn it. Without this bump the video visibly
+  // stops one frame early, which reads as "the video is fine, it just ends
+  // there".
+  //
+  // The seek to just before the end is what keeps the test fast; it is deliberate
+  // that the version is read AFTER the seek has settled, so what the assertion
+  // measures is the ending and not the seek.
+  const result = await gpuPage.evaluate(async () => {
+    const { VideoSource } = window.__panoTest
+    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
+    await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    await new Promise(r => {
+      const off = src.on('media-seeked', () => { off(); r(null) })
+      src.element.currentTime = Math.max(0, src.element.duration - 0.3)
+    })
+    const before = src.frame.version
+    const ended = new Promise(r => { const off = src.on('media-ended', () => { off(); r(true) }) })
+    await src.play()
+    await ended
+    const after = src.frame.version
+    src.dispose()
+    return { before, after }
+  })
+  expect(result.after).toBeGreaterThan(result.before)
 })
 
 test('hands out a fresh frame instead of a cached one', async ({ gpuPage }) => {
@@ -963,13 +1260,17 @@ test('hands out a fresh frame instead of a cached one', async ({ gpuPage }) => {
     const { VideoSource } = window.__panoTest
     const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
     await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
+    // Identical calls on an unchanged video must still produce two objects: the
+    // next draw is what advances the version, so a video that is playing is what
+    // this test needs. Playing also keeps `markFramePresented` from short-
+    // circuiting on a paused element.
+    await src.play()
     const a = src.frame
     const b = src.frame
     src.markFramePresented()
     const c = src.frame
     src.dispose()
-    return { cached: a === b, advanced: c.version > a.version, sameElement: a.element === b.element }
-  })
+    return { cached: a === b, advanced: c.version > a.version, sameElement: a.element === b.element }  })
   expect(result.cached).toBe(false)
   expect(result.advanced).toBe(true)
   expect(result.sameElement).toBe(true)
@@ -982,7 +1283,7 @@ test('dispose stops the element and removes every listener', async ({ gpuPage })
     await new Promise(r => { const off = src.on('media-load', () => { off(); r(null) }) })
     await src.play()
     src.dispose()
-    return { paused: src.element.paused, listeners: (src as any).__listenerCount() }
+    return { paused: src.element.paused, listeners: src.listenerCount }
   })
   expect(result.paused).toBe(true)
   expect(result.listeners).toBe(0)
@@ -1069,7 +1370,30 @@ export class VideoSource extends Disposable implements MediaSource {
   #listen (domName: string, eventName: keyof MediaEvents & string): void {
     this.#listenerCount++
     this.#element.addEventListener(domName, () => {
-      if (eventName === 'media-load') this.#version++
+      // The version advances on the events that change what should be on screen,
+      // and NOT on every event. Getting this set wrong is a deadlock rather than
+      // a glitch: the render loop only draws when a source's version moved, and
+      // `markFramePresented` -- the other thing that moves it -- is only called
+      // from inside a draw. A video that changed without bumping here would need
+      // a frame to get a frame.
+      //
+      //   media-load    the first frame exists at all
+      //   media-play    un-pauses a stopped loop; see `markFramePresented`
+      //   media-seeked  a seek while paused has no other way to reach the screen
+      //   media-ended   the last frame, drawn after `paused` has become true
+      //
+      // Deliberately NOT media-pause or media-progress: pausing changes nothing
+      // (the current frame is already drawn), and `timeupdate` fires about four
+      // times a second, which is far too coarse to be the thing that drives a
+      // video at 60fps.
+      if (
+        eventName === 'media-load' ||
+        eventName === 'media-play' ||
+        eventName === 'media-seeked' ||
+        eventName === 'media-ended'
+      ) {
+        this.#version++
+      }
       this.#events.emit(eventName, {
         target: this,
         // A failed video load must reach the application as a value it can show,
@@ -1080,15 +1404,32 @@ export class VideoSource extends Disposable implements MediaSource {
   }
 
   /**
-   * Bumps the version on every drawn frame.
+   * Advances the version while the video is actually producing frames.
    *
-   * Called by the render loop rather than driven by an event: there is no DOM
-   * event for "a new frame is ready to sample", and `timeupdate` fires only
-   * about four times a second -- far too coarse to drive a 60fps upload. A
-   * paused video therefore re-uploads at the draw rate; the renderer's frame
-   * rate cap is what bounds that cost.
+   * Called by the render loop after each draw, rather than driven by an event:
+   * there is no DOM event for "a new frame is ready to sample", and `timeupdate`
+   * fires only about four times a second. While the video plays, this is what
+   * makes the next frame draw at all.
+   *
+   * The guard is what keeps a paused video from doing work forever. Without it
+   * the version advances on every drawn frame, "drawn" is defined as "the version
+   * moved", and the loop therefore redraws a full-screen fragment shader for a
+   * video nobody is watching -- at the display's refresh rate, for as long as the
+   * viewer is alive. The legacy codebase bounded that with a `MAX_FRAME_RATE = 60`
+   * cap on draw calls; v1 has no such cap (a cap is a fixed-rate loop pretending
+   * to be a reactive one), so the bound has to come from the video's own state.
+   *
+   * `ended` and not only `paused`: they are separate properties, `ended` stays
+   * true after the last frame, and reading `paused` alone would leave a finished
+   * video re-uploading at the refresh rate.
+   *
+   * The cost of reading the element here is one property read per drawn frame,
+   * and the alternative -- a timer, or a `requestVideoFrameCallback` -- would
+   * either poll or add a callback whose lifetime has to be managed alongside the
+   * `AbortSignal`.
    */
   markFramePresented (): void {
+    if (this.#element.paused || this.#element.ended) return
     this.#version++
   }
 
@@ -1139,7 +1480,22 @@ export class VideoSource extends Disposable implements MediaSource {
   }
 
   pause (): void {
+    this.assertAlive()
     this.#element.pause()
+  }
+
+  /**
+   * How many DOM listeners this source currently holds.
+   *
+   * Same reasoning as `ImageSource.listenerCount`: "did dispose remove
+   * everything" is otherwise unobservable. This class is the more interesting
+   * case of the two, because it binds ten listeners -- the eight DOM event names
+   * in the shared `MEDIA_EVENT_MAP`, plus `loadedmetadata` (which is what makes
+   * the natural size meaningful and has no image equivalent) and `timeupdate` --
+   * and drops every one of them by aborting a single signal.
+   */
+  get listenerCount (): number {
+    return this.#listenerCount
   }
 
   override dispose (): void {
@@ -1346,19 +1702,36 @@ export async function renderVideoBothPaths (
     ])
     const copy = await readTarget()
 
-    // A uniform frame is useless as a probe: the test would pass on a black
-    // screen. The fixture's first frame must have a top and a bottom.
-    const distinct = new Set<number>()
-    for (let i = 0; i < external.length; i += 4) distinct.add(external[i]! + external[i + 1]! * 256)
+    // A uniform frame is useless as a probe -- the test would pass on a black
+    // screen -- and so is one whose top half and bottom half happen to match:
+    // "is this upside down" is a question about the top against the bottom, so
+    // the frame has to have a top and a bottom to tell apart. Hence the mean of
+    // each half rather than "are there two colours in here".
+    const halfMean = (from: number, to: number): number => {
+      let sum = 0
+      let count = 0
+      for (let y = from; y < to; y++) {
+        for (let x = 0; x < size; x++) {
+          const i = (y * size + x) * 4
+          sum += external[i]! + external[i + 1]! + external[i + 2]!
+          count += 3
+        }
+      }
+      return sum / count
+    }
+    const half = Math.floor(size / 2)
 
     return {
       external: { width: size, height: size, rgba: external },
       copy: { width: size, height: size, rgba: copy },
-      distinct
+      split: { top: halfMean(0, half), bottom: halfMean(half, size) }
     }
   }, { url, size }).then((r) => {
-    if (r.distinct.size < 2) {
-      throw new Error('the fixture frame is uniform; orientation cannot be judged from it')
+    if (Math.abs(r.split.top - r.split.bottom) < 8) {
+      throw new Error(
+        `the fixture frame has no top/bottom contrast (top ${r.split.top}, bottom ${r.split.bottom}); ` +
+        'orientation cannot be judged from it'
+      )
     }
     return { external: r.external, copy: r.copy }
   })
@@ -1369,8 +1742,22 @@ export async function renderVideoBothPaths (
 
 ```ts
 import { test, expect } from './support/fixtures'
-import { maxChannelDiff } from './support/gpu'
 import { renderVideoBothPaths } from './support/upload-paths'
+
+/*
+ * The largest per-channel difference between two readbacks.
+ *
+ * Defined here rather than in a shared helper: it is six lines, it has exactly
+ * one caller, and the tolerance below only means anything next to the reason for
+ * it. A `support/gpu.ts` holding this one function would be a file whose only
+ * content is a subtraction.
+ */
+function maxChannelDiff (a: readonly number[], b: readonly number[]): number {
+  if (a.length !== b.length) throw new Error('readbacks differ in size')
+  let max = 0
+  for (let i = 0; i < a.length; i++) max = Math.max(max, Math.abs(a[i]! - b[i]!))
+  return max
+}
 
 /*
  * The two upload paths must agree on orientation.
@@ -1382,6 +1769,9 @@ import { renderVideoBothPaths } from './support/upload-paths'
  */
 test('external and copy upload paths produce the same orientation', async ({ gpuPage }) => {
   const result = await renderVideoBothPaths(gpuPage, '/fixtures/clip.mp4')
+  // Not zero: the two paths do different colour-space conversions, so a couple
+  // of levels of difference is expected. What must not happen is a whole frame
+  // being mirrored, which moves every pixel that matters.
   expect(maxChannelDiff(result.external.rgba, result.copy.rgba)).toBeLessThanOrEqual(2)
 })
 ```
@@ -1389,9 +1779,9 @@ test('external and copy upload paths produce the same orientation', async ({ gpu
 - [ ] **Step 4: 跑测试**
 
 Run: `npm run test:integration -- video-source video-orientation`
-Expected: 全 PASS
+Expected: video-source 8 条 + video-orientation 1 条，全 PASS
 
-**`video-orientation` 失败时**：**不要直接给 copy 路径加 `flipY: true` 试**。先确认是**哪一条**需要翻 —— 把读回按行切成上下两半，看哪一条是倒的（探针里的 `distinct` 检查保证测试帧上下不对称，否则这条判断无从做起）。翻错了就是把对的翻成错的。若最终必须翻，改动落在**后端**（`WebGPUBackend` 的 copy 路径），不在本层。
+**`video-orientation` 失败时**：**不要直接给 copy 路径加 `flipY: true` 试**。先确认是**哪一条**需要翻 —— 把读回按行切成上下两半，看哪一条是倒的（探针里的 `split` 检查保证测试帧上下两半的均值差 ≥ 8，否则这条判断无从做起）。翻错了就是把对的翻成错的。若最终必须翻，改动落在**后端**（`WebGPUBackend` 的 copy 路径），不在本层。
 
 - [ ] **Step 5: Commit**
 
@@ -1914,14 +2304,16 @@ AbortController, and the element's touch-action is restored on dispose."
 ## 完成标准
 
 - [ ] 图片和视频都不存在「未加载就被上传」的路径（两条集成测试证明会抛）
-- [ ] `dispose()` 后每个源的 DOM 监听数归零
+- [ ] `dispose()` 后每个源的 DOM 监听数归零，且这个数字是**公开可读的**
 - [ ] `src/media/` 下不存在 `frameSize` 及其任何同义词
 - [ ] 本层不重新定义 `SourceState`，只组合 core 的那一个
 - [ ] 源不缓存帧（同一任务内两次读 `frame` 得到两个对象）
 - [ ] external / copy 两条上传路径的朝向一致
+- [ ] **暂停的视频不再推进版本号** —— 播放中会前进，暂停后不动，`play()` / seek 之后又能继续动（否则渲染循环要么永远重画，要么永远醒不过来）
 - [ ] `PTZ = false` 不产生事件，且重新打开后恢复
 - [ ] `touch-action` 在 dispose 时还原
 - [ ] 不存在任何 2 的幂量化逻辑
+- [ ] `public/fixtures/panorama.png` 与 `public/fixtures/clip.mp4` 已由 `scripts/gen-fixtures.mjs` 生成并提交，且 `ffprobe` 复核为 `512x256`、`64` 帧（P5 的全部 User Story、P6 的后端对比都读它们）
 
 ## 交给下游的东西
 
@@ -1932,9 +2324,12 @@ AbortController, and the element's touch-action is restored on dispose."
 | `MediaFrame` | **就是 P3 的 `RenderableSource`**（本计划写成 `type` 别名），P5 原样交给 `Backend.setSource`，全程无转换 |
 | `MediaFrame.version` | P5 的脏检查；P3 据此决定是否重传 |
 | `MediaFrame.state`（即 core 的 `SourceState`） | P3 的上传尺寸与 `projection` uniform |
-| `MediaSource.markFramePresented()` | P5 的渲染循环每画一帧调一次 —— 视频的版本号靠它前进 |
+| `MediaSource.markFramePresented()` | P5 的渲染循环每画一帧调一次 —— **播放中**视频的版本号靠它前进；暂停的源不会动 |
+| **视频源自己会在 `load` / `play` / `seeked` / `ended` 上推进版本号** | P5 的渲染循环**不需要**为「视频暂停后循环停了怎么再启动」做任何事 —— 重新播放和 seek 都会自己把版本号推一下，循环因此醒来。**不要在 Viewer 里加定时重绘或者忽略脏标记**，那会把这条契约弄坏 |
+| `listenerCount`（两个源各一个） | P5 的监听器泄漏断言；P6 的后端替换不该动它 |
 | `InputController` 的语义事件 | P5 的 `Viewer` 把 `pan`/`zoom` 转成相机动作 |
 | `WheelZoom` 常量 | 没有下游，但**它是行为变更**：旧版鼠标滚轮与触控板共用一个除数 |
+| `public/fixtures/` 的两个素材 | P5 的全部 User Story、P6 的后端对比都从 `/fixtures/...` 取它们。**P4 之后不再有人产出它们**，所以这一条是下游能不能跑起来的硬前提 |
 
 ## 留给 P3 的一处依赖（本计划改不动）
 

@@ -53,6 +53,7 @@ let p = h.xyz / h.w;          // 线性：远平面上的点，方向即视线
 | `test/integration/uniform-layout.test.ts` | 布局往返测试 |
 | `test/integration/gate-a-pixels.test.ts` | **门禁 A** |
 | `test/integration/gate-b-projection.test.ts` | **门禁 B** |
+| `index.html`（仓库根） | **集成测试的落地页**：`page.goto('/')` 打开的就是它，只有它加载 `demo/test-entry.ts` |
 | `demo/test-entry.ts` | `window.__panoTest` 出口，只在测试构建里加载 |
 | `demo/test-entry-hooks/renderer.ts` | 本期的 hook：`renderOffscreen` / `WebGPUBackend` / `acquireDevice` |
 | `demo/test-entry-hooks/echo.ts` | 本期第二个 hook：uniform 布局探针 |
@@ -2128,9 +2129,39 @@ declare global {
 export default { renderOffscreen, WebGPUBackend, acquireDevice } satisfies Partial<PanoTestApi>
 ```
 
-> `demo/test-entry.ts` 的完整性由本步负责（不留占位）。它还需要两件事，都要在**本步**做好：
-> 1. Vite 的测试模式要加载它（P1 的 `vite.config.ts` 里加一个 `test` 模式入口）；
-> 2. **两套 tsconfig 都要把 `demo/` 收进 program** —— Vite 侧的 `demo/tsconfig.json` 和 Playwright 侧的 `test/integration/tsconfig.json`。否则全局 `Window.__panoTest` 声明只在一半程序里可见，测试侧就得写 `as unknown as`，而那正是本步要消灭的东西。
+**这一步还要建仓库根的 `index.html` —— 集成测试的落地页。**
+
+`page.goto('/')` 是**所有**集成测试的第一行（P1 的 `gpuPage` fixture、P5 的五个 User Story、P6 的门禁 C 都这么写），而 `/` 得是一个真的加载了 `demo/test-entry.ts` 的页面，`window.__panoTest` 才会在。
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>pano.gl test entry</title>
+  <!--
+    The page every integration test navigates to. It is the ONLY page that loads
+    the test entry, and that is how "test-only" is enforced: not by a build flag
+    but by which page imports what. demo/index.html (the demo, P1 Task 10) and
+    this file never import each other, so window.__panoTest exists here and
+    cannot exist there.
+
+    No vite.config.ts is needed for this. Vite's root is the repo root (that is
+    where `npx vite` runs) and its publicDir default is <root>/public, which is
+    where P1 Task 11 puts the fixtures -- so '/fixtures/panorama.png' resolves
+    with no configuration at all.
+  -->
+</head>
+<body>
+  <div id="host"></div>
+  <script type="module" src="/demo/test-entry.ts"></script>
+</body>
+</html>
+```
+
+> `demo/test-entry.ts` 的完整性由本步负责（不留占位）。还有两件事也要在**本步**做好：
+> 1. **两套 tsconfig 都要把 `demo/` 收进 program** —— Vite 侧的 `demo/tsconfig.json` 和 Playwright 侧的 `test/integration/tsconfig.json`。否则全局 `Window.__panoTest` 声明只在一半程序里可见，测试侧就得写 `as unknown as`，而那正是本步要消灭的东西。
+> 2. `index.html` 里那句 `<script type="module" src="/demo/test-entry.ts">` 用的是**根绝对路径**，不是 `./`。它保证页面从哪个 URL 打开都能解析到同一个模块 —— 测试只走 `/`，但有人手工打开 `/index.html` 时不该得到两个不同的模块实例。
 
 - [ ] **Step 4: 写冒烟测试**
 
@@ -2183,7 +2214,7 @@ Expected: 2 个测试 PASS
 
 ```bash
 git add src/renderer/webgpu/backend.ts test/integration/support/gpu.ts \
-  test/integration/backend-smoke.test.ts demo/ tsconfig.json
+  test/integration/backend-smoke.test.ts demo/ index.html tsconfig.json
 git commit -m "feat(renderer): WebGPU backend skeleton, offscreen test entry, device loss reporting"
 ```
 
