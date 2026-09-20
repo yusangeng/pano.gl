@@ -109,7 +109,7 @@ otherwise: npm run build-debug produces a byte-identical bundle."
 **Files:**
 - Modify: `package.json`
 
-- [ ] **Step 1: 写新的 package.json**
+- [x] **Step 1: 写新的 package.json**
 
 ```json
 {
@@ -194,12 +194,12 @@ otherwise: npm run build-debug produces a byte-identical bundle."
 
 > `build:legacy` 需要 webpack 与 babel 的依赖。它们**必须留着**直到 P7 —— 否则 v0.2.x 就发不了版了。见 Task 6。
 
-- [ ] **Step 2: 确认依赖树不再包含旧库**
+- [x] **Step 2: 确认依赖树不再包含旧库**
 
 Run: `npm install && npm ls litchy konph polygala shortid chivy param-check dodele 2>&1 | tail -20`
 Expected: 每条 `(empty)` 或 `not found`。**除 `build:legacy` 需要的 webpack/babel 外，运行时依赖树里不应再出现它们。**
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add package.json package-lock.json
