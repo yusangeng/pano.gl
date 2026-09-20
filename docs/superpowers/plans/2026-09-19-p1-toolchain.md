@@ -320,7 +320,7 @@ git commit -m "build: strict TypeScript config with WebGPU types"
 - Create: `src/index.ts`
 - Modify: `package.json`、`package-lock.json`（build 脚本换 vite；devDeps 换掉 tsup）
 
-- [ ] **Step 1: 写配置**
+- [x] **Step 1: 写配置**
 
 ```ts
 import { defineConfig } from 'vite'
@@ -356,7 +356,7 @@ export default defineConfig({
 })
 ```
 
-- [ ] **Step 2: 换 package.json 的构建工具位**
+- [x] **Step 2: 换 package.json 的构建工具位**
 
 ```bash
 npm rm tsup && npm i -D vite-plugin-dts@^5
@@ -385,7 +385,7 @@ npm rm tsup && npm i -D vite-plugin-dts@^5
 
 理由：①semver 里 `1.0.0-alpha.0 > 0.2.2`，裸 `npm publish` 会把 alpha 打成 `latest`，所有 `npm i pano.gl` 用户默认拿到 alpha——`publishConfig.tag: alpha` 是唯一写在 manifest 里的防线（GA 时 `--tag latest` 或删掉该字段）；②`files: ["dist"]` 下从干净检出直接 publish 会**成功发布一个只有 package.json 的坏包**（实测 `npm pack --dry-run` 静默通过），`prepublishOnly` 把构建挂进发布链；③`bugs` 补全 npm 页 Issues 入口，`npm bugs pano.gl` 因此可用。
 
-- [ ] **Step 3: 造一个最小入口让它能跑**
+- [x] **Step 3: 造一个最小入口让它能跑**
 
 `src/index.ts`：
 
@@ -400,12 +400,12 @@ npm rm tsup && npm i -D vite-plugin-dts@^5
 export const VERSION = '1.0.0-alpha.0'
 ```
 
-- [ ] **Step 4: 构建**
+- [x] **Step 4: 构建**
 
 Run: `npm run build && ls -la dist/`
 Expected：`index.js`、`index.cjs`、`index.d.ts`，以及 `index.js.map` / `index.cjs.map`（lib mode 双格式各带 sourcemap；`emptyOutDir` 默认开，无需清理配置）
 
-- [ ] **Step 5: 确认产物可以被普通 Node 加载**
+- [x] **Step 5: 确认产物可以被普通 Node 加载**
 
 ```bash
 node -e "import('./dist/index.js').then(m => console.log('esm ok:', m.VERSION))"
@@ -419,7 +419,7 @@ cjs ok: 1.0.0-alpha.0
 
 **这一条是本任务的核心验收**：它正是旧 `lib/` 做不到的事（`lib/index.js` 里有无法解析的 `.glsl` require）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add vite.config.ts src/index.ts package.json package-lock.json
