@@ -339,7 +339,12 @@ export default defineConfig({
       formats: ['es', 'cjs'],
       fileName: format => (format === 'es' ? 'index.js' : 'index.cjs')
     },
-    sourcemap: true
+    sourcemap: true,
+    // Lib mode minifies by default; tsup did not. The toolchain pivot must
+    // not silently flip recorded behavior, and an unminified bundle is the
+    // one a consumer can actually read in node_modules while debugging
+    // GPU math. (Task 4 quality review, 2026-09-20.)
+    minify: false
     // No rollupOptions.external: lib mode externalizes package.json
     // "dependencies" by default, so gl-matrix and debug are importable from
     // the consumer's own install -- which is what a library dependency list
@@ -404,6 +409,12 @@ export const VERSION = '1.0.0-alpha.0'
 
 Run: `npm run build && ls -la dist/`
 Expected：`index.js`、`index.cjs`、`index.d.ts`，以及 `index.js.map` / `index.cjs.map`（lib mode 双格式各带 sourcemap；`emptyOutDir` 默认开，无需清理配置）
+
+> **实测与裁决（Task 4 质量审查，2026-09-20）**：落地产物 = 恰好 5 文件；`npm pack --dry-run` 8 文件 2.7 kB（LICENSE/README 自动带入）。四条裁决：
+> ① **`minify: false` 补进 Step 1**——vite lib mode 默认 minify on，tsup 时代产物 unminified 是被记录的行为（CLAUDE.md "unminified"），pivot 不能静默翻转它；整改轮已同步代码与本 plan。
+> ② **不做 IIFE/UMD 第三格式**——v0.2.x 的 manifest `main` 从未指向过 webpack UMD bundle（`PanoGL` 全局只喂 demo 页），npm 受众里没有任何人被 ESM+CJS-only 落下；GA 后若出现 script-tag/CDN 需求，加格式是纯增量（新文件 + exports 新条件 + unpkg/jsdelivr 字段），P5 公开 API 设计不用为它留心。
+> ③ **`.map` 进 tarball 是对的**——`sourcesContent` 已内嵌（实测），GPU 数学的 bug 报告能直接映射回 TS 源；体积可忽略。将来 tarball 大小真成问题时用 `files` 里的否定模式再收。
+> ④ **`dist` 缺 `.gitignore` 条目**（webpack 时代只 ignore lib/.package/doc/wasm）——原 plan 没有任何一步补它，推迟到 Task 8 等于永不修；已补进 Task 8 Step 1 的 .gitignore 块（该步本就改 .gitignore）。
 
 - [x] **Step 5: 确认产物可以被普通 Node 加载**
 
@@ -623,11 +634,13 @@ Task 2 的根 package.json 带了 `"type": "module"`，而两个 webpack 配置�
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["scripts/**/*.mjs"]
+  "include": ["scripts/**/*.mjs", "vite.config.ts", "vitest.config.ts"]
 }
 ```
 
 装 node 类型：`npm i -D @types/node`。`types` 是**替换**不是追加——它挡掉 `@webgpu/types`（scripts 用不到）和一切 `node_modules/@types/*` 的自动混入；`declaration: false` 的理由同 `tsconfig.legacy.json` 的注记。**Task 8 Step 1 会把 `npm run typecheck` 改成三条**，把 `-p tsconfig.scripts.json` 也跑起来；在那之前手动 `npx tsc --noEmit -p tsconfig.scripts.json` 验证本步（P2 的 `gen-shader-constants.mjs` 落地时自动继承这份覆盖，不必再改）。
+
+> **include 里的两个配置文件（Task 4 质量审查 2026-09-20 提出，探针实测）**：vite 加载 `vite.config.ts` / `vitest.config.ts` 走 esbuild **只转译不检查类型**——配置键拼错是静默 no-op。最坏的点在 Task 7：`vitest.config.ts` 的 coverage 键拼错会**静默禁用 90% 门槛**，测试全绿、门槛失效——和 Task 3 打掉的惰性 include 是同一类「绿灯没有信息量」问题。两个文件当时不在任何 tsc program（`tsc --listFiles` 实测零命中）。**落点在本 program 而不是根 program，是实测出来的**：根 program 刻意不带 @types/node（Task 3 的纪律），而 Task 8 Step 2 的 `vitest.config.ts` 要用 `process.env.CI`——探针实测它在根 program 报 TS2591 `Cannot find name 'process'`；本 program 的 `types: ["node"]` 恰好是它们运行所在的环境，同一份完整 `vitest.config.ts`（含 `process.env.CI`）在本 program 探针全绿。`vite.config.ts` 自 Task 4 已存在，本步建好即覆盖；`vitest.config.ts` 由 Task 7 创建，include 预列它（精确文件名此刻匹配不到是静默的，但另两条 include 保证 program 非空，无 TS18003 风险），届时自动进程序。Task 8 的 typecheck 第三条因此天然覆盖两个配置文件，无需再改。
 
 `scripts/legacy-build.mjs`：
 
@@ -814,7 +827,11 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 ```gitignore
 # Vitest browser-mode failure artifacts (screenshots, traces)
 .vitest
+# Library build output (produced since Task 4; never committed)
+dist
 ```
+
+> **`dist` 这一行是 Task 4 质量审查（2026-09-20）补的**：webpack 时代的 .gitignore 只 ignore `lib`/`.package`/`doc`/`wasm`，`dist` 从 Task 4 起产生却无人 ignore——原 plan 没有任何一步加它。Task 6 Step 3 会两次 `npm run build`，未跟踪的 `dist/` 会一直躺在工作区，任何一次手滑的 `git add -A` 都会把构建产物提进去。本步反正要开 .gitignore，一并补上。
 
 - [ ] **Step 2: 往 vitest.config.ts 里加两个 browser project**
 
@@ -1471,3 +1488,5 @@ git commit -m "docs(demo): minimal vite-served demo page"
 > ② `src/index.ts` 将硬编码 `VERSION = '1.0.0-alpha.0'`，与 package.json 的 `version` 两处一份——发版时是两个要同步的手改点。要么写进发布检查单，要么 P5 起在构建期从 package.json 派生（vite `define` 一行的事），届时定。
 
 > **给 P2/P3 的 API 类型纪律（Task 3 质量审查 2026-09-20 拍板，保留 `exactOptionalPropertyTypes`）**：该 flag 不写进产出的 .d.ts，只约束本仓库编译，消费者端按他们自己的设置走——所以"传染性"论点对发布产物不成立，且现在收紧、1.0 前放松是安全方向，反之是破坏性返工。**写公开 option 类型时的纪律**：凡消费者会动态构造/展开合并的 option 属性（partial 展开、默认值合并），声明成 `prop?: T | undefined` 而不是裸 `prop?: T`——前者在任何消费者配置下都合法传 `undefined`，产出的 .d.ts 对所有人群最顺手。
+
+> **`sideEffects: false` 的模块结构纪律（Task 4 质量审查 2026-09-20）**：manifest 声明了 `sideEffects: false`，打包器据此可以整模块丢弃「导出未被使用」的模块。P2–P6 因此**不得在任何模块顶层放 load-bearing 工作**——典型翻车姿势是模块作用域里做 GPU 能力探测或全局补丁：import 它但不用其导出的人，这段代码会被 tree-shake 掉，且没有任何报错。副作用要么放进被导出的函数里，要么做成显式的 `init()`。
