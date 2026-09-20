@@ -6,8 +6,15 @@ test('the browser has a real WebGPU adapter', async () => {
   // report WHICH adapter, so a machine slipping to a software rasteriser is
   // visible in the log rather than inferred from pixel tolerances later.
   const adapter = await navigator.gpu!.requestAdapter()
-  console.log('adapter:', JSON.stringify(adapter!.info))
-  expect(adapter!.info).toBeTruthy()
+  // GPUAdapterInfo's fields are prototype getters on Chromium (measured on
+  // 153 / playwright 1.63): JSON.stringify sees no own enumerable properties
+  // and prints "{}", which would eat exactly the signal this log exists to
+  // surface.
+  console.log('adapter:', adapter!.info.vendor, adapter!.info.architecture)
+  expect(
+    adapter!.info.vendor,
+    'a machine slipping to a software rasteriser must be visible here, not inferred from tolerances later'
+  ).toBeTruthy()
 })
 
 test('a WebGPU canvas reads back as RGBA, after frames have passed', async () => {
