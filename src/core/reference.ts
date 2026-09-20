@@ -48,11 +48,12 @@ export interface UV {
  * This mixes units, and it is a bug in v0.2.2, not a convention. It is
  * reproduced here because reproducing v0.2.2 is the acceptance criterion; fixing
  * it changes panning sensitivity and is a separate, user-visible decision that
- * must not be smuggled in as part of a port. The observable effect is that the
- * non-linear cameras rotate at a rate roughly `8*PI` times faster than the
- * angles suggest -- which is also why `CylindricalCamera` wraps its longitude
- * with `% 25`: 25 degrees works out to `25 / 4 = 6.25` radians, within 0.5% of
- * one full turn, so the wrap point approximately coincides with the seam.
+ * must not be smuggled in as part of a port. The observable effect is one full
+ * turn per `8 * PI` (about 25.13) degrees of `povLongitude` -- about 14.3x
+ * (`45 / PI`) the rate of a naive one-turn-per-360-degrees pan. That rate is
+ * also why `CylindricalCamera` wraps its longitude with `% 25`: 25 degrees
+ * works out to `25 / 4 = 6.25` radians, 0.53% short of the `2 * PI` of a full
+ * turn, so the wrap point approximately coincides with the seam.
  *
  * A second hazard, recorded because P0's baseline is the arbiter for it: `lng`
  * is a file-scope initialiser that is not a constant expression, which is
@@ -179,10 +180,18 @@ function projectPannini (x: number, y: number, z: number, zoom: number, lng: num
 /**
  * Projects a point on the camera's surface to an equirectangular coordinate.
  *
+ * `state.povLatitude` is deliberately unread: `fshader.glsl` declares
+ * `u_CamPOVLatitude` and never reads it either, so tilting the non-linear
+ * cameras here would render something v0.2.2 never did.
+ *
  * @param x - Surface position. For the linear projection only the direction
  *   matters; for the others the magnitude is part of the projection.
+ * @param y - Surface position. Drives `phi` in every projection; scaled by
+ *   `zoom` by the three non-linear ones.
+ * @param z - Surface position. Drives `theta` in every projection; scaled by
+ *   `zoom` by the three non-linear ones, and negated by planet.
  * @param state - Camera angles, used by the non-linear projections as a
- *   longitude offset.
+ *   longitude offset. Only `povLongitude` is read.
  * @param projection - Which formula to apply.
  */
 export function project (x: number, y: number, z: number, state: CameraState, projection: Projection): UV {
