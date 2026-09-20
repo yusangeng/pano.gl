@@ -1,6 +1,6 @@
 ---
 plan: docs/superpowers/plans/2026-09-19-p1-toolchain.md
-scope: [package.json, package-lock.json, tsconfig.json, tsconfig.legacy.json, tsconfig.scripts.json, vitest.config.ts, vite.config.ts, eslint.config.js, .gitignore, .travis.yml, .github/workflows/**, scripts/legacy-build.mjs, src/diagnostics.ts, src/index.ts, test/**, demo/**, webpack/**, legacy/**]
+scope: [package.json, package-lock.json, tsconfig.json, tsconfig.legacy.json, tsconfig.scripts.json, vitest.config.ts, vite.config.ts, eslint.config.js, .gitignore, .travis.yml, .github/workflows/**, README.md, scripts/legacy-build.mjs, src/diagnostics.ts, src/index.ts, test/**, demo/**, webpack/**, legacy/**]
 verify: if [ -f vitest.config.ts ]; then npm run typecheck && if [ -f eslint.config.js ]; then npm run lint; fi && npm run test:coverage && npm run test:integration && npm run build; fi
 bootstrap: npx playwright install chromium
 layer: foundation
@@ -28,6 +28,8 @@ bootstrap 里的 `npx playwright install chromium` 不能省：默认的 chrome-
 > 均属清单与定稿 plan 的对齐修正，不是执行期扩权。
 
 > **verify/plan 修订（2026-09-20，用户裁决 B）**：「v0.2.x 全程可发版」约束废弃（经查证系 spec 阶段由 AI 写入、用户从未裁决；用户质询后拍板砍掉，发版保险 = git 历史，需要时 checkout 迁移前提交构建）。落地：plan Task 6 瘦身为「scripts 的 typecheck program」——只建 `tsconfig.scripts.json` 并顺手删 Task 2 落地的 `build:legacy` 死脚本行，不再装回 webpack/babel 旧依赖；Task 9 的 CI 两个 job（无 legacy job）；本卡 verify 已去掉 `npm run build:legacy`（即本行所在处）。scope 里的 `scripts/legacy-build.mjs` 条目自此空匹配、无害保留（gate 2 按实际改动路径核对，不会因未触碰的条目报警）。Task 1 的 `git mv` 不受影响——其理由是目录名冲突，独立成立。
+
+> **scope 修订 III（2026-09-20，Task 9 质量审查 I-2）**：`.travis.yml` 删除后 README 首屏残留指向已关停 travis 服务的 Build Status 徽章——它是 Task 9 Step 4「删掉 travis」的残留物，清理属该步本意的收尾而非新功能，`README.md` 补入 scope。授权范围仅限删除该徽章行（standardjs 徽章不动）；是否换挂 GitHub Actions 徽章属仓库门面决策，留给用户合并后自行定夺。
 
 ## 完成报告
 
