@@ -1,0 +1,11 @@
+{
+  "camera": {
+    "linear": 1,
+    "cylindrical": 2,
+    "planet": 3,
+    "pannini": 4
+  },
+  "texture": {
+    "equirectangular": 1
+  }
+}
