@@ -4,11 +4,13 @@
 
 **Goal:** 让 `npm run build` 出包、`npm test` 真的在跑测试、CI 会因 WebGPU 不可用而**红**。不写任何产品逻辑。
 
-**Architecture:** 新实现与旧实现**并存于同一仓库、同一分支**：旧源码 `git mv` 到 `legacy/`（webpack 配置随之指向），新源码从零开始写在 `src/`。`legacy/` 的构建脚本原样保留并在 CI 里跑，保证 v0.2.x 全程可以发版。
+**Architecture:** 新实现与旧实现**并存于同一仓库、同一分支**：旧源码 `git mv` 到 `legacy/`（webpack 配置随之指向），新源码从零开始写在 `src/`。~~`legacy/` 的构建脚本原样保留并在 CI 里跑，保证 v0.2.x 全程可以发版。~~（划线句已废弃，见下方第二条拍板注记。）
 
 **Tech Stack:** TypeScript 5 (strict) · vite（lib mode 出包；demo dev server 与 vitest 同根同工具）· vitest（单元 = node project，集成 = browser project）· neostandard · GitHub Actions
 
 > **2026-09-20 拍板变更（用户裁决）**：出包工具由 tsup 换成 **vite library mode**。理由：demo dev server、vitest 浏览器模式、库打包三者本就共用 vite 作底层，再引入 tsup 是第五个构建工具；用户明确要求打包方案统一到 vite。tsup 相关内容已从本计划移除；Task 2 落地时（先于本变更提交）package.json 里仍是 tsup，由 Task 4 换掉——Task 2 的提交在当时规格下是合规的，不算偏离。
+
+> **2026-09-20 拍板变更 II（用户裁决）：废弃「v0.2.x 全程可发版」约束。** 该约束源自 spec §10.5，经查证系设计共创时由 AI 写入、用户从未主动要求或逐条确认——用户质询后裁决砍掉。理由：旧版可发版的真正保险是 **git 历史**（需要时 checkout 迁移前提交构建发布，Task 1 已实测本机 Node 22 能跑旧 webpack 构建），不需要 master 上拖着一条 2017 年构建链；本包 2017 年后未动，重写期间发 0.2.x hotfix 的概率趋零，而为它付出约 12 个 webpack 3 / babel 6 旧 devDependencies + 一个 CI job 的实打实代价。**落地改动**：原 Task 6「legacy 构建保留」瘦身为只建 `tsconfig.scripts.json`（原 Step 1 装旧依赖、Step 2 的 `webpack/package.json` shim 与 `scripts/legacy-build.mjs`、Step 3 互不干扰验证全部移除，均已从本 plan 删除）；Task 2 已落地的 `build:legacy` 脚本行由瘦身版 Task 6 顺手删除（指向从此不会创建的文件）；Task 9 的 CI 不再有 legacy job；卡 verify 去掉 `npm run build:legacy`。**不影响**：Task 1 的 `git mv`（理由是目录名冲突，独立成立）、P0 基线（独立工具链 `tools/baseline/`）。**对 P7 的提示**：P7 计划里「删除 legacy 构建链」类任务届时变成空操作，其卡自查。spec §10.5 已由协调侧勘误。
 
 ---
 
@@ -197,6 +199,8 @@ otherwise: npm run build-debug produces a byte-identical bundle."
 > runner 已经不再使用。少一个 runner、少一套断言库。
 
 > `build:legacy` 需要 webpack 与 babel 的依赖。它们**必须留着**直到 P7 —— 否则 v0.2.x 就发不了版了。见 Task 6。
+
+> **（2026-09-20 用户裁决 II 已废弃上一条，见文件头部拍板变更 II。）** 旧版发版的保险改为 git 历史（checkout 迁移前提交构建），webpack/babel 旧依赖不再装回。Task 2 重写时已把旧 devDependencies 删净（落地 package.json 可证），但 `"build:legacy": "node scripts/legacy-build.mjs"` 脚本行还在——指向从此不会创建的文件，是死引用，由瘦身版 Task 6 Step 1 顺手删掉。本条原文按审查时点保留不改。
 
 - [x] **Step 2: 确认依赖树不再包含旧库**
 
@@ -604,41 +608,27 @@ git commit -m "feat: opt-in trace channels built on debug"
 
 ---
 
-### Task 6: legacy 构建保留
+### Task 6: scripts 的 typecheck program
+
+> **本任务曾名为「legacy 构建保留」，2026-09-20 用户裁决 II 砍掉了它的 legacy 半边**（见文件头部拍板变更 II）：不再装回 webpack 3 / babel 6 旧依赖、不再建 `scripts/legacy-build.mjs` 与 `webpack/package.json` shim、不再验证新旧构建互不干扰。存活下来的是另一半——`tsconfig.scripts.json`，它承载的东西与 legacy 无关：scripts/ 的 node 环境 .mjs 覆盖、`vite.config.ts` / `vitest.config.ts` 的类型检查（coverage 键拼错 = 90% 门槛静默失效，这是它存在的真正理由）。Task 2 落地时写下的 `"build:legacy"` 脚本行（指向从此不会创建的文件）在本任务 Step 1 顺手删除。
 
 **Files:**
-- Create: `scripts/legacy-build.mjs`
-- Create: `webpack/package.json`（一行，把 `webpack/` 划回 CommonJS scope）
-- Create: `tsconfig.scripts.json`（scripts/ 的 node 环境 program，见下方 Step 2）
-- Modify: `package.json`
+- Create: `tsconfig.scripts.json`（scripts/ 的 node 环境 program）
+- Modify: `package.json`（删 `build:legacy` 死脚本行）
 
-- [ ] **Step 1: 把旧构建的依赖装回来**
+- [ ] **Step 1: 删掉 build:legacy 死脚本行**
 
-旧的 webpack/babel 依赖在 Task 2 被移除了，但 `build:legacy` 需要它们。装回来：
-
-Run: `npm i -D webpack@^3.10.0 webpack-bundle-analyzer@^2.9.2 babel-core@^6.24.1 babel-loader@^7.1.2 babel-preset-env@^1.6.1 babel-plugin-transform-runtime@^6.23.0 babel-plugin-transform-decorators-legacy@^1.3.4 babel-plugin-transform-class-properties@^6.24.1 webpack-glsl-loader@^1.0.1 param-check@^1.1.9 chivy@^0.1.7 shortid@^2.2.8`
-
-版本号逐一对照迁移前的 package.json 核过（2026-09-20 质量审查轮亲验，含 `webpack/debug.js` / `webpack/release.js` / `.babelrc` 的真实 require 面）。这份清单与 plan 初稿的差异是**修正**而非放松：
-
-- **`webpack-bundle-analyzer` 必须装**：两个 webpack 配置在模块加载时就 require 它（`webpack/debug.js:2`、`webpack/release.js:4`）——初稿清单漏了它，`scripts/legacy-build.mjs` 一加载配置就崩。
-- **`.babelrc` 用的是 `env` preset + `transform-runtime`**，不是 es2015 preset；`babel-runtime` 由 babel-plugin-transform-runtime 传递带入（其 dependencies 声明 `babel-runtime@^6.22.0`，实测），无需单列。
-- **`babel-loader` 是 7.x**（旧包 `^7.1.2`），不是 6。
-- **三个运行时依赖也要装**：`param-check` / `chivy` / `shortid` 是 legacy 源码仅有的直连外部导入（grep 实测 19+3+2 处），webpack 3 构建期解析并打进 bundle。装成 devDependencies——根包的 `dependencies` 属于 v1，legacy 的导入只是构建输入。`chivy` 自带 `konph`/`lodash`/`dateformat`，传递解析即可，不必单列。
-- **不装**：`webpack-dev-server`（旧 `start` 专用，新 start 是 vite）、`babel-cli`（旧 `es5`/test 脚本专用，新脚本表里没有它们）、`babel-preset-es2015`（无人引用）、`uglifyjs-webpack-plugin`（release.js 用 webpack 3 内置的 `webpack.optimize.UglifyJsPlugin`）、`litchy` / `dodele` / `konph` / `polygala`（legacy 源码零直连导入，konph 经 chivy 传递回归）。
-
-> 若 `npm install` 后 `build:legacy` 仍报缺包，以报错为准补装**迁移前 package.json 里的原版本**：`git show <Task 2 之前的提交>:package.json`，不要凭记忆写版本号。
-
-- [ ] **Step 2: 写 legacy 构建脚本**
-
-先建 `webpack/package.json`，内容一行：
+`package.json` 的 `scripts` 表里删这一行：
 
 ```json
-{"type": "commonjs"}
+    "build:legacy": "node scripts/legacy-build.mjs",
 ```
 
-Task 2 的根 package.json 带了 `"type": "module"`，而两个 webpack 配置是 CommonJS 写法（`require` / `module.exports`）。**实测（Node 22.23.2）**：type:module scope 下 `createRequire(import.meta.url)('./webpack/debug.js')` 直接抛 `ReferenceError: require is not defined in ES module scope`，`createRequire` 不能豁免目标文件的 scope 判定。这个一行的嵌套 package.json 把 `webpack/` 重新划回 CommonJS，配置文件本身一字不动，bundle 产物不受影响（修法已实测验证）。
+它是 Task 2 按当时规格落地的（当时本任务还包含 legacy 构建保留），裁决 II 之后 `scripts/legacy-build.mjs` 不会创建，该行成了指向空处的死引用——任何人跑 `npm run build:legacy` 会得到一个 Node 找不到模块的报错。删行后无需动 lockfile（旧 webpack/babel 依赖 Task 2 重写时已删净）。
 
-本步还落地 scripts/ 自己的 typecheck program（缘由见 Task 3 Step 1 的 include 注记：`.mjs` 进不了根 program，那不是覆盖是静默）。`tsconfig.scripts.json`：
+- [ ] **Step 2: 建 tsconfig.scripts.json**
+
+缘由见 Task 3 Step 1 的 include 注记：`.mjs` 进不了根 program，那不是覆盖是静默。`tsconfig.scripts.json`：
 
 ```json
 {
@@ -658,53 +648,18 @@ Task 2 的根 package.json 带了 `"type": "module"`，而两个 webpack 配置�
 
 > **include 里的两个配置文件（Task 4 质量审查 2026-09-20 提出，探针实测）**：vite 加载 `vite.config.ts` / `vitest.config.ts` 走 esbuild **只转译不检查类型**——配置键拼错是静默 no-op。最坏的点在 Task 7：`vitest.config.ts` 的 coverage 键拼错会**静默禁用 90% 门槛**，测试全绿、门槛失效——和 Task 3 打掉的惰性 include 是同一类「绿灯没有信息量」问题。两个文件当时不在任何 tsc program（`tsc --listFiles` 实测零命中）。**落点在本 program 而不是根 program，是实测出来的**：根 program 刻意不带 @types/node（Task 3 的纪律），而 Task 8 Step 2 的 `vitest.config.ts` 要用 `process.env.CI`——探针实测它在根 program 报 TS2591 `Cannot find name 'process'`；本 program 的 `types: ["node"]` 恰好是它们运行所在的环境，同一份完整 `vitest.config.ts`（含 `process.env.CI`）在本 program 探针全绿。`vite.config.ts` 自 Task 4 已存在，本步建好即覆盖；`vitest.config.ts` 由 Task 7 创建，include 预列它（精确文件名此刻匹配不到是静默的，但另两条 include 保证 program 非空，无 TS18003 风险），届时自动进程序。Task 8 的 typecheck 第三条因此天然覆盖两个配置文件，无需再改。
 
-`scripts/legacy-build.mjs`：
-
-```js
-/*
- * Builds the v0.2.x UMD bundle from legacy/.
- *
- * This exists so the shipping version keeps building while the rewrite is in
- * progress. It is deleted in P7 along with legacy/ itself.
- *
- * The legacy webpack config is CommonJS and predates "type": "module", so it is
- * loaded through createRequire rather than imported.
- */
-
-import { createRequire } from 'node:module'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const require = createRequire(import.meta.url)
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-
-const config = require(path.join(repoRoot, 'webpack/debug.js'))
-const webpack = require('webpack')
-
-webpack(config, (err, stats) => {
-  if (err) { console.error(err); process.exit(1) }
-  const info = stats.toJson({ errors: true, warnings: false })
-  if (stats.hasErrors()) {
-    console.error(info.errors.map(e => e.message || e).join('\n'))
-    process.exit(1)
-  }
-  console.log(`legacy bundle ok: ${path.relative(repoRoot, config.output.path)}`)
-})
-```
-
-- [ ] **Step 3: 验证新旧两套构建互不干扰**
+- [ ] **Step 3: 手动验证本 program**
 
 ```bash
-npm run build && npm run build:legacy && npm run build
-ls dist/ .package/
+npx tsc --noEmit -p tsconfig.scripts.json
 ```
-Expected: `dist/` 与 `.package/` 双双存在；`build:legacy` 的输出没有污染 `dist/`
+Expected: 退出码 0（此刻 include 里只有 `vite.config.ts` 匹配得到文件；`scripts/**/*.mjs` 与 `vitest.config.ts` 分别由 P2、Task 7 落地后自动进入）
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add scripts/legacy-build.mjs tsconfig.scripts.json package.json package-lock.json
-git commit -m "build: keep the v0.2.x bundle buildable during the rewrite"
+git add tsconfig.scripts.json package.json package-lock.json
+git commit -m "task-p1-toolchain: build: scripts typecheck program; drop the dead build:legacy script"
 ```
 
 ---
@@ -1350,18 +1305,9 @@ jobs:
             .vitest/attachments/
             **/__traces__/
           if-no-files-found: ignore
-
-  legacy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      # v0.2.x keeps shipping while the rewrite lands. This job is what keeps
-      # "unbroken" a fact rather than an intention. Deleted in P7.
-      - run: npm run build:legacy
 ```
+
+> **（2026-09-20 用户裁决 II：CI 不设 legacy job。）** 本步的 yaml 里原本还有第三个 job——checkout 后跑 `npm run build:legacy`，守住「v0.2.x 全程可发版」；该约束废弃后 job 一并删除（见文件头部拍板变更 II）。旧版构建的保险是 git 历史：需要发 0.2.x hotfix 时 checkout 迁移前提交构建发布，Task 1 已实测本机 Node 22 能跑旧 webpack 构建。
 
 - [ ] **Step 4: 删掉 travis**
 
@@ -1374,7 +1320,7 @@ git rm .travis.yml
 - [ ] **Step 5: 本地预演 CI**
 
 ```bash
-npm run typecheck && npm run lint && npm run test:coverage && npm run build && npm run build:legacy
+npm run typecheck && npm run lint && npm run test:coverage && npm run build
 ```
 Expected: 全部退出码 0
 
@@ -1395,10 +1341,9 @@ git add eslint.config.js .github/workflows/ci.yml
 git rm --cached .travis.yml 2>/dev/null || true
 git commit -m "ci: replace the node-9 travis config with github actions
 
-Three jobs: unit (typecheck, lint, coverage, build, artifact loads in
-plain node), integration (browser mode with the WebGPU guard, running on a
-SwiftShader adapter since hosted runners have no GPU), and legacy (the
-v0.2.x bundle still builds)."
+Two jobs: unit (typecheck, lint, coverage, build, artifact loads in
+plain node) and integration (browser mode with the WebGPU guard, running
+on a SwiftShader adapter since hosted runners have no GPU)."
 ```
 
 ---
@@ -1480,7 +1425,6 @@ git commit -m "docs(demo): minimal vite-served demo page"
 - [ ] `npm run lint` 退出码 0
 - [ ] `npm run test:coverage` 通过，且**门槛已验证会拦人**（Task 7 Step 2）
 - [ ] `npm run build` 后 `node -e "import('./dist/index.js')"` 成功
-- [ ] `npm run build:legacy` 成功，产物 JS 主体与迁移前逐字节一致（inline sourcemap 的路径串除外，见 Task 1 Step 4 实测注记）
 - [ ] `npm run test:integration` 通过（本机与 `CI=1` 两条路径都跑过），且**两个守卫都验证过会拦人**（Task 8 Step 5）
 - [ ] `legacy/` 已建立，`src/` 里没有任何旧代码
 - [ ] `.travis.yml` 已删除
