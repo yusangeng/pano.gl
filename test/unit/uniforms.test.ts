@@ -38,18 +38,19 @@ describe('camera uniform layout', () => {
   })
 
   it('accounts for every byte the struct needs', () => {
-    const expected = 64 /* invClip */ + 4 * 8 /* eight scalars */
+    // Summing the declared sizes makes every byteLength load-bearing: shrink
+    // one field and the sum no longer reaches the total.
+    const expected = CAMERA_UNIFORM_LAYOUT.reduce((sum, f) => sum + f.byteLength, 0)
     expect(CAMERA_UNIFORM_SIZE).toBe(expected)
     expect(CAMERA_UNIFORM_SIZE).toBe(96)
   })
 })
 
 describe('packCameraUniforms', () => {
-  const invClip = mat4.create()
-
   it('writes the matrix column-major, matching WGSL mat4x4 indexing', () => {
     // WGSL's `m[col][row]` is gl-matrix's `elements[col * 4 + row]`. Getting
     // this wrong transposes the picture, and there is no error.
+    const invClip = mat4.create()
     mat4.identity(invClip)
     invClip[12] = 7
     invClip[13] = 8
@@ -74,6 +75,7 @@ describe('packCameraUniforms', () => {
   })
 
   it('writes the projection kinds as unsigned integers, not floats', () => {
+    const invClip = mat4.create()
     const buf = new ArrayBuffer(CAMERA_UNIFORM_SIZE)
     packCameraUniforms(buf, {
       invClip,
@@ -86,9 +88,15 @@ describe('packCameraUniforms', () => {
     const u32 = new Uint32Array(buf)
     const projField = CAMERA_UNIFORM_LAYOUT.find(f => f.name === 'projKind')!
     expect(u32[projField.offset / 4]).toBe(3)
+    // The inputs are distinct so this slot has its own value to check:
+    // writing projKind's value into texProjKind's slot is the copy-paste
+    // bug this kills, and no other test reads this slot.
+    const texProjField = CAMERA_UNIFORM_LAYOUT.find(f => f.name === 'texProjKind')!
+    expect(u32[texProjField.offset / 4]).toBe(1)
   })
 
   it('writes the scalars at their declared offsets', () => {
+    const invClip = mat4.create()
     const buf = new ArrayBuffer(CAMERA_UNIFORM_SIZE)
     packCameraUniforms(buf, {
       invClip,
@@ -109,6 +117,7 @@ describe('packCameraUniforms', () => {
   it('rejects a buffer of the wrong size', () => {
     // A short buffer would make the writes silently land outside the typed
     // array view and vanish, producing a frame drawn from zeros.
+    const invClip = mat4.create()
     expect(() =>
       packCameraUniforms(new ArrayBuffer(CAMERA_UNIFORM_SIZE - 4), {
         invClip,
