@@ -49,3 +49,12 @@ wasm
 # Baseline probe deps live with the probe, not at the repo root
 tools/baseline/node_modules
 .gstack/
+
+# Vitest browser-mode failure artifacts (screenshots, traces)
+.vitest
+# Playwright traces land beside the test files, not under .vitest/
+# (measured: .vitest/ gets the screenshots, test/integration/__traces__/
+# gets the zips -- Task 8 quality review, 2026-09-20)
+**/__traces__/
+# Library build output (produced since Task 4; never committed)
+dist

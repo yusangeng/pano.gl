@@ -2,8 +2,8 @@
 import Eventable from 'litchy/lib/Eventable'
 import delegate from 'dodele/lib/decorator/delegate'
 import callback from 'dodele/lib/decorator/callback'
-import ImageViewer from '../src/FramelessImageViewer'
-import VideoViewer from '../src/FramelessVideoViewer'
+import ImageViewer from '../legacy/FramelessImageViewer'
+import VideoViewer from '../legacy/FramelessVideoViewer'
 
 @delegate
 class ImageViewerWrap extends Eventable {
