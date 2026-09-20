@@ -48,3 +48,4 @@ wasm
 
 # Baseline probe deps live with the probe, not at the repo root
 tools/baseline/node_modules
+.gstack/
