@@ -334,10 +334,19 @@ import dts from 'vite-plugin-dts'
 
 export default defineConfig({
   plugins: [
-    // One .d.ts per source file, emitted next to the js. A single rollup'd
-    // index.d.ts would pull api-extractor in for no benefit while src/ still
-    // has one module; revisit if the public surface ever needs flattening.
-    dts()
+    // One .d.ts per source file, flattened to the dist root. A single
+    // rollup'd index.d.ts would pull api-extractor in for no benefit while
+    // the public surface is this small; revisit if it ever needs flattening.
+    //
+    // include + entryRoot are pinned, and not for style. Bare dts() takes its
+    // file set from the root tsconfig include and places output under the
+    // common ancestor of that set. That ancestor was src/ only while test/
+    // and demo/ matched no files; from Task 5 on, declarations mirrored the
+    // repo layout (dist/src/index.d.ts plus test/demo .d.ts that
+    // "files": ["dist"] would ship) while package.json's types field pointed
+    // at a file that no longer existed. Every gate stayed green because they
+    // load the js, never the types entry. (Final branch review, 2026-09-20.)
+    dts({ include: ['src/**/*'], entryRoot: 'src' })
   ],
   build: {
     lib: {
@@ -421,6 +430,8 @@ Expected：`index.js`、`index.cjs`、`index.d.ts`，以及 `index.js.map` / `in
 > ② **不做 IIFE/UMD 第三格式**——v0.2.x 的 manifest `main` 从未指向过 webpack UMD bundle（`PanoGL` 全局只喂 demo 页），npm 受众里没有任何人被 ESM+CJS-only 落下；GA 后若出现 script-tag/CDN 需求，加格式是纯增量（新文件 + exports 新条件 + unpkg/jsdelivr 字段），P5 公开 API 设计不用为它留心。
 > ③ **`.map` 进 tarball 是对的**——`sourcesContent` 已内嵌（实测），GPU 数学的 bug 报告能直接映射回 TS 源；体积可忽略。将来 tarball 大小真成问题时用 `files` 里的否定模式再收。
 > ④ **`dist` 缺 `.gitignore` 条目**（webpack 时代只 ignore lib/.package/doc/wasm）——原 plan 没有任何一步补它，推迟到 Task 8 等于永不修；已补进 Task 8 Step 1 的 .gitignore 块（该步本就改 .gitignore）。
+
+> **（2026-09-20 勘误，终末全分支审查 CRITICAL #1；上方 Step 1 代码块已就地更新为整改后形态）**：`dts()` 裸调用在 Task 4 落地时是够的——当时根 tsconfig 的 include 在 test/demo 侧匹配不到任何文件，vite-plugin-dts 以被编译文件集的公共祖先为 entryRoot，恰好是 `src/`，产物正是上方注记记录的 5 文件，Task 4 的质量审查记录在其时点上是真话。但这个「恰好」没有任何东西钉住：插件默认跟随根 tsconfig 的 include 取文件集，**Task 5 落地第一个 `test/unit/diagnostics.test.ts` 起**，公共祖先变成仓库根，声明开始镜像仓库布局（`dist/src/index.d.ts`、`dist/test/unit/*.d.ts`），Task 10 把 `demo/**` 并进根 program 后 demo 的 .d.ts 同样会进 dist——而 package.json 的 `types` / `exports` 一直指向 `./dist/index.d.ts`，一个从此不存在的文件；`files: ["dist"]` 会把 test/demo 声明当包内容发出去。**全程每一道闸都绿着**：verify 链断言的是 js 可加载（`dist/index.js` 一直在），`npm pack` 只在 Task 4 查过一次、之后再无人看 dist 布局——本 plan 已打过五次的「绿灯没有信息量」病的第六个实例，这次咬的是类型契约。整改：`dts({ include: ['src/**/*'], entryRoot: 'src' })` 双钉；CI 的产物步补 `test -f dist/index.d.ts`，把 types 入口的存在性变成 exit code；整改轮实测 `npm pack --dry-run` 恢复 8 文件（LICENSE/README + dist 5 件 + package.json），node ESM/CJS 双加载通过。
 
 - [x] **Step 5: 确认产物可以被普通 Node 加载**
 

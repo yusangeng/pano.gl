@@ -20,6 +20,12 @@ jobs:
         run: |
           node -e "import('./dist/index.js').then(m => console.log('esm ok'))"
           node -e "console.log('cjs ok', typeof require('./dist/index.cjs'))"
+          # The two loads above prove the js entries; this proves the types
+          # entry. package.json points "types" at dist/index.d.ts, and a dts
+          # config that drifts back to mirroring the repo layout breaks that
+          # contract while both loads stay green. (Final branch review,
+          # 2026-09-20.)
+          test -f dist/index.d.ts
 
   integration:
     runs-on: ubuntu-latest

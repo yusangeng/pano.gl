@@ -3,10 +3,19 @@ import dts from 'vite-plugin-dts'
 
 export default defineConfig({
   plugins: [
-    // One .d.ts per source file, emitted next to the js. A single rollup'd
-    // index.d.ts would pull api-extractor in for no benefit while src/ still
-    // has one module; revisit if the public surface ever needs flattening.
-    dts()
+    // One .d.ts per source file, flattened to the dist root. A single
+    // rollup'd index.d.ts would pull api-extractor in for no benefit while
+    // the public surface is this small; revisit if it ever needs flattening.
+    //
+    // include + entryRoot are pinned, and not for style. Bare dts() takes its
+    // file set from the root tsconfig include and places output under the
+    // common ancestor of that set. That ancestor was src/ only while test/
+    // and demo/ matched no files; from Task 5 on, declarations mirrored the
+    // repo layout (dist/src/index.d.ts plus test/demo .d.ts that
+    // "files": ["dist"] would ship) while package.json's types field pointed
+    // at a file that no longer existed. Every gate stayed green because they
+    // load the js, never the types entry. (Final branch review, 2026-09-20.)
+    dts({ include: ['src/**/*'], entryRoot: 'src' })
   ],
   build: {
     lib: {
