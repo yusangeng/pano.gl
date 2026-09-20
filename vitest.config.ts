@@ -1,3 +1,4 @@
+import { playwright } from '@vitest/browser-playwright'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
@@ -27,6 +28,89 @@ export default defineConfig({
       }
     },
     projects: [
+      {
+        test: {
+          name: 'integration',
+          setupFiles: ['./test/integration/support/require-webgpu.ts'],
+          include: ['test/integration/**/*.test.ts'],
+          exclude: ['test/integration/fallback/**'],
+          browser: {
+            enabled: true,
+            /*
+             * The launch/context options live HERE, on the provider factory.
+             *
+             * Putting them on `instances[].launch` / `instances[].context`
+             * instead is accepted without a word and then ignored -- you
+             * silently get Playwright's bundled headless chromium, which has
+             * no GPU at all. Measured: with the options in the wrong place
+             * requestAdapter() returns null and every test in this project
+             * fails at the guard; with them here the adapter is real
+             * (apple/metal-3 on the machine this was verified on).
+             *
+             * channel: 'chromium' is load-bearing, and not for the reason it
+             * looks like. Playwright's default headless launch uses
+             * chrome-headless-shell, a separate binary with no GPU stack:
+             * WebGL still works (through SwiftShader) and renders correct
+             * pixels, but requestAdapter() returns null, so every WebGPU test
+             * no-ops. The failure mode is "looks fine", not "reports an error".
+             */
+            provider: playwright({
+              launchOptions: {
+                channel: 'chromium',
+                /*
+                 * CI runners have no GPU, and a GPU-less browser hands back a
+                 * null adapter -- which the guard would (correctly) turn into a
+                 * red build. SwiftShader gives software WebGPU back, but only
+                 * with BOTH of these flags: --enable-unsafe-swiftshader and
+                 * --use-webgpu-adapter=swiftshader on their own each still
+                 * return null. Measured; see also the CI job in Task 9.
+                 *
+                 * Reproduce the CI environment locally with `CI=1 npm run
+                 * test:integration`. Note that the gates therefore have to hold
+                 * on a software rasteriser as well as on a real GPU -- that is
+                 * a tolerance decision for P3, not something this file settles.
+                 */
+                args: process.env.CI
+                  ? ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader']
+                  : []
+              },
+              contextOptions: { deviceScaleFactor: 2 }
+            }),
+            headless: true,
+            // Traces are Playwright-provider-only and open in
+            // https://trace.playwright.dev -- the debugging story Playwright
+            // users expect, kept.
+            trace: 'retain-on-failure',
+            instances: [{ browser: 'chromium' }]
+          }
+        }
+      },
+      {
+        test: {
+          name: 'no-webgpu',
+          setupFiles: ['./test/integration/support/require-no-webgpu.ts'],
+          include: ['test/integration/fallback/**/*.test.ts'],
+          browser: {
+            enabled: true,
+            /*
+             * --disable-gpu reproduces the real downgrade condition: navigator.gpu
+             * still exists, requestAdapter() returns null, and WebGL2 keeps
+             * working. Measured. Note --disable-features=WebGPU does NOT work
+             * (the adapter still appears), and adding
+             * --disable-software-rasterizer would kill WebGL2 too.
+             *
+             * This project is what P6 grows into: P6 widens its `include` to
+             * the whole integration suite (excluding the gate tests) so that
+             * every user story from P5 is proven to pass on the WebGL2 path.
+             */
+            provider: playwright({
+              launchOptions: { channel: 'chromium', args: ['--disable-gpu'] }
+            }),
+            headless: true,
+            instances: [{ browser: 'chromium' }]
+          }
+        }
+      },
       {
         test: {
           name: 'unit',
