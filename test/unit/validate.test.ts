@@ -53,8 +53,21 @@ describe('wrapLongitude', () => {
     expect(wrapLongitude(-360)).toBe(0)
   })
 
+  it('never returns 360 or a negative, including around exact multiples', () => {
+    // The + 360 canonicalisation step must not leak a 360 or a -0 back out:
+    // downstream camera-state diffing relies on [0, 360) with a canonical +0.
+    for (const x of [360, -360, 720, -720, 1080, 359.9999999999999, -1e-15, -0]) {
+      const r = wrapLongitude(x)
+      expect(r).toBeGreaterThanOrEqual(0)
+      expect(r).toBeLessThan(360)
+    }
+    expect(wrapLongitude(-0)).toBe(0)
+    expect(wrapLongitude(-720)).toBe(0)
+  })
+
   it('rejects a non-finite input', () => {
     expect(() => wrapLongitude(NaN)).toThrow(/finite/i)
+    expect(() => wrapLongitude(Infinity)).toThrow(/finite/i)
   })
 })
 

@@ -34,6 +34,21 @@ export interface CameraState {
  * `u_CamGeoHeight` and read neither.
  *
  * Promoting it to a parameter is what lets the geometry subsystem disappear.
+ *
+ * The `extent` pair is ordered `[width, height]`, after the legacy
+ * `u_CamGeoWidth` / `u_CamGeoHeight` pair it replaces. Every extent in use
+ * today is square, so the order is presently unobservable -- which is exactly
+ * why it is written down here, before a non-square extent arrives and turns an
+ * unstated assumption into a silent transposition.
+ *
+ * The four `kind` literals are deliberately re-spelled here rather than
+ * derived from `ProjectionKind` -- a discriminated union names each variant's
+ * literal itself and cannot index the `ProjectionKind` union per-variant, and
+ * the split is the point: `ProjectionKind` is the set of legal values, this
+ * union is which fields each value carries. If either side drifts, the
+ * `Record<ProjectionKind, number>` table in `constants.ts` or the
+ * `cameraProjectionCode` call sites turn it into a compile error; binding them
+ * mechanically here would blur a decision that should stay visible.
  */
 export type Projection =
   | { readonly kind: 'linear'; readonly fov: number; readonly aspect: number }
