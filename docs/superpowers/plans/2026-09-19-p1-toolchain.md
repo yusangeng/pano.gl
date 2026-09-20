@@ -683,7 +683,7 @@ git commit -m "feat: opt-in trace channels built on debug"
 - Create: `tsconfig.scripts.json`（scripts/ 的 node 环境 program）
 - Modify: `package.json`（删 `build:legacy` 死脚本行）
 
-- [ ] **Step 1: 删掉 build:legacy 死脚本行**
+- [x] **Step 1: 删掉 build:legacy 死脚本行**
 
 `package.json` 的 `scripts` 表里删这一行：
 
@@ -693,7 +693,7 @@ git commit -m "feat: opt-in trace channels built on debug"
 
 它是 Task 2 按当时规格落地的（当时本任务还包含 legacy 构建保留），裁决 II 之后 `scripts/legacy-build.mjs` 不会创建，该行成了指向空处的死引用——任何人跑 `npm run build:legacy` 会得到一个 Node 找不到模块的报错。删行后无需动 lockfile（旧 webpack/babel 依赖 Task 2 重写时已删净）。
 
-- [ ] **Step 2: 建 tsconfig.scripts.json**
+- [x] **Step 2: 建 tsconfig.scripts.json**
 
 缘由见 Task 3 Step 1 的 include 注记：`.mjs` 进不了根 program，那不是覆盖是静默。`tsconfig.scripts.json`：
 
@@ -715,14 +715,14 @@ git commit -m "feat: opt-in trace channels built on debug"
 
 > **include 里的两个配置文件（Task 4 质量审查 2026-09-20 提出，探针实测）**：vite 加载 `vite.config.ts` / `vitest.config.ts` 走 esbuild **只转译不检查类型**——配置键拼错是静默 no-op。最坏的点在 Task 7：`vitest.config.ts` 的 coverage 键拼错会**静默禁用 90% 门槛**，测试全绿、门槛失效——和 Task 3 打掉的惰性 include 是同一类「绿灯没有信息量」问题。两个文件当时不在任何 tsc program（`tsc --listFiles` 实测零命中）。**落点在本 program 而不是根 program，是实测出来的**：根 program 刻意不带 @types/node（Task 3 的纪律），而 Task 8 Step 2 的 `vitest.config.ts` 要用 `process.env.CI`——探针实测它在根 program 报 TS2591 `Cannot find name 'process'`；本 program 的 `types: ["node"]` 恰好是它们运行所在的环境，同一份完整 `vitest.config.ts`（含 `process.env.CI`）在本 program 探针全绿。`vite.config.ts` 自 Task 4 已存在，本步建好即覆盖；`vitest.config.ts` 由 Task 7 创建，include 预列它（精确文件名此刻匹配不到是静默的，但另两条 include 保证 program 非空，无 TS18003 风险），届时自动进程序。Task 8 的 typecheck 第三条因此天然覆盖两个配置文件，无需再改。
 
-- [ ] **Step 3: 手动验证本 program**
+- [x] **Step 3: 手动验证本 program**
 
 ```bash
 npx tsc --noEmit -p tsconfig.scripts.json
 ```
 Expected: 退出码 0（此刻 include 里只有 `vite.config.ts` 匹配得到文件；`scripts/**/*.mjs` 与 `vitest.config.ts` 分别由 P2、Task 7 落地后自动进入）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tsconfig.scripts.json package.json package-lock.json
