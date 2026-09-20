@@ -1361,9 +1361,27 @@ provider factory. Neither reports an error; both are caught here."
 import neostandard from 'neostandard'
 
 export default [
-  ...neostandard({ ts: true, ignores: ['legacy/**', 'dist/**', '.package/**', 'doc/**'] })
+  ...neostandard({
+    ts: true,
+    ignores: [
+      'legacy/**',
+      'dist/**',
+      '.package/**',
+      'doc/**',
+      /*
+       * The v0.2.2 baseline fixtures include the vendored UMD bundle the
+       * captures were rendered from. Its sha256 is recorded in
+       * test/fixtures/baseline/index.json and the P0 manifest check fails if
+       * the bytes ever change, so "fixing" its style is not an option -- it is
+       * hash-pinned input data, the same category of non-source as dist/.
+       */
+      'test/fixtures/**'
+    ]
+  })
 ]
 ```
+
+> **（ignores 增补 2026-09-20，Task 9 落地实测 + 协调侧裁决）**：上方代码块初版 ignores 只有四项，漏了 `test/fixtures/**`——lint 脚本是 `eslint src test`，`test/**` 含 fixtures；P0 vendored 的 v0.2.2 UMD bundle（`test/fixtures/baseline/bundle.js`，17,403 行）首跑贡献 22,929 个 problem（20,585 errors / 2,344 warnings），而它的 sha256 被 P0 capture manifest 钉死（`index.json` 的 `bundleSha256`，字节不一致即校验失败）——「修源码不加 ignore」对它在构造上不可能成立，它与 `dist/**` 同类（hash 钉死的非源码数据）。9 个手写文件（src×2、unit×2、integration×2、support×3）首跑零错零警。代码块已按落地 config 更新；下方 Step 2 的「唯一的例外是 legacy/」随之读作「已在 ignores 里的冻结非源码（legacy/、test/fixtures/）」。
 
 > 选择 `neostandard` 而不是裸 eslint + 一堆插件：它就是把 standardjs 的规则以可维护的形式重新打包，和项目既有的无分号/单引号/2 空格风格一致。spec 里说的「match the surrounding code by hand」在有了 linter 之后可以自动化。
 
