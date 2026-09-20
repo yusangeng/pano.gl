@@ -104,4 +104,23 @@ verify 里 `gen:shaders` 那条写成条件式是**自举悖论**：`scripts/gen
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve，合并。**（2026-09-21，superloop-verify 第 5 关）
+
+**手段**：协调者直审——卡面红线静态核查 ＋ 核心文件逐个亲读（reference / matrix / constants / generated / JSON / types / validate / 生成器）＋ **verify 全链在分支树上亲跑**（不采信自报）＋ 防漂移闸双向变异亲测 ＋ 钉值第四路独立推导 ＋ P0 对拍单独复跑。
+
+**亲验记录**：
+
+- **verify 全链 EXIT=0**：`gen:shaders -- --check`（up to date）→ typecheck 三条腿 → lint → coverage（80/80，四维全 100%：98/98、46/46、20/20、98/98）→ test:integration 3/3 → build 绿。与自报逐项一致。
+- **reference.ts 逐句对读 legacy/shader/fshader.glsl**：四投影公式、象限修正（linear 的 x<0 / planet 的 Q>0∧P<0）、planet 的 z 取负、pannini 的先加倍后修正、`theta/TWO_PI` 无 +0.5——全部忠实转写。**度减弧度 bug 原样保留未修**（`lngOffset = povLongitude/4`，含 8π≈25.13 度/圈与 `% 25` wrap 吻合的注释推导）；`u_CamPOVLatitude` 死 uniform 同样保留不读。atan 不化简为 atan2 的理由成立（pannini 加倍次序致象限差异）。
+- **单一真源链亲验**：JSON → constants.ts（零数值字面量，`cameraProjectionCode` 唯一数值桥）→ generated.ts（WGSL/GLSL 值与 JSON 及 legacy `#define` 一致；GLSL 为 D1 修正后的空格分隔 `#define NAME VALUE`）。
+- **防漂移闸双向变异亲测**：手改 generated.ts → `--check` 报 stale 且 **exit 1**；改 JSON 不重生成 → 同样 exit 1；还原后 exit 0。（首轮管道吃掉退出码，已用无管道重测钉死。）
+- **钉值第四路独立推导**：从 GLSL 文本另起 scratch 转写，linear(-1,0.3,0.7) 双分量逐位一致；planet、cylindrical 的 u 在正确取模 wrap 下一致——我 scratch 的朴素 +1 wrap 所产生的差值恰好反证钉值编码的是真 REPEAT-wrap 语义，v 分量逐位一致。三路推导声明属实。
+- **P0 对拍单独复跑**：matrix-baseline 17/17（含「非线性只差两个深度项」收窄到恰好两元素的那条）。
+- **红线静态核查**：src/core 零越层 import（renderer/media/interaction/viewer 均无）、零 `window/document/navigator/setTimeout/rAF` 引用、**无 index.ts barrel**、TS 侧无投影 kind 数值字面量比较、`test/fixtures/baseline/` 与 `tools/` 未触碰。
+- **门禁证据**：20 个改动文件全在 scope 白名单（package.json/tsconfig.json 属两次已裁决的清单对齐修订，实际 diff 各仅一处/两处，与修订声明严格吻合）；19/19 commit 前缀合规；分支侧 plan 37/37 全勾且 diff 仅勾选变更；执行期 master 侧仅一笔协调侧 scope 修订·二（a4ae108，卡面透明登记 + 用户裁决选项 a，与 P1 同型认定）。
+
+**留档（非阻断）**：
+
+1. **npm audit 2 条**（brace-expansion HIGH / esbuild LOW，均 dev-only）：修复需动 package-lock.json，在 P2 白名单外——执行者不越权修是正确的。交用户裁决：建议单独 chore（`npm audit fix`）或并入 P3 卡，不阻断本卡。
+2. 下游移交风险 8 条（P3 门禁 B 的 planet NaN 策略、D8 legacyFovFrom 承重声明、GLSL 文件域 lng 初始化器的驱动差异等）均在卡面登记，属正常移交。
+3. Task 1 两个已裁定 Minor 残留（texture 侧锁步不对称、JSON 未知节不校验）维持执行者自审裁定，理由成立。
