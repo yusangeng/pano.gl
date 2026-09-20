@@ -1447,13 +1447,18 @@ jobs:
         if: failure()
         with:
           name: vitest-browser-artifacts
-          # Failure screenshots (always) and Playwright traces
-          # (browser.trace: 'retain-on-failure'). Both live under .vitest/.
+          # Failure screenshots (always) land under .vitest/attachments/;
+          # Playwright traces (browser.trace: 'retain-on-failure') land next
+          # to the test files under __traces__/, not under .vitest/.
           path: |
             .vitest/attachments/
             **/__traces__/
-          if-no-files-found: ignore
+          # warn, not ignore: a glob that drifts out of match must be visible,
+          # not a silently empty artifact on exactly the runs that need it.
+          if-no-files-found: warn
 ```
+
+> **（artifact 步勘误 2026-09-20，Task 9 质量审查 I-1/M-1/M-5）**：上方 yaml 块上传步两处按质量审查修正——①注释原文「Both live under .vitest/」与机制不符：trace 落点是 `dirname(testPath)/__traces__/`（`@vitest/browser-playwright` 的 resolveTracesPath，审查员实测），截图才是 `.vitest/attachments/`；两个 glob 都对，错的只是注释（I-1）。②`if-no-files-found` 由 `ignore` 改 `warn`（M-5）：`ignore` 下 glob 失配是静默无产物，恰在最需要 artifact 的失败 run 里才发现；`warn` 零成本换回漂移信号。另有一处仅落地的补充（M-1，不进本块——块里的测试步本就被移交①②的落地实现取代）：计数断言旁补注释，说明 `|project (browser)|` 管道前缀只在无色输出中存在、`| tee` 管道保证无 TTY → 无色。整改轮在落地 ci.yml 一并执行。
 
 > **（2026-09-20 用户裁决 II：CI 不设 legacy job。）** 本步的 yaml 里原本还有第三个 job——checkout 后跑 `npm run build:legacy`，守住「v0.2.x 全程可发版」；该约束废弃后 job 一并删除（见文件头部拍板变更 II）。旧版构建的保险是 git 历史：需要发 0.2.x hotfix 时 checkout 迁移前提交构建发布，Task 1 已实测本机 Node 22 能跑旧 webpack 构建。
 
