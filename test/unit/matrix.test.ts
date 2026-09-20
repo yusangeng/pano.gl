@@ -51,19 +51,24 @@ describe('depth convention', () => {
   })
 
   it('bases the box half-width on the largest extent axis, not per axis', () => {
-    // [4, 2] is asymmetric and the type allows it; every legacy extent was
-    // square, so nothing else would notice per-axis sizing creeping back in.
-    const asymmetric: Projection = { kind: 'cylindrical', zoom: 1, extent: [4, 2] }
-    const gl = buildProjection(asymmetric, 'minus-one-to-one', mat4.create())
-    const zo = buildProjection(asymmetric, 'zero-to-one', mat4.create())
+    // Both orderings of an asymmetric extent, which the type allows even
+    // though every legacy extent was square. Jointly the two inputs pin
+    // m = max/2 against all three wrong sizings: per-axis ([4, 2] catches it
+    // on y), width-driven ([2, 4] catches it on both axes) and height-driven
+    // ([4, 2] catches it on both axes).
+    for (const extent of [[4, 2], [2, 4]] as const) {
+      const asymmetric: Projection = { kind: 'cylindrical', zoom: 1, extent }
+      const gl = buildProjection(asymmetric, 'minus-one-to-one', mat4.create())
+      const zo = buildProjection(asymmetric, 'zero-to-one', mat4.create())
 
-    // m = max(4, 2) / 2 = 2 on BOTH axes: a [-2, 2] x [-2, 2] box has both
-    // scales at 2 / (2 - (-2)) = 0.5. Per-axis sizing would read extent[1] on
-    // the y axis and produce 2 / (1 - (-1)) = 1 there instead.
-    expect(gl[0]).toBeCloseTo(0.5, 12)
-    expect(gl[5]).toBeCloseTo(0.5, 12)
-    expect(zo[0]).toBeCloseTo(0.5, 12)
-    expect(zo[5]).toBeCloseTo(0.5, 12)
+      // max = 4 either way, so m = 2 on BOTH axes: a [-2, 2] x [-2, 2] box
+      // has both scales at 2 / (2 - (-2)) = 0.5. Any sizing that reads the
+      // wrong axis -- or one axis for both -- produces a 1 somewhere.
+      expect(gl[0]).toBeCloseTo(0.5, 12)
+      expect(gl[5]).toBeCloseTo(0.5, 12)
+      expect(zo[0]).toBeCloseTo(0.5, 12)
+      expect(zo[5]).toBeCloseTo(0.5, 12)
+    }
   })
 })
 
