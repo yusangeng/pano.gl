@@ -445,7 +445,7 @@ git commit -m "task-p1-toolchain: build: vite lib mode producing self-contained 
 - Create: `src/diagnostics.ts`
 - Create: `test/unit/diagnostics.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -495,14 +495,14 @@ describe('diagnostics', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run test/unit/diagnostics.test.ts`
 Expected: FAIL —— `Failed to resolve import "../../src/diagnostics"`
 
 > **为什么不是 `npm run test:unit`（2026-09-20 实测修正）**：该脚本是 `vitest run --project unit`，而 `unit` project 由 Task 7 的 vitest.config.ts 定义——此刻配置不存在，vitest 直接抛错退出（不是"跑不了测试"意义上的红）。直跑测试文件即可；**显式路径同时是必需的**：vitest 零配置的默认 glob 会扫到 `tools/baseline/fixtures.test.mjs`（P0 的 node:test 产物），把它当自己的测试文件拾进来报 no tests。Task 7 建好 unit project（include 锁定 `test/unit/**`）后，`npm run test:unit` 才成为正式入口。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/diagnostics.ts`：
 
@@ -590,12 +590,12 @@ export function enableChannels (namespaces: string): () => void {
 
 > **第二个坑（2026-09-20 Task 5 落地实测，debug@4.4.3，主控复现确认）**：DEBUG 未设时，debug 的 Node 引擎在模块初始化跑 `enable(undefined)`，内部 marker 停在 `undefined`；而 `.enabled` 的 getter 只在 marker **变化**时重算（`undefined !== undefined` 为假），于是在第一次 `enable()`/`disable()` 之前，每个通道的 `.enabled` 读出来是 `undefined` 而非 `false`——「默认全静默」在可观测层面不成立，Step 1 的测试 2 因此红（`expected undefined to be false`，确定性复现，非 flaky）。修法是 import 后加一段归一化（已并入上方代码块）：`names`/`skips` 双空（= host 没给 DEBUG）时 `createDebug.enable('')`，把「什么都没开」显式化成可观测的 `false`；host 设了 DEBUG 则双空不成立、原样透传（实测 `DEBUG='pano:*,-pano:media'` 下归一化不触发）。备选——放宽断言为 falsy、或测试里强制清 env——分别弱化规格与绕环境，均不取。附带结论：`@types/debug@4.1.12` 把 `disable()` 标为 `() => string`，上方 `?? ''` 编译干净；4.4.3 运行时 `disable()` 经 `.join()` 重建串，实际不会返回 undefined，该守卫纯防御性。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run test/unit/diagnostics.test.ts`
 Expected: 5 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/diagnostics.ts test/unit/diagnostics.test.ts
