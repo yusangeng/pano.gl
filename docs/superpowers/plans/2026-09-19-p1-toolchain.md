@@ -129,6 +129,22 @@ otherwise: npm run build-debug produces a byte-identical bundle."
   },
   "files": ["dist"],
   "sideEffects": false,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yusangeng/pano.gl.git"
+  },
+  "keywords": [
+    "panorama",
+    "equirectangular",
+    "video-player",
+    "webgl",
+    "webgpu"
+  ],
+  "author": {
+    "name": "yusangeng",
+    "email": "yusangeng@outlook.com"
+  },
   "scripts": {
     "build": "tsup",
     "build:legacy": "node scripts/legacy-build.mjs",
@@ -165,6 +181,8 @@ otherwise: npm run build-debug produces a byte-identical bundle."
 ```
 
 **与旧 package.json 的差异是刻意的**：`babel` / `babel-*` / `webpack` / `webpack-glsl-loader` / `isparta` / `istanbul` / `mocha` / `chai` / `litchy` / `konph` / `polygala` / `shortid` / `lodash` / `chivy` / `param-check` / `dodele` **全部退出**。
+
+> **发布元数据从旧文件原样携带**（`license` / `repository` / `author` / `keywords`，2026-09-20 拍板补入）：plan 初稿的 JSON 漏了它们——公共包丢 `license` 字段会让 npm 发版告警、下游 license 审计判 unknown。`keywords` 在旧表基础上加了 `webgpu`；更精细的营销性 keywords 属 P5/P7 的事，不在本卡扩。
 
 > **不再需要 `pngjs`。** 集成测试现在跑在真浏览器里，读一张基线图就是
 > `fetch(url) → blob → createImageBitmap()`，浏览器自带解码器。P0 的采集工具
