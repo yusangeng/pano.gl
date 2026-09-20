@@ -45,7 +45,7 @@ spec §10.5 写的是「旧代码不被触碰」。这次移动**不违背它的
 - Move: `src/` → `legacy/`
 - Modify: `webpack/debug.js`, `webpack/release.js`, `demo/webpack.config.js`, `package.json`
 
-- [ ] **Step 1: 先确认迁移前是绿的**
+- [x] **Step 1: 先确认迁移前是绿的**
 
 Run: `npm install && npm run build-debug && ls -la .package/`
 Expected: `.package/bundle.js` 与 `.package/BundleSizeDebug.html` 存在
@@ -55,14 +55,14 @@ Expected: `.package/bundle.js` 与 `.package/BundleSizeDebug.html` 存在
 wc -c .package/bundle.js | tee /tmp/pano-prepare-bundle-size.txt
 ```
 
-- [ ] **Step 2: 移动**
+- [x] **Step 2: 移动**
 
 ```bash
 git mv src legacy
 git status --short | head -40
 ```
 
-- [ ] **Step 3: 更新构建配置里的路径**
+- [x] **Step 3: 更新构建配置里的路径**
 
 `git grep -n "src/" -- webpack demo package.json` 会列出所有引用点。逐个改：
 
@@ -72,7 +72,7 @@ git status --short | head -40
 
 **顺带修掉 CLAUDE.md 记录的已知缺陷**：`demo/webpack.config.js` 的 `entry: './index.js'` 与实际文件 `Index.js` 大小写不符，在 Linux/CI 上失败。改成 `'./Index.js'`。
 
-- [ ] **Step 4: 重建并比对**
+- [x] **Step 4: 重建并比对**
 
 ```bash
 npm run build-debug && wc -c .package/bundle.js
@@ -81,14 +81,14 @@ Expected: 与 Step 1 记下的字节数**完全一致**。
 
 若不一致，`git diff` 两个 bundle 找出差异；**若差异涉及函数体而非路径注释，回滚整个 Task（`git reset --hard && git clean -fd`）并上报卡点。**
 
-- [ ] **Step 5: 确认基线 fixture 仍可用**
+- [x] **Step 5: 确认基线 fixture 仍可用**
 
 Run: `cd tools/baseline && node verify-fixtures.mjs`
 Expected: 6 个测试 PASS
 
 （基线 fixture 用的是存档 bundle，不随源码移动而变 —— 这一步确认的是它没被误改。）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A

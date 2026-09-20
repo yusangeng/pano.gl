@@ -3,7 +3,7 @@
   "version": "0.2.2",
   "description": "Web viewer for equirectangular video or image.",
   "main": "lib/index.js",
-  "jsnext:main": "src/index.js",
+  "jsnext:main": "legacy/index.js",
   "scripts": {
     "start": "webpack-dev-server --progress --colors --inline --hot --config=./demo/webpack.config.js",
     "test": "babel-node node_modules/.bin/isparta cover node_modules/.bin/_mocha",
@@ -11,8 +11,8 @@
     "build-release": "webpack --color --config ./webpack/release.js",
     "_prebuild": "npm test",
     "build": "npm run build-debug && npm run build-release",
-    "es5": "babel ./src -d ./lib --source-maps inline",
-    "doc": "jsdoc -r ./src -d ./doc -R ./README.md -t ./node_modules/ink-docstrap/template",
+    "es5": "babel ./legacy -d ./lib --source-maps inline",
+    "doc": "jsdoc -r ./legacy -d ./doc -R ./README.md -t ./node_modules/ink-docstrap/template",
     "_prepublish": "npm test && npm run es5",
     "prepublish": "npm run es5"
   },
