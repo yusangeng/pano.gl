@@ -1317,7 +1317,7 @@ fine, draws nothing' failure with a different API."
 - Create: `test/integration/support/gpu.ts`
 - Test: `test/integration/backend-smoke.test.ts`
 
-- [ ] **Step 1: 写集成测试工具**
+- [x] **Step 1: 写集成测试工具**
 
 `test/integration/support/gpu.ts`。这段代码**就跑在页面里**（浏览器模式），所以没有跨进程边界、没有 wire 类型、没有 base64：
 
@@ -1473,7 +1473,7 @@ export { maxChannelDiff } from './canvas'
 >
 > **这里没有 `RenderRequest` 的 wire 类型，也不需要第二份声明。** 之前那份存在的理由是「页面侧拥有线格式、测试侧不能手抄」；现在两边是同一个模块系统里的同一个类型，抄不抄的问题不存在了。
 
-- [ ] **Step 2: 写后端实现**
+- [x] **Step 2: 写后端实现**
 
 `src/renderer/webgpu/backend.ts` —— 骨架与关键决策，完整实现由执行者补齐：
 
@@ -2044,7 +2044,7 @@ export class WebGPUBackend implements Backend {
 >
 > 不要为了让骨架跑起来而跳过 error scope。**先跑通 Task 6 的布局往返测试，再写四个投影的接线。**
 
-- [ ] **Step 3: 写冒烟测试**
+- [x] **Step 3: 写冒烟测试**
 
 `test/integration/backend-smoke.test.ts` —— **直接 import，没有 `page.evaluate`，没有 `window.__panoTest`**：
 
@@ -2096,12 +2096,12 @@ describe('WebGPU backend lifecycle', () => {
 >
 > `acquireDevice` 在这里是**直接 import 的 `src/` 内部模块**。这正是浏览器模式带来的变化：以前要走 `window.__panoTest` 再导出一次，现在门禁测试 import 内部模块、用户故事测试 import `src/index.ts` —— 这条纪律从「由桥接层的形状隐式保证」变成「靠约定 + review 保证」。
 
-- [ ] **Step 4: 跑集成测试**
+- [x] **Step 4: 跑集成测试**
 
 Run: `npm run test:integration -- backend-smoke`
 Expected: 2 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/webgpu/backend.ts test/integration/support/gpu.ts \
