@@ -61,7 +61,7 @@ export default defineConfig({
                  * CI runners have no GPU, and a GPU-less browser hands back a
                  * null adapter -- which the guard would (correctly) turn into a
                  * red build. SwiftShader gives software WebGPU back, but only
-                 * with BOTH of these flags: --enable-unsafe-swiftshader and
+                 * with BOTH of these flags: --enable-unsafe-webgpu and
                  * --use-webgpu-adapter=swiftshader on their own each still
                  * return null. Measured; see also the CI job in Task 9.
                  *

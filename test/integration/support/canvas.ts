@@ -46,8 +46,7 @@ function decode (dataUrl: string): Promise<HTMLImageElement> {
  * Reads `canvas` back as RGBA8, downscaled to `width`x`height`.
  *
  * @param canvas - Any canvas, WebGPU or 2D.
- * @param width - Output width. 64 keeps the readback near the 256-byte row
- *   alignment `copyTextureToBuffer` wants and keeps comparisons cheap.
+ * @param width - Output width. 64 keeps each readback and comparison cheap.
  * @param height - Output height.
  */
 export async function readCanvas (
@@ -74,7 +73,7 @@ export function maxChannelDiff (a: ArrayLike<number>, b: ArrayLike<number>): num
 }
 
 /**
- * How many pixels are not fully transparent black.
+ * How many pixels are not RGB-black (any channel above zero; alpha ignored).
  *
  * The question a "did anything render" test is really asking, and one an exact
  * comparison cannot answer: a viewer that drew the wrong thing still drew.
