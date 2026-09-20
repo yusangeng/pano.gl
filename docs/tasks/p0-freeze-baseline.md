@@ -127,3 +127,29 @@ verify 写成条件式是**自举悖论**：`verify-fixtures.mjs` 是本卡自�
 **门禁证据复核**：47 个 diff 文件全在 scope 白名单；17/17 commit 前缀合规；自审三轮收敛真实（含双方变异验证，非自查充数）；覆盖陈述如实枚举了有网/无网路径——但"完整性锚定"的覆盖面判断存在系统性盲区（①②④的根因）：网只织到 PNG 就停了。这不是流程违规，是校准问题，供你方后续自审参考。
 
 **整改路径**：主检出 `task-claim` 认领（rejected→fixing）→ 进原 worktree 续干（分支已存在，**不跑 task-go**）→ 重读本卡 → ①–⑤ 必改、⑥–⑨ 顺带 → 全量重捕获（你方已证逐字节可复现，index.json 预期只增锚点字段与 capturedAt/renderer 复现）→ 自审两节更新（变异实验补：锚点篡改必红、llvmpipe 植入必红、黑帧必红）→ `task-finish` 交卷。复审时我将重跑上述三组变异实验。
+
+---
+
+## 审查意见（复审，2026-09-20）
+
+**结论：approve，合并。**
+
+**复审手段**：协调者直审整改增量（`c785924` + 卡同步 `c50d6ac`，约 200 行代码增量逐 hunk 亲读）＋ 四组独立变异实验于净导出副本亲跑（按收窄后的轮询编排：变异实验为主审亲执，不再整建制派专家团——整改轮的评审对象是九条已知结论，不是开放式发现）。
+
+**①–⑨ 逐条核销**：
+
+1. ✅ `uniformsSha256` 对落盘字节记录，对账测试断言磁盘哈希。**变异复验**：同款 `u_CamPOVLongitude` 20→999.5 篡改（上轮 13/13 全绿的那一个）→ 对账红，报错指名 `uniformsSha256` 不符。
+2. ✅ `sourceSha256`/`bundleSha256` 顶层入 manifest（bundle 改 Buffer 读，路由注入与哈希同源），新增输入锚测试。
+3. ✅ `isSoftwareRenderer` 单源谓词（+llvmpipe/lavapipe/softpipe），capture 与测试共同消费，正则双份拷贝消除。**变异复验**：植入 `llvmpipe (LLVM 15.0.7, 256 bits)` → provenance 红。
+4. ✅ 双向对账：递归 walk、`STATIC_FIXTURE_FILES` 单源白名单，orphaned/missing 双向断言。**变异复验**：植入 `orphanCam/ghost.png` → 对账红。执行者留档的 walk 相对路径 bug 被该断言首跑自擒，属断言有效性的计划外实证，采信。
+5. ✅ capture 末尾内嵌 verify（剥 `NODE_TEST_CONTEXT`），红即 exit 1。**变异复验（最强攻击形态）**：合法纯黑 PNG + **同步篡改** pngSha256/pngBytes 骗过哈希网 → 唯内容神谕红（distinct 色数）。出口码信任链闭合。执行者第 8 次全量捕获被该机制真实拒收过一次（walk bug 触发），机制经受过计划外实战，采信。
+6. ✅ `page.setDefaultTimeout(60_000)`。
+7. ✅ 动态枚举全部 `uniform*` 原型方法，未钩者在**录制 target 上**抛错（canvas 身份闸语义正确：不死 viewer 透传），未来 bundle 启用 `uniform4f` 等即刻炸响。
+8. ✅ `FRAMES_PER_CAPTURE` 单源三处消费；占位符校验改双向（顺带发现并消除原单向校验死码——超整改范围的诚实发现）。
+9. ✅ TAP `# skipped 0` 断言入 wrapper；泄漏场景无法变异构造（需泄漏完整环境），以代码审读闭环：TAP footer 计数由 node:test 自身产出，非套件可伪造。裁决：接受。
+
+**亲验汇总**：分支净导出实跑 **14/14 绿、0 skipped、wrapper 出口 0**；manifest 三锚点字段在案；`0668175..branch` 区间 32 个数据文件 diff 为空——"逐字节未变"声明属实，基线幂等第十次成立。commit 前缀合规、scope 全在白名单、整改轮记录如实（含自身失误留档，佳）。
+
+**遗留按留档处理**：maintainability 五条、对抗 8 上下文余量、decodePng 扫描线容忍、根 CI 归 P1——理由成立，随卡留档。
+
+**给执行者的校准反馈（随卡留档，无动作项）**：本轮整改质量高于首轮交付——九条全中、零越界文件、五个变异自证先于我复验。上轮的盲区（网的边界）本轮自审已内化：你们自己的孤儿断言抓住自己 walk bug、fail-closed 拒收自己第 8 次产物，都是"问网外"的行为。保持这个问法。
