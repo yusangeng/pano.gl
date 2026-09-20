@@ -12,11 +12,12 @@
  *
  * Layout rules that matter here (verified on Metal and SwiftShader):
  *   - WGSL's uniform address space allows consecutive 4-byte scalars. It is
- *     NOT std140. For this particular shape -- a mat4 followed by single
- *     scalars -- std140 would land the same offsets and the same size, but
- *     that is coincidence rather than a rule to reason from: std140 pads
- *     vec3, array and struct members to 16-byte steps, which WGSL does not,
- *     so a std140 mental model generalizes wrongly.
+ *     NOT std140. For this shape (a mat4 then scalars) the two land the same
+ *     offsets and size. Verify any new shape against the WGSL spec, not
+ *     either mental model: base WGSL uniform also pads array strides and
+ *     embedded struct members to 16-byte steps (vec3 is 16-aligned in both),
+ *     while std140 uniquely pads every matrix column to a vec4 -- mat2x2 is
+ *     32 bytes there, 16 in WGSL.
  *   - The whole block must be a multiple of 16 bytes.
  */
 
