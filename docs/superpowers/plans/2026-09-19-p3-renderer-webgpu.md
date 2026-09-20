@@ -73,7 +73,7 @@ let p = h.xyz / h.w;          // 线性：远平面上的点，方向即视线
 - Create: `src/renderer/capabilities.ts`
 - Test: `test/unit/capabilities.test.ts`
 
-- [ ] **Step 1: 写接口**
+- [x] **Step 1: 写接口**
 
 `src/renderer/backend.ts`：
 
@@ -214,7 +214,7 @@ export interface DeviceLost {
 > `Capabilities` 与 spec §2.3 的 `static probe(): Promise<Capabilities>` 是同一个类型，
 > 定义在这里、由 `capabilities.ts` 产出。
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 `test/unit/capabilities.test.ts`：
 
@@ -273,12 +273,12 @@ describe('describeCapabilities', () => {
 })
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `npm run test:unit -- capabilities`
 Expected: FAIL —— 无法解析 `../../src/renderer/capabilities`
 
-- [ ] **Step 4: 实现**
+- [x] **Step 4: 实现**
 
 `src/renderer/capabilities.ts`：
 
@@ -353,12 +353,12 @@ export function describeCapabilities (input: ProbeInput): SelectedCapabilities {
 }
 ```
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `npm run test:unit -- capabilities`
 Expected: 6 个测试 PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/renderer/backend.ts src/renderer/capabilities.ts test/unit/capabilities.test.ts
