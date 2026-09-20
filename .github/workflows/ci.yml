@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push: { branches: [main, master] }
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:coverage
+      - run: npm run build
+      - name: the published artifact must load in plain node
+        run: |
+          node -e "import('./dist/index.js').then(m => console.log('esm ok'))"
+          node -e "console.log('cjs ok', typeof require('./dist/index.cjs'))"
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # No GPU on a hosted runner. With CI set, vitest.config.ts adds
+      # --enable-unsafe-webgpu --use-webgpu-adapter=swiftshader so the browser
+      # exposes a software WebGPU adapter instead of a null one. Both flags are
+      # needed; either alone still returns null.
+      #
+      # The point is NOT that software is a better oracle -- it is float32 like
+      # any GPU, so it is not closer to the float64 CPU reference than a real
+      # adapter is. The point is that without it this job would be red for a
+      # reason that has nothing to do with the code, and a permanently red job
+      # is a job people learn to ignore.
+      #
+      # What it does cost: the gates now have to hold on a software rasteriser
+      # AND on a real GPU, so P3's tolerances must be checked under both.
+      # `CI=1 npm run test:integration` reproduces this locally.
+      - name: integration tests
+        run: |
+          set -o pipefail
+          # --reporter=verbose is here for the adapter log: the default reporter
+          # swallows console.log from passing tests (measured), and "which
+          # adapter did this run use" is exactly the signal a machine slipping
+          # to a software rasteriser must leave in the CI log. The flag is
+          # passed here, at the step level, so local `npm run test:integration`
+          # keeps the default reporter.
+          npm run test:integration -- --reporter=verbose 2>&1 | tee integration-tests.log
+          # Vitest exits 0 when a project's include pattern matches nothing
+          # (measured), so a green run above proves nothing about what ran.
+          # Assert each browser project executed tests: the verbose reporter
+          # prefixes every test-result line with "|<project> (<browser>)|",
+          # which stays correct even when P6 changes what no-webgpu includes.
+          for project in 'integration' 'no-webgpu'; do
+            count=$(grep -cF "|$project (" integration-tests.log || true)
+            if [ "$count" -eq 0 ]; then
+              echo "::error::project '$project' ran 0 tests -- vitest exits 0 on an empty include, so this assertion is the only thing that catches it"
+              exit 1
+            fi
+            echo "project '$project' ran $count test(s)"
+          done
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: vitest-browser-artifacts
+          # Failure screenshots (always) and Playwright traces
+          # (browser.trace: 'retain-on-failure'). Both live under .vitest/.
+          path: |
+            .vitest/attachments/
+            **/__traces__/
+          if-no-files-found: ignore
