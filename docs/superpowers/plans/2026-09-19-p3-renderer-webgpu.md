@@ -633,7 +633,7 @@ unit tests and round-tripped through the GPU in P3's integration tests."
 - Create: `src/renderer/webgpu/shaders/sampler.ts`
 - Test: `test/unit/shaders.test.ts`
 
-- [ ] **Step 1: 写 WGSL**
+- [x] **Step 1: 写 WGSL**
 
 `src/renderer/webgpu/shaders/panorama.wgsl`：
 
@@ -928,7 +928,7 @@ fn fs_main_external(in: VertexOut) -> @location(0) vec4f {
 >
 > **`ext` 的声明在下面 Step 2 的绑定里**，和 `tex` 同属 `group(1)` 但编号不同 —— 两条管线各自只认其中一个，所以另一条的 bind group 不需要为它提供资源。这是「一个模块、两条管线」成立的关键：**管线布局是按入口点校验的，模块里没被该入口点用到的绑定不参与校验。**
 
-- [ ] **Step 2: 写拼接模块**
+- [x] **Step 2: 写拼接模块**
 
 `src/renderer/webgpu/shaders/index.ts`：
 
@@ -954,7 +954,7 @@ import panoramaSource from './panorama.wgsl?raw'
 export const PANORAMA_WGSL = `${WGSL_CONSTANTS}\n${panoramaSource}`
 ```
 
-- [ ] **Step 3: 写采样器描述符**
+- [x] **Step 3: 写采样器描述符**
 
 着色器不自己 wrap，wrap 由采样器做（见上面 `to_uv` 的注释），所以采样器不是随手一写的东西 —— 它必须和旧版的纹理对象一致：
 
@@ -994,7 +994,7 @@ export function createPanoramaSampler (device: GPUDevice): GPUSampler {
 >
 > **两条路径都要验证**：`npm run test:unit`（vitest）与 `npm run build`（vite lib mode，随后 grep 产物，见 Step 5）。**如果哪一边不认，说出来，不要改成把着色器内联进 TS** —— 那会牺牲着色器文件的语法高亮，而这是长期维护里最值钱的东西。
 
-- [ ] **Step 4: 加一条着色器可编译性测试**
+- [x] **Step 4: 加一条着色器可编译性测试**
 
 着色器编译只能在浏览器里验，但**源码级的不变量**可以在单元测试里查：
 
@@ -1109,12 +1109,12 @@ describe('panorama WGSL', () => {
 })
 ```
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 Run: `npm run test:unit -- shaders && npm run build && grep -c "fn to_uv" dist/index.js`
 Expected: 单元测试 PASS；构建成功且 grep 输出 ≥ 1（`.wgsl` 源码经 `?raw` 真的进了产物，而不是被解析成外部资源引用）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/renderer/webgpu/shaders/ test/unit/shaders.test.ts
