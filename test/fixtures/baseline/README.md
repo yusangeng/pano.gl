@@ -7,6 +7,11 @@ Captured from the vendored `bundle.js` (the shipped UMD build) by
 cd tools/baseline && npm install && node capture.mjs
 ```
 
+The exit code is trustworthy on its own: capture.mjs re-runs the full fixture
+suite over what it just wrote, so "command succeeded" means "bytes on disk
+passed every hash, content and provenance check", not merely "sixteen files
+came back".
+
 ## What is here
 
 - `<camera>/<state>.png` — the last of three steady-state frames, 128x128, lossless.
@@ -14,14 +19,19 @@ cd tools/baseline && npm install && node capture.mjs
   in submission order, keyed by the name recovered from `getUniformLocation`.
 - `source.png` — the panorama every capture was rendered from, committed so that
   a later pixel comparison renders the same image rather than regenerating one.
-- `index.json` — capture manifest: the observed uniform set per camera, byte
-  count and sha256 per PNG, and the renderer string the captures were
-  produced on, so a changed fixture shows up in a text diff.
-  `fixtures.test.mjs` fails if the manifest and the bytes on disk ever
-  disagree, so the hash column is enforced, not decorative. `capture.mjs`
-  refuses to produce anything on a software rasterizer (SwiftShader et al),
-  and the test suite re-checks the recorded string, so the baseline cannot
-  silently change rasterizers between the capture and the gate.
+- `index.json` — capture manifest: the observed uniform set per camera; byte
+  count and sha256 per PNG; sha256 of every uniforms.json and of the two
+  inputs (`source.png`, `bundle.js`); and the renderer string the captures
+  were produced on — so a changed fixture or a changed input shows up in a
+  text diff. `fixtures.test.mjs` fails if the manifest and the bytes on disk
+  ever disagree **in either direction**: every manifest entry must have its
+  files, and every file in the tree must be claimed by the manifest or belong
+  to the static root set, so an orphan from a removed matrix entry cannot
+  linger. `capture.mjs` refuses to produce anything on a software rasterizer
+  (SwiftShader, llvmpipe, lavapipe, SoftPipe — the shared predicate lives in
+  `states.mjs`), and the test suite re-checks the recorded string, so the
+  baseline cannot silently change rasterizers between the capture and the
+  gate.
 
 PNG rows are top-down, flipped at encode time because the GL origin is
 bottom-up. A renderer reading its own framebuffer from row 0 is already in the
@@ -39,10 +49,11 @@ something that can be re-derived on demand.
 Two things this does not cover, and neither is a defect in the harness:
 
 - **Same machine, same browser build.** `capture.mjs` pins Playwright's
-  `channel: 'chromium'` so the rasteriser is the real one rather than
-  SwiftShader, and it now refuses to run at all when the browser reports a
-  software rasterizer, recording the string it saw in `index.json` so a
-  regeneration can be diffed against the frozen provenance. A future Chromium
+  `channel: 'chromium'` so the rasteriser is the real one rather than a
+  software rasterizer, and it refuses to run at all when the browser reports
+  one (SwiftShader, llvmpipe, lavapipe, SoftPipe), recording the string it
+  saw in `index.json` so a regeneration can be diffed against the frozen
+  provenance. A future Chromium
   could still legitimately round differently. If a regeneration ever produces
   different pixels, that is the first thing to suspect, and the right response
   is to decide deliberately whether the locked baseline moves rather than to
