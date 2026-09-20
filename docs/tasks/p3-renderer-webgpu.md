@@ -4,7 +4,7 @@ scope: [src/renderer/**, src/core/reference.ts, test/unit/**, test/integration/*
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: foundation
 deps: [p2-core]
-state: open
+state: doing
 createdAt: 2026-09-19T08:51:52.509Z
 ---
 # 任务：P3 — renderer + WebGPU
