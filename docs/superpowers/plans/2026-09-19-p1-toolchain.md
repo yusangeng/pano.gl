@@ -296,7 +296,9 @@ legacy build keeps its own dependencies until P7 deletes the code."
 npm i -D @webgpu/types
 npm run typecheck
 ```
-Expected: 退出码 0（此时 `src/` 几乎是空的）
+Expected: 见下方实测注记——**不能**期待此时退出码 0。
+
+（**实测（Task 3 落地，2026-09-20）**：tsc 5.9 在 include 匹配零文件时硬错误 **TS18003**（"No inputs were found in config file"），不是静默通过。Task 3 落地后的孤立状态下 src/test/scripts 还没有可匹配文件，`npm run typecheck` 是红的——这会在 Task 4 落地第一个 `src/index.ts` 时自然消失。本步的真实意图（配置有效 + @webgpu/types 类型可用）的验证法：往 src/ 放一个引用 `GPUDevice` / `GPUTextureFormat` 的临时探针 .ts，跑 typecheck 确认退出码 0，然后删掉探针、不入库。Task 3 实现者正是这样做的。）
 
 - [x] **Step 4: Commit**
 
