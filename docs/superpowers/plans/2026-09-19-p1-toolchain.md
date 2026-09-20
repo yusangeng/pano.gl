@@ -532,6 +532,18 @@ Expected: FAIL —— `Failed to resolve import "../../src/diagnostics"`
 
 import createDebug from 'debug'
 
+// debug's Node engine initialises its enable state from `process.env.DEBUG`
+// verbatim: when DEBUG is unset, `enable(undefined)` runs and the internal
+// `namespaces` marker stays undefined. A channel's `.enabled` getter only
+// recomputes when that marker *changes* value, so on a fresh import every
+// channel reports `undefined` rather than `false` until the first
+// enable()/disable() call. Normalising the nothing-enabled case to `''` here
+// makes "silent by default" observable, while a host-provided DEBUG pattern
+// (names/skips non-empty) is left exactly as the environment set it.
+if (createDebug.names.length === 0 && createDebug.skips.length === 0) {
+  createDebug.enable('')
+}
+
 /**
  * Trace channels, declared once. Creating them anywhere else would let a typo
  * produce a channel that silently never fires -- which is indistinguishable
@@ -575,6 +587,8 @@ export function enableChannels (namespaces: string): () => void {
 ```
 
 > **实现上的坑**：`debug` 没有「读当前 enable 列表」的公开 API。`disable()` 返回上一次的列表（这是它的既有行为），所以上面用了一次「取出 → 恢复 → 再设」的往返。若 `@types/debug` 把 `disable()` 标成 `void`，用 `(createDebug.disable as () => string | undefined)()` 取。
+
+> **第二个坑（2026-09-20 Task 5 落地实测，debug@4.4.3，主控复现确认）**：DEBUG 未设时，debug 的 Node 引擎在模块初始化跑 `enable(undefined)`，内部 marker 停在 `undefined`；而 `.enabled` 的 getter 只在 marker **变化**时重算（`undefined !== undefined` 为假），于是在第一次 `enable()`/`disable()` 之前，每个通道的 `.enabled` 读出来是 `undefined` 而非 `false`——「默认全静默」在可观测层面不成立，Step 1 的测试 2 因此红（`expected undefined to be false`，确定性复现，非 flaky）。修法是 import 后加一段归一化（已并入上方代码块）：`names`/`skips` 双空（= host 没给 DEBUG）时 `createDebug.enable('')`，把「什么都没开」显式化成可观测的 `false`；host 设了 DEBUG 则双空不成立、原样透传（实测 `DEBUG='pano:*,-pano:media'` 下归一化不触发）。备选——放宽断言为 falsy、或测试里强制清 env——分别弱化规格与绕环境，均不取。附带结论：`@types/debug@4.1.12` 把 `disable()` 标为 `() => string`，上方 `?? ''` 编译干净；4.4.3 运行时 `disable()` 经 `.join()` 重建串，实际不会返回 undefined，该守卫纯防御性。
 
 - [ ] **Step 4: 跑测试确认通过**
 
