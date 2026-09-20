@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
+import kinds from '../../src/core/projection-kinds.json'
 import {
   PROJECTION_KINDS,
   cameraProjectionCode,
@@ -8,6 +9,17 @@ import {
 } from '../../src/core/constants'
 
 const repoRoot = path.resolve(__dirname, '../..')
+
+// The guard tests walk the whole of src/, not a hand-picked file list -- a
+// scan that only covers the files the rule was written for cannot catch the
+// next file that breaks it.
+const srcTsFiles = readdirSync(path.join(repoRoot, 'src'), { recursive: true, encoding: 'utf8' })
+  .filter(entry => entry.endsWith('.ts'))
+  .map(entry => path.join(repoRoot, 'src', entry))
+
+// The JSON source is scanned alongside the TypeScript files, because a kind
+// that sneaks into either side of the bridge is the same bug.
+const fisheyeScanFiles = [...srcTsFiles, path.join(repoRoot, 'src/core/projection-kinds.json')]
 
 describe('projection kinds', () => {
   it('uploads the numeric values the legacy shader hard-coded', () => {
@@ -31,25 +43,38 @@ describe('projection kinds', () => {
     }
   })
 
+  it('keeps the JSON keys and the TypeScript union in lockstep', () => {
+    // resolveJsonModule types the JSON exactly as written, so a key added to
+    // the file without a matching member in ProjectionKind typechecks silently
+    // and stays invisible until a caller trips over it. Set equality fails on
+    // the day of the edit instead.
+    expect(Object.keys(kinds.camera).sort()).toEqual([...PROJECTION_KINDS].sort())
+  })
+
   it('has no fisheye entry, because fisheye is not implemented', () => {
     // The legacy code had a PROJECTION_FISHEYE constant that was only assigned
     // inside a commented-out branch, while the shader's tex_proj_fisheye
     // returned vec2(0.0) and the JS side threw. The two sides contradicted each
-    // other. The fix is to not describe a projection that does not exist.
-    expect(readFileSync(path.join(repoRoot, 'src/core/constants.ts'), 'utf8')).not.toMatch(
-      /'fisheye'|Fisheye|FISHEYE/
-    )
+    // other. The fix is to not describe a projection that does not exist. The
+    // regex is the bare token, case-insensitive, because the old spelling
+    // ('fisheye'|Fisheye|FISHEYE) does not match a quoted JSON key like
+    // "fisheye": 5 -- and the JSON is exactly where an entry would reappear.
+    for (const file of fisheyeScanFiles) {
+      expect(readFileSync(file, 'utf8'), file).not.toMatch(/fisheye/i)
+    }
   })
 
   it('is the only place these numbers appear', () => {
     // The whole point of the JSON file. If someone re-declares the numbers
-    // inline anywhere in src/, the two-copies-by-luck problem is back.
+    // inline anywhere in src/, the two-copies-by-luck problem is back. The
+    // generated constants file is naturally immune: its lines begin with
+    // `const`, `#` or `export`, never with a bare kind name.
     const offenders: string[] = []
-    for (const rel of ['src/core/constants.ts']) {
-      const src = readFileSync(path.join(repoRoot, rel), 'utf8')
+    for (const file of srcTsFiles) {
+      const src = readFileSync(file, 'utf8')
       for (const line of src.split('\n')) {
         if (/^\s*(linear|cylindrical|planet|pannini|equirectangular)\s*:\s*\d/.test(line)) {
-          offenders.push(`${rel}: ${line.trim()}`)
+          offenders.push(`${path.relative(repoRoot, file)}: ${line.trim()}`)
         }
       }
     }
