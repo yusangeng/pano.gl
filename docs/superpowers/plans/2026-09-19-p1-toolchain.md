@@ -452,6 +452,8 @@ git commit -m "task-p1-toolchain: build: vite lib mode producing self-contained 
 - [x] **Step 1: 写失败测试**
 
 > **（2026-09-20 Task 5 质量审查整改版）**：初版 5 个测试有三处强度缺口——①TSDoc 旗舰示例 `'pano:*,-pano:media'`（skip 模式）零覆盖；②undo 只从全关默认态测过，一个把 skip 状态清掉的坏 undo 也能通过；③`pano:` 命名空间前缀没钉住（test 1 只查对象键，`createDebug('pano:gpu')` 改名 `createDebug('gpu')` 后 suite 依然绿，而所有文档化的 `DEBUG=pano:*` 示例全断）。下方为补强后的 9 测试版（skip 模式、非默认先前态 undo、namespace 断言、垃圾模式 = 无效输入路径；test 4 顺带补 try/finally，与同文件其余测试一致，断言失败时不向后续测试泄漏已启用通道）。
+>
+> **（同日第二轮修正）**：上版 undo 测试的前态用了 `'pano:gpu'`（不含 skip 条目），缺陷注入实验证明「丢 skip 的坏 undo」对它不可见、而其注释恰恰声称覆盖该形状——注释说谎比没注释更糟。修法采用复审给出的、经出厂代码探针验证的形状：前态改为 `'pano:*,-pano:media'`（自带 skip），undo 后断言 `media.enabled === false` 把 skip 存活钉住；丢 skip 的 undo 形状现在会且只会红在这条断言上。
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -513,18 +515,22 @@ describe('diagnostics', () => {
   })
 
   it('undo restores a partially-enabled previous state, not just all-off', () => {
-    // The discriminating case for the undo: previous state carries its own
-    // enable list. An undo that clobbers it (e.g. drops to all-off, or loses
-    // skip entries) passes the all-off round-trip above and fails only here.
-    const restoreFirst = enableChannels('pano:gpu')
+    // The discriminating case for the undo: the previous state carries a
+    // skip entry of its own. An undo that drops skips (rebuilds the previous
+    // list without its '-pano:media' term) or clobbers everything to all-off
+    // passes the all-off round-trip above and fails only here.
+    const restoreFirst = enableChannels('pano:*,-pano:media')
     try {
-      const restoreSecond = enableChannels('pano:*')
+      const restoreSecond = enableChannels('pano:camera')
       try {
-        expect(channels.media.enabled).toBe(true)
+        expect(channels.camera.enabled).toBe(true)
+        expect(channels.gpu.enabled).toBe(false)
       } finally {
         restoreSecond()
       }
       expect(channels.gpu.enabled).toBe(true)
+      // The skip entry must survive the undo: an undo that loses the
+      // '-pano:media' term leaves media on, and only this line catches it.
       expect(channels.media.enabled).toBe(false)
     } finally {
       restoreFirst()
@@ -649,7 +655,7 @@ export function enableChannels (namespaces: string): () => void {
 }
 ```
 
-> **实现上的坑**：`debug` 没有「读当前 enable 列表」的公开 API，`disable()` 返回上一次的列表（既有行为）是唯一读出口——`previous` 靠它捕获。undo 里的 `disable()` 不是死代码：`.enabled` 的 getter 只在内部 namespaces marker **变化**时重算，先 disable（marker 清空）再 enable(previous) 保证 marker 经历一次跳变、getter 必然重算；直接 `enable(previous)` 在 previous 与当前 marker 相同时可能不触发重算。若 `@types/debug` 把 `disable()` 标成 `void`，用 `(createDebug.disable as () => string)()` 取。
+> **实现上的坑**：`debug` 没有「读当前 enable 列表」的公开 API，`disable()` 返回上一次的列表（既有行为）是唯一读出口——`previous` 靠它捕获。undo 里的 `disable()` 在 debug 4.4.3 下**并不承重**（复审缺陷注入实验：去掉它直接 `enable(previous)`，9/9 仍全绿——`enable()` 原子地重建 names/skips，marker 相等蕴含状态相等，getter 不重算结果也对）；保留它是 belt-and-braces：`.enabled` 的 getter 只在内部 namespaces marker **变化**时重算，这是 debug 的内部实现细节而非契约，先 disable 再 enable 保证 marker 必经跳变，防的是 debug 未来版本改变重算条件。若 `@types/debug` 把 `disable()` 标成 `void`，用 `(createDebug.disable as () => string)()` 取。
 
 > **（2026-09-20 Task 5 质量审查整改）**：初版实现里 enable 后还有一次「disable 读回 → 恢复 previous → 再设 enabled」的三行往返——审查以 9 模式对照探针证明它与删除可观察等价（读回值无任何消费者，previous 一次捕获就够），纯维护成本，已删；同时删掉的还有 `?? ''` 守卫（`disable()` 经 `.join()` 重建串，实测永不返回 undefined，且它是 90% 分支门槛下的永久未覆盖分支）。行为不变的证明与探针记录见质量审查报告。
 
