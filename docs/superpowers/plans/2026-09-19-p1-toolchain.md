@@ -364,6 +364,21 @@ npm rm tsup && npm i -D vite-plugin-dts@^5
 
 （`tsup` 从 devDependencies 消失，`vite-plugin-dts@^5` 进来——peer `vite: >=3`，实测对 vite 7 兼容。`vite` 本来就在，demo / 测试 / 打包从此一个工具。）
 
+同一编辑里顺带落两条发布加固（Task 2 质量审查 2026-09-20 提出，均为首次发版前的硬要求，趁 package.json 开着一起改）：
+
+```json
+  "bugs": { "url": "https://github.com/yusangeng/pano.gl/issues" },
+  "publishConfig": { "tag": "alpha" },
+```
+
+以及 scripts 表加一行：
+
+```json
+    "prepublishOnly": "npm run build",
+```
+
+理由：①semver 里 `1.0.0-alpha.0 > 0.2.2`，裸 `npm publish` 会把 alpha 打成 `latest`，所有 `npm i pano.gl` 用户默认拿到 alpha——`publishConfig.tag: alpha` 是唯一写在 manifest 里的防线（GA 时 `--tag latest` 或删掉该字段）；②`files: ["dist"]` 下从干净检出直接 publish 会**成功发布一个只有 package.json 的坏包**（实测 `npm pack --dry-run` 静默通过），`prepublishOnly` 把构建挂进发布链；③`bugs` 补全 npm 页 Issues 入口，`npm bugs pano.gl` 因此可用。
+
 - [ ] **Step 3: 造一个最小入口让它能跑**
 
 `src/index.ts`：
@@ -1425,3 +1440,7 @@ git commit -m "docs(demo): minimal vite-served demo page"
 
 > **给 P3 的提醒**：门禁容差必须在**真 GPU 与 SwiftShader 两种环境**下都验证过。
 > CI 跑的是 SwiftShader，本机跑的是真 GPU —— 只在其中一边调出来的容差，另一边会红。
+
+> **留给后续期的两笔账（Task 2 质量审查 2026-09-20 提出，P1 不处理）**：
+> ① 仓库根还躺着 webpack 时代的 `.npmignore`——`files` 字段现在是白名单，它已失效（`files` 赢），但留着会误导人；P7 清 legacy 时一并 `git rm`。
+> ② `src/index.ts` 将硬编码 `VERSION = '1.0.0-alpha.0'`，与 package.json 的 `version` 两处一份——发版时是两个要同步的手改点。要么写进发布检查单，要么 P5 起在构建期从 package.json 派生（vite `define` 一行的事），届时定。
