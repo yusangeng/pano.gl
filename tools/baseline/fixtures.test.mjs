@@ -1,13 +1,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile, mkdir, mkdtemp, writeFile, rm, cp } from 'node:fs/promises'
+import { readFile, readdir, mkdir, mkdtemp, writeFile, rm, cp } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import zlib from 'node:zlib'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { STATES, CAMERAS, CANVAS_SIZE, captureId } from './states.mjs'
+import {
+  STATES, CAMERAS, CANVAS_SIZE, captureId,
+  FRAMES_PER_CAPTURE, isSoftwareRenderer, STATIC_FIXTURE_FILES
+} from './states.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '../../test/fixtures/baseline')
@@ -15,6 +18,24 @@ const readJson = async p => JSON.parse(await readFile(p, 'utf8'))
 const capture = (camera, state) => readJson(path.join(root, camera, `${state}.uniforms.json`))
 const lastFrame = doc => doc.frames.at(-1)
 const uniform = (doc, name) => lastFrame(doc).find(u => u.name === name)
+const sha256 = buf => createHash('sha256').update(buf).digest('hex')
+
+/*
+ * Every regular file under `dir`, as absolute paths -- relativisation happens
+ * once, at the call site, because doing it per recursion level resolves the
+ * child's relative strings against the process cwd instead of the fixture
+ * root and invents phantom paths. Symlinks and other oddities are returned
+ * too, so the orphan check fails on them rather than walking past them.
+ */
+const walk = async dir => {
+  const out = []
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name)
+    if (e.isDirectory()) out.push(...await walk(p))
+    else out.push(p)
+  }
+  return out
+}
 
 /*
  * Minimal PNG decoder for the one job this suite needs: proving a fixture
@@ -212,24 +233,36 @@ test('the projections and poses are visually distinguishable', async () => {
   }
 })
 
-test('the manifest matches the files on disk', async () => {
+test('the manifest and the fixture tree agree, in both directions', async () => {
   /*
    * index.json is the text-diffable face of binary fixtures: a changed PNG is
    * supposed to surface as a changed pngSha256. That contract only holds if
    * something actually compares the hash to the bytes -- git will happily
    * accept a hand-edited PNG and a stale index.json in the same commit.
+   *
+   * The uniform streams are hashed for the same reason (review finding 1):
+   * they are this phase's primary product -- the only carrier of the F10/F11
+   * conclusions and of what P2 diffs against -- and until they were anchored,
+   * a hand-edited value, a bad merge, or CRLF rewriting passed every
+   * structural check while silently corrupting the record.
    */
   for (const c of captured(INDEX)) {
     const png = await readFile(path.join(root, c.camera, `${c.state.id}.png`))
-    const sha = createHash('sha256').update(png).digest('hex')
-    assert.equal(sha, c.pngSha256, `${c.id}: png on disk does not match index.json pngSha256`)
+    assert.equal(sha256(png), c.pngSha256, `${c.id}: png on disk does not match index.json pngSha256`)
     assert.equal(png.length, c.pngBytes, `${c.id}: png byte count drifted from index.json`)
 
-    const doc = await capture(c.camera, c.state.id)
+    const uniformsBytes = await readFile(path.join(root, c.camera, `${c.state.id}.uniforms.json`))
+    assert.equal(
+      sha256(uniformsBytes),
+      c.uniformsSha256,
+      `${c.id}: uniforms.json on disk does not match index.json uniformsSha256`
+    )
+
+    const doc = JSON.parse(uniformsBytes.toString('utf8'))
     assert.equal(doc.camera, c.camera, `${c.id}: uniforms.json says camera ${doc.camera}`)
     assert.equal(doc.state.id, c.state.id, `${c.id}: uniforms.json says state ${doc.state.id}`)
     assert.equal(doc.frames.length, c.frameCount, `${c.id}: frame count drifted from index.json`)
-    assert.equal(doc.frames.length, 3, `${c.id}: expected three frames`)
+    assert.equal(doc.frames.length, FRAMES_PER_CAPTURE, `${c.id}: expected ${FRAMES_PER_CAPTURE} frames`)
 
     /*
      * Names carry the whole evidence chain for the dead-uniform findings.
@@ -241,6 +274,39 @@ test('the manifest matches the files on disk', async () => {
     for (const n of names) assert.ok(n && n !== '?', `${c.id}: unnamed uniform write recorded`)
     assert.deepEqual(names, c.uniformNames, `${c.id}: uniform names drifted from index.json`)
   }
+
+  /*
+   * And the other direction (review finding 4): the loop above proves every
+   * manifest entry has its files, not that every file has its entry. A matrix
+   * entry that is renamed or removed would leave its old fixture on disk
+   * forever -- orphaned, plausible-looking, and green under a verifier that
+   * only enumerates the matrix. So the tree is enumerated and compared to
+   * manifest claims plus the static root files, exactly.
+   */
+  const expected = new Set(STATIC_FIXTURE_FILES)
+  for (const c of captured(INDEX)) {
+    expected.add(`${c.camera}/${c.state.id}.png`)
+    expected.add(`${c.camera}/${c.state.id}.uniforms.json`)
+  }
+  const onDisk = new Set((await walk(root)).map(p => path.relative(root, p)))
+  const orphaned = [...onDisk].filter(f => !expected.has(f))
+  const missing = [...expected].filter(f => !onDisk.has(f))
+  assert.deepEqual(orphaned, [], 'files on disk that the manifest does not claim')
+  assert.deepEqual(missing, [], 'manifest entries with no file on disk')
+})
+
+test('the two baseline inputs are pinned (source and bundle)', async () => {
+  /*
+   * source.png is the single input function of all 16 captures; bundle.js is
+   * the measured artifact itself. Neither was anchored anywhere (review
+   * finding 2): a wrong file, a truncated copy, or a line-ending rewrite of
+   * the 17k-line bundle would drift silently until a downstream pixel gate
+   * failed looking like a renderer bug.
+   */
+  const source = await readFile(path.join(root, 'source.png'))
+  assert.equal(sha256(source), INDEX.sourceSha256, 'source.png on disk does not match index.json sourceSha256')
+  const bundle = await readFile(path.join(root, 'bundle.js'))
+  assert.equal(sha256(bundle), INDEX.bundleSha256, 'bundle.js on disk does not match index.json bundleSha256')
 })
 
 test('capture resolution is the one the fixtures were recorded at', async () => {
@@ -251,17 +317,18 @@ test('the baseline records a hardware rasterizer', async () => {
   /*
    * Provenance, pinned where verify re-executes it rather than only where
    * capture.mjs enforced it once. channel:'chromium' is supposed to buy the
-   * real GPU, but headless Chromium silently falls back to SwiftShader when
-   * its GPU process cannot start, and 16 self-consistent captures off a
-   * software rasterizer would pass every structural check here while being a
-   * baseline of the wrong thing. The string itself stays unpinned -- a
-   * different machine legitimately reports a different GPU -- but "software"
-   * is wrong everywhere.
+   * real GPU, but headless Chromium silently falls back to software
+   * rasterization when its GPU process cannot start, and 16 self-consistent
+   * captures off a software rasterizer would pass every structural check here
+   * while being a baseline of the wrong thing. The predicate is shared with
+   * the capture gate via states.mjs and also names llvmpipe/lavapipe/SoftPipe
+   * -- the software stacks of headless Linux CI, which do not contain the
+   * word "software". The string itself stays otherwise unpinned: a different
+   * machine legitimately reports a different GPU.
    */
   assert.ok(INDEX.renderer, 'index.json records no renderer string at all')
-  assert.doesNotMatch(
-    INDEX.renderer,
-    /swiftshader|software/i,
+  assert.ok(
+    !isSoftwareRenderer(INDEX.renderer),
     `the frozen baseline was captured on: ${INDEX.renderer}`
   )
 })

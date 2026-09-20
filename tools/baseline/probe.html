@@ -20,6 +20,7 @@
     'use strict'
 
     var SIZE = __CANVAS_SIZE__
+    var FRAMES = __FRAMES_PER_CAPTURE__
 
     // Location objects are opaque, so names have to be recovered by
     // intercepting getUniformLocation. A WeakMap keeps this leak-free.
@@ -91,6 +92,33 @@
       pending.length = 0
       return r
     }
+
+    /*
+     * Guard the uniform setters this probe does NOT record (review finding 7).
+     * Today's bundle calls only uniform1f / uniform1i / uniformMatrix4fv --
+     * verified against the artifact, not assumed -- so a future bundle that
+     * starts sending e.g. uniform4f would have its writes silently missing
+     * from the uniform stream while the pixels it influences still land in the
+     * fixture. That split (complete-looking stream, subtly wrong baseline) is
+     * the failure mode this exists to make loud: the moment an unhooked setter
+     * fires on the recording target, the capture fails instead of recording
+     * half the truth. Non-target contexts (the undead viewers) pass through
+     * untouched -- they are not being measured.
+     */
+    var HOOKED_SETTERS = { uniform1f: 1, uniform1i: 1, uniformMatrix4fv: 1 }
+    Object.keys(WebGLRenderingContext.prototype)
+      .filter(function (name) { return /^uniform/.test(name) })
+      .forEach(function (name) {
+        if (HOOKED_SETTERS[name]) return
+        var orig = WebGLRenderingContext.prototype[name]
+        if (typeof orig !== 'function') return
+        WebGLRenderingContext.prototype[name] = function () {
+          if (this.canvas === target) {
+            throw new Error('probe has no hook for ' + name + ' -- the uniform stream would be incomplete')
+          }
+          return orig.apply(this, arguments)
+        }
+      })
 
     /*
      * A deterministic equirectangular test pattern. Must be power-of-two and
@@ -277,7 +305,7 @@
              */
             var spins = 0
             ;(function tick () {
-              if (window.__probe.frames().length < 3 && ++spins < 60) {
+              if (window.__probe.frames().length < FRAMES && ++spins < 60) {
                 return requestAnimationFrame(tick)
               }
               var f = window.__probe.frames()
