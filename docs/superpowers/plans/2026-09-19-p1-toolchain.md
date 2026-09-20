@@ -246,7 +246,7 @@ legacy build keeps its own dependencies until P7 deletes the code."
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.mjs"],
+  "include": ["src/**/*.ts", "test/**/*.ts"],
   "exclude": ["test/integration"]
 }
 ```
@@ -268,13 +268,15 @@ legacy build keeps its own dependencies until P7 deletes the code."
 >
 > **`"exclude": []` 必须写，它看着多余但不是。** 继承下来的 `exclude` 相对**声明它的那个文件**解析，所以根配置里的 `"exclude": ["test/integration"]` 会跟到子配置里，把子 program 自己要检查的文件全部排掉。实测（tsc 5.9）：少了这一行，往 `test/integration/` 里放一个故意写错的测试，`tsc -p test/integration` **照样退出码 0**；加上就报出那个错。一个静默地什么都不检查的 typecheck program 比没有还糟 —— 它会让「typecheck 是绿的」变成一句没有信息量的话。
 >
-> **`npm run typecheck` 因此必须是两条**（Task 8 Step 1 改）：`tsc --noEmit && tsc --noEmit -p test/integration`。否则那个 program 根本不会被跑到。
+> **`npm run typecheck` 因此必须是三条**（Task 8 Step 1 改）：`tsc --noEmit && tsc --noEmit -p test/integration && tsc --noEmit -p tsconfig.scripts.json`。否则后两个 program 根本不会被跑到。（第三条是 Task 3 质量审查后补的：scripts 的 program 由 Task 6 建，见 Task 3 的 include 注记。）
 >
 > 单元测试不碰 `window`、不碰 GPU、不 import 资源（见 Testing 一节），所以留在根 program 里是对的。**别把 `exclude` 去掉图省事** —— 去掉了根 program 立刻红，而且报错会指向集成测试文件，看起来像测试写错了。
 
 **`noUncheckedIndexedAccess` 是刻意的**：spec §7.4 说明删掉 `param-check` 的前提是类型够严。它会让 `arr[i]` 的类型变成 `T | undefined`，一开始会很烦 —— 但那正是 GPU 缓冲下标这类代码该有的严谨度。**不要为了省事关掉它。**
 
 `@webgpu/types` 需要装：把它加进 devDependencies。
+
+> **include 里没有 `scripts/**/*.mjs`，这是 2026-09-20 实测后的修正（Task 3 质量审查）**：`.mjs` 在 `allowJs` 关闭时根本不是可被 include 的扩展名——tsc 对它静默跳过（有 .ts 时）或 TS18003 硬错（只有它时）。原来写着的那个条目是**惰性假覆盖**：「typecheck 是绿的」对 scripts 什么都没说。修法沿用本 plan 已有的"一种环境一个 program"模式：`scripts/` 的 node 环境 .mjs 由 **Task 6** 建的 `tsconfig.scripts.json` 覆盖（`types: ["node"]`，届时装 `@types/node`——**不要**把 @types/node 加进根 types 数组，那会把 `process`/`Buffer` 全局泄进 `src/`，库里手滑写 `process.env` 也能编译）。在那之前 scripts/ 没有文件，也无需覆盖。
 
 - [x] **Step 2: 写 legacy 的隔离配置**
 
@@ -283,12 +285,14 @@ legacy build keeps its own dependencies until P7 deletes the code."
 ```json
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "checkJs": false, "allowJs": true, "noEmit": true },
+  "compilerOptions": { "checkJs": false, "allowJs": true, "declaration": false, "noEmit": true },
   "include": ["legacy/**/*.js"]
 }
 ```
 
 **目的**：让编辑器知道 `legacy/` 是 Babel 6 时代的 JS，不要拿新规则去检查它。它不参与 `npm run typecheck`。
+
+> **`"declaration": false` 不能省（Task 3 质量审查实测，tsc 5.9.3）**：根配置的 `declaration: true` 会被继承，而它在 `noEmit` 下**不是惰性**——声明发射诊断照跑，对 legacy 的 JS（连同被 import 拉进来的 `vendor/cuon.js`）报一片 TS9005/TS9006，`tsc -p tsconfig.legacy.json` 退出码 2。加上这一行，同一文件集退出码 0。`checkJs: false` 的那一半行为如设计所愿：类型错误被压住、语法错误（TS1005）仍会浮出。
 
 - [x] **Step 3: 加 @webgpu/types 并确认类型可用**
 
@@ -578,6 +582,7 @@ git commit -m "feat: opt-in trace channels built on debug"
 **Files:**
 - Create: `scripts/legacy-build.mjs`
 - Create: `webpack/package.json`（一行，把 `webpack/` 划回 CommonJS scope）
+- Create: `tsconfig.scripts.json`（scripts/ 的 node 环境 program，见下方 Step 2）
 - Modify: `package.json`
 
 - [ ] **Step 1: 把旧构建的依赖装回来**
@@ -605,6 +610,24 @@ Run: `npm i -D webpack@^3.10.0 webpack-bundle-analyzer@^2.9.2 babel-core@^6.24.1
 ```
 
 Task 2 的根 package.json 带了 `"type": "module"`，而两个 webpack 配置是 CommonJS 写法（`require` / `module.exports`）。**实测（Node 22.23.2）**：type:module scope 下 `createRequire(import.meta.url)('./webpack/debug.js')` 直接抛 `ReferenceError: require is not defined in ES module scope`，`createRequire` 不能豁免目标文件的 scope 判定。这个一行的嵌套 package.json 把 `webpack/` 重新划回 CommonJS，配置文件本身一字不动，bundle 产物不受影响（修法已实测验证）。
+
+本步还落地 scripts/ 自己的 typecheck program（缘由见 Task 3 Step 1 的 include 注记：`.mjs` 进不了根 program，那不是覆盖是静默）。`tsconfig.scripts.json`：
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "declaration": false,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["scripts/**/*.mjs"]
+}
+```
+
+装 node 类型：`npm i -D @types/node`。`types` 是**替换**不是追加——它挡掉 `@webgpu/types`（scripts 用不到）和一切 `node_modules/@types/*` 的自动混入；`declaration: false` 的理由同 `tsconfig.legacy.json` 的注记。**Task 8 Step 1 会把 `npm run typecheck` 改成三条**，把 `-p tsconfig.scripts.json` 也跑起来；在那之前手动 `npx tsc --noEmit -p tsconfig.scripts.json` 验证本步（P2 的 `gen-shader-constants.mjs` 落地时自动继承这份覆盖，不必再改）。
 
 `scripts/legacy-build.mjs`：
 
@@ -651,7 +674,7 @@ Expected: `dist/` 与 `.package/` 双双存在；`build:legacy` 的输出没有�
 - [ ] **Step 4: Commit**
 
 ```bash
-git add scripts/legacy-build.mjs package.json package-lock.json
+git add scripts/legacy-build.mjs tsconfig.scripts.json package.json package-lock.json
 git commit -m "build: keep the v0.2.x bundle buildable during the rewrite"
 ```
 
@@ -746,7 +769,7 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 **Files:**
 - Create: `test/integration/tsconfig.json`
 - Modify: `vitest.config.ts`（加两个 browser project）
-- Modify: `package.json`（typecheck 变两条）
+- Modify: `package.json`（typecheck 变三条）
 - Modify: `.gitignore`
 - Create: `test/integration/support/require-webgpu.ts`
 - Create: `test/integration/support/require-no-webgpu.ts`
@@ -763,7 +786,7 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 1. Playwright 自带的 headless chromium **没有 GPU**（`channel: 'chromium'` 才指到带 GPU 的那个完整构建）。此时 `navigator.gpu` **存在**、`requestAdapter()` 返回 **null**、WebGL2 照常工作 —— 所以「测试跑过了」和「测试什么都没测」在输出上长得一模一样。
 2. **Vitest 5 的 `instances[].launch` / `instances[].context` 会被静默忽略** —— 见 Step 2 的说明。配置被吞掉不会有任何报错，你只是拿到了上面那个没 GPU 的浏览器。
 
-- [ ] **Step 1: 集成测试的 tsconfig，并把 typecheck 改成两条**
+- [ ] **Step 1: 集成测试的 tsconfig，并把 typecheck 改成三条**
 
 `test/integration/tsconfig.json`：
 
@@ -780,10 +803,10 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 
 理由见 Task 3 Step 1 的说明。**`"exclude": []` 不能省** —— 少了它这个 program 会静默地什么都不检查（tsc 5.9 实测）。
 
-`package.json` 里把 typecheck 改成两条：
+`package.json` 里把 typecheck 改成三条（第三条跑 Task 6 建的 scripts program）：
 
 ```json
-    "typecheck": "tsc --noEmit && tsc --noEmit -p test/integration",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test/integration && tsc --noEmit -p tsconfig.scripts.json",
 ```
 
 `.gitignore` 末尾追加（browser mode 失败时会往这里落截图和 trace，是本地诊断产物，不入库）：
@@ -1446,3 +1469,5 @@ git commit -m "docs(demo): minimal vite-served demo page"
 > **留给后续期的两笔账（Task 2 质量审查 2026-09-20 提出，P1 不处理）**：
 > ① 仓库根还躺着 webpack 时代的 `.npmignore`——`files` 字段现在是白名单，它已失效（`files` 赢），但留着会误导人；P7 清 legacy 时一并 `git rm`。
 > ② `src/index.ts` 将硬编码 `VERSION = '1.0.0-alpha.0'`，与 package.json 的 `version` 两处一份——发版时是两个要同步的手改点。要么写进发布检查单，要么 P5 起在构建期从 package.json 派生（vite `define` 一行的事），届时定。
+
+> **给 P2/P3 的 API 类型纪律（Task 3 质量审查 2026-09-20 拍板，保留 `exactOptionalPropertyTypes`）**：该 flag 不写进产出的 .d.ts，只约束本仓库编译，消费者端按他们自己的设置走——所以"传染性"论点对发布产物不成立，且现在收紧、1.0 前放松是安全方向，反之是破坏性返工。**写公开 option 类型时的纪律**：凡消费者会动态构造/展开合并的 option 属性（partial 展开、默认值合并），声明成 `prop?: T | undefined` 而不是裸 `prop?: T`——前者在任何消费者配置下都合法传 `undefined`，产出的 .d.ts 对所有人群最顺手。
