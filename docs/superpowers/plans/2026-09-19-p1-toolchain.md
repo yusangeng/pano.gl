@@ -681,7 +681,8 @@ git commit -m "feat: opt-in trace channels built on debug"
 
 **Files:**
 - Create: `tsconfig.scripts.json`（scripts/ 的 node 环境 program）
-- Modify: `package.json`（删 `build:legacy` 死脚本行）
+- Modify: `package.json`（删 `build:legacy` 死脚本行；质量审查整改追加两处：`@types/node` pin `^22`、lint 行去掉 `scripts` 参数——见 Step 5）
+- Modify: `package-lock.json`（整改轮随 `npm i` 重生成）
 
 - [x] **Step 1: 删掉 build:legacy 死脚本行**
 
@@ -711,7 +712,7 @@ git commit -m "feat: opt-in trace channels built on debug"
 }
 ```
 
-装 node 类型：`npm i -D @types/node`。`types` 是**替换**不是追加——它挡掉 `@webgpu/types`（scripts 用不到）和一切 `node_modules/@types/*` 的自动混入；`declaration: false` 的理由同 `tsconfig.legacy.json` 的注记。**Task 8 Step 1 会把 `npm run typecheck` 改成三条**，把 `-p tsconfig.scripts.json` 也跑起来；在那之前手动 `npx tsc --noEmit -p tsconfig.scripts.json` 验证本步（P2 的 `gen-shader-constants.mjs` 落地时自动继承这份覆盖，不必再改）。
+装 node 类型：`npm i -D @types/node`（原指令无版本约束，落地装到 latest＝26.x；质量审查后 pin `^22`，见 Step 5）。`types` 是**替换**不是追加——它挡掉 `@webgpu/types`（scripts 用不到）和一切 `node_modules/@types/*` 的自动混入；`declaration: false` 的理由同 `tsconfig.legacy.json` 的注记——**质量审查实测精确化（2026-09-20）**：TS9005/TS9006 的触发形态是 legacy 那种 2012 年式跨模块未类型化导出，本 program 的现实文件集（TS 配置 + 现代 node 脚本）当下不触发，此行属预防性保留（零成本挡掉一整类未来报错），不应被读作「不加就炸」。**Task 8 Step 1 会把 `npm run typecheck` 改成三条**，把 `-p tsconfig.scripts.json` 也跑起来；在那之前手动 `npx tsc --noEmit -p tsconfig.scripts.json` 验证本步（P2 的 `gen-shader-constants.mjs` 落地时自动继承这份覆盖，不必再改）。
 
 > **include 里的两个配置文件（Task 4 质量审查 2026-09-20 提出，探针实测）**：vite 加载 `vite.config.ts` / `vitest.config.ts` 走 esbuild **只转译不检查类型**——配置键拼错是静默 no-op。最坏的点在 Task 7：`vitest.config.ts` 的 coverage 键拼错会**静默禁用 90% 门槛**，测试全绿、门槛失效——和 Task 3 打掉的惰性 include 是同一类「绿灯没有信息量」问题。两个文件当时不在任何 tsc program（`tsc --listFiles` 实测零命中）。**落点在本 program 而不是根 program，是实测出来的**：根 program 刻意不带 @types/node（Task 3 的纪律），而 Task 8 Step 2 的 `vitest.config.ts` 要用 `process.env.CI`——探针实测它在根 program 报 TS2591 `Cannot find name 'process'`；本 program 的 `types: ["node"]` 恰好是它们运行所在的环境，同一份完整 `vitest.config.ts`（含 `process.env.CI`）在本 program 探针全绿。`vite.config.ts` 自 Task 4 已存在，本步建好即覆盖；`vitest.config.ts` 由 Task 7 创建，include 预列它（精确文件名此刻匹配不到是静默的，但另两条 include 保证 program 非空，无 TS18003 风险），届时自动进程序。Task 8 的 typecheck 第三条因此天然覆盖两个配置文件，无需再改。
 
@@ -728,6 +729,31 @@ Expected: 退出码 0（此刻 include 里只有 `vite.config.ts` 匹配得到�
 git add tsconfig.scripts.json package.json package-lock.json
 git commit -m "task-p1-toolchain: build: scripts typecheck program; drop the dead build:legacy script"
 ```
+
+- [ ] **Step 5: 质量审查整改（2026-09-20）**
+
+两条独立发现，各自单独 commit：
+
+**5a — `@types/node` pin 到 `^22`（Important 1）**。原指令 `npm i -D @types/node` 无版本约束，落地装到 latest（26.6.2），而运行环境是 Node 22（本机 22.23.2；Task 9 的 CI 两个 job 均 `node-version: 22`）。类型面描述 Node 26 意味着「typecheck 绿」对「Node 22 上能跑」什么都不敢保证——scripts 手滑用了 Node 23+ 的 API 时依然全绿、运行时才炸。这是本 plan 已打过三次的「惰性绿灯」病（惰性 include、coverage 键拼错、无 GPU 绿测）的第四个实例，而该 program 存在的全部意义就是绿灯有信息量。pin 代价已验证为零：vite@7 与 vitest@5 的 peer 范围均覆盖 `^22`，hoisted 副本不变。
+
+```bash
+npm i -D @types/node@^22
+git add package.json package-lock.json
+git commit -m "task-p1-toolchain: build: pin @types/node to the Node 22 runtime the CI declares"
+```
+
+**5b — lint 行去掉 `scripts` 参数（审查相邻发现，越出 Task 6 原文但等不到 Task 9）**。Task 2 落地的 `"lint": "eslint src test scripts"` 里，`scripts/` 目录要到 P2 Task 1 才创建——eslint 9 对未匹配的显式 pattern 硬错（实测 `npm run lint` exit 2：`No files matching the pattern "scripts" were found`）。这不是「Task 9 跑 lint 时才发现」的问题：**Task 7 落地 vitest.config.ts 后本卡 verify（含 `npm run lint`）就会执行，闸 6 必红**。现在去掉参数，P2 建目录时加回——master 上的 P2 plan 已由协调侧预补回补步骤（其 Task 1 的 Step 9a）。
+
+```json
+    "lint": "eslint src test",
+```
+
+```bash
+git add package.json
+git commit -m "task-p1-toolchain: build: drop the scripts pattern from lint until the directory exists"
+```
+
+验证：`npm run lint` exit 0；`npx tsc --noEmit -p tsconfig.scripts.json` 仍 exit 0；`npm i -D @types/node@^22` 后 lockfile 里 `@types/node` 为 22.x。
 
 ---
 
