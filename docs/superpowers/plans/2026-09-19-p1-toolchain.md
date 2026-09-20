@@ -81,6 +81,8 @@ Expected: 与 Step 1 记下的字节数**完全一致**。
 
 若不一致，`git diff` 两个 bundle 找出差异；**若差异涉及函数体而非路径注释，回滚整个 Task（`git reset --hard && git clean -fd`）并上报卡点。**
 
+（**实测（Task 1 落地，spec 审查与质量审查两轮独立复现）**：+304 字节，全部位于 inline sourcemap 的 `sources`/`sourcesContent` 路径串——`./src/` → `./legacy/`，38 对条目一一对应；JS 主体 17,403 行逐字节一致，mappings/names/version/file/sourceRoot 不变。属上方"路径注释"分类，不触发回滚。**此后所有字节比对以 JS 主体为准**：inline sourcemap 内嵌源路径，目录移动后整文件字节相等已不可达。）
+
 - [x] **Step 5: 确认基线 fixture 仍可用**
 
 Run: `cd tools/baseline && node verify-fixtures.mjs`
@@ -511,9 +513,17 @@ git commit -m "feat: opt-in trace channels built on debug"
 
 旧的 webpack/babel 依赖在 Task 2 被移除了，但 `build:legacy` 需要它们。装回来：
 
-Run: `npm i -D webpack@3 webpack-dev-server@2 babel-cli@6 babel-core@6 babel-loader@6 babel-preset-es2015@6 babel-plugin-transform-decorators-legacy@1 babel-plugin-transform-class-properties@6 webpack-glsl-loader@1`
+Run: `npm i -D webpack@^3.10.0 webpack-bundle-analyzer@^2.9.2 babel-core@^6.24.1 babel-loader@^7.1.2 babel-preset-env@^1.6.1 babel-plugin-transform-runtime@^6.23.0 babel-plugin-transform-decorators-legacy@^1.3.4 babel-plugin-transform-class-properties@^6.24.1 webpack-glsl-loader@^1.0.1 param-check@^1.1.9 chivy@^0.1.7 shortid@^2.2.8`
 
-> **版本号必须与旧 package.json 一致**。先 `git show HEAD~N:package.json`（N 指到 Task 2 之前）把原版本抄下来，不要凭记忆写。
+版本号逐一对照迁移前的 package.json 核过（2026-09-20 质量审查轮亲验，含 `webpack/debug.js` / `webpack/release.js` / `.babelrc` 的真实 require 面）。这份清单与 plan 初稿的差异是**修正**而非放松：
+
+- **`webpack-bundle-analyzer` 必须装**：两个 webpack 配置在模块加载时就 require 它（`webpack/debug.js:2`、`webpack/release.js:4`）——初稿清单漏了它，`scripts/legacy-build.mjs` 一加载配置就崩。
+- **`.babelrc` 用的是 `env` preset + `transform-runtime`**，不是 es2015 preset；`babel-runtime` 由 babel-plugin-transform-runtime 传递带入（其 dependencies 声明 `babel-runtime@^6.22.0`，实测），无需单列。
+- **`babel-loader` 是 7.x**（旧包 `^7.1.2`），不是 6。
+- **三个运行时依赖也要装**：`param-check` / `chivy` / `shortid` 是 legacy 源码仅有的直连外部导入（grep 实测 19+3+2 处），webpack 3 构建期解析并打进 bundle。装成 devDependencies——根包的 `dependencies` 属于 v1，legacy 的导入只是构建输入。`chivy` 自带 `konph`/`lodash`/`dateformat`，传递解析即可，不必单列。
+- **不装**：`webpack-dev-server`（旧 `start` 专用，新 start 是 vite）、`babel-cli`（旧 `es5`/test 脚本专用，新脚本表里没有它们）、`babel-preset-es2015`（无人引用）、`uglifyjs-webpack-plugin`（release.js 用 webpack 3 内置的 `webpack.optimize.UglifyJsPlugin`）、`litchy` / `dodele` / `konph` / `polygala`（legacy 源码零直连导入，konph 经 chivy 传递回归）。
+
+> 若 `npm install` 后 `build:legacy` 仍报缺包，以报错为准补装**迁移前 package.json 里的原版本**：`git show <Task 2 之前的提交>:package.json`，不要凭记忆写版本号。
 
 - [ ] **Step 2: 写 legacy 构建脚本**
 
@@ -1335,7 +1345,7 @@ git commit -m "docs(demo): minimal vite-served demo page"
 - [ ] `npm run lint` 退出码 0
 - [ ] `npm run test:coverage` 通过，且**门槛已验证会拦人**（Task 7 Step 2）
 - [ ] `npm run build` 后 `node -e "import('./dist/index.js')"` 成功
-- [ ] `npm run build:legacy` 成功，产物字节数与迁移前一致
+- [ ] `npm run build:legacy` 成功，产物 JS 主体与迁移前逐字节一致（inline sourcemap 的路径串除外，见 Task 1 Step 4 实测注记）
 - [ ] `npm run test:integration` 通过（本机与 `CI=1` 两条路径都跑过），且**两个守卫都验证过会拦人**（Task 8 Step 5）
 - [ ] `legacy/` 已建立，`src/` 里没有任何旧代码
 - [ ] `.travis.yml` 已删除
