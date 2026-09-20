@@ -834,6 +834,8 @@ Expected: `exit=1`，且输出里有
 
 （已实测：`exit=1`，四个维度各报一条 ERROR。删掉探针文件后恢复正常。）
 
+> **（补注 2026-09-20，Task 7 落地实录）**：本步上方「Expected: PASS」首轮实测为红——branches 75%：`src/diagnostics.ts` 模块顶层归一化 if 的「DEBUG 已设」分支（names/skips 非空、不落 `enable('')`）无测试。「都有测试」是文件级事实，不等于分支级覆盖。修复：新增 `test/unit/diagnostics.init.test.ts`（`vi.stubEnv('DEBUG','pano:gpu')` + 动态 import，依赖 vitest 按文件的模块注册表隔离，故独立成文件——文件头注释已钉住这一前提），修后四维 100%。质量审查对补的测试做过双向缺陷注入（坏归一化→红；静态 import 破坏时序→红）与 `--no-isolate` 反事实实测（隔离前提被破坏时套件响亮地红，不会静默恒真）。
+
 - [x] **Step 3: Commit**
 
 ```bash
