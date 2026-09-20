@@ -20,6 +20,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.mjs"],
+  "include": ["src/**/*.ts", "test/**/*.ts"],
   "exclude": ["test/integration"]
 }
