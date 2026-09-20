@@ -867,6 +867,14 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 1. Playwright 自带的 headless chromium **没有 GPU**（`channel: 'chromium'` 才指到带 GPU 的那个完整构建）。此时 `navigator.gpu` **存在**、`requestAdapter()` 返回 **null**、WebGL2 照常工作 —— 所以「测试跑过了」和「测试什么都没测」在输出上长得一模一样。
 2. **Vitest 5 的 `instances[].launch` / `instances[].context` 会被静默忽略** —— 见 Step 2 的说明。配置被吞掉不会有任何报错，你只是拿到了上面那个没 GPU 的浏览器。
 
+> **（质量审查整改 2026-09-20，Task 8 质量审查 NEEDS_FIXES 轮，六处已并入本节代码块，落地以修正后为准）**：
+> ① Step 1 的 .gitignore 补 `**/__traces__/`——实测 trace 落在 `test/integration/__traces__/`（未忽略），截图才落在 `.vitest/`；本节 Step 6 的故意跑红每轮都会留下未跟踪 zip，一次 `git add -A` 就入库。
+> ② Step 2 注释旗名 `--enable-unsafe-swiftshader` 系笔误，实为 `--enable-unsafe-webgpu`（质量审查实测：shipped 双旗足够、去掉该旗即 null adapter——代码自始正确，说错话的是注释）。
+> ③ Step 4 `countNonBlack` docstring 与谓词不符（代码只查 RGB、忽略 alpha，原注释说「not fully transparent black」）；`readCanvas` TSDoc 删弃用机制残留（`copyTextureToBuffer` 行对齐——现实现走 toDataURL，无此路径）。
+> ④ Step 5 冒烟测试双 rAF 改用 `nextFrames(2)`（`nextFrames` 原为零覆盖死导出，smoke 内联重写了同一逻辑）；adapter 测试注释加 reporter 可见性限定（vitest 默认 reporter 不显示通过测试的 console.log，实测）。
+> ⑤ Step 5 fallback 冒烟注释删「零测试 project 拦得住」的虚假承诺——实测 include 空匹配时 vitest 单跑与聚合均静默 exit 0，该测试随 include 一起消失。
+> ⑥ 移交 Task 9 两项（见 Task 9 节注记）：CI 用能透出 stdout 的 reporter；对两个 project 的测试数做断言。
+
 - [x] **Step 1: 集成测试的 tsconfig，并把 typecheck 改成三条**
 
 `test/integration/tsconfig.json`：
@@ -897,6 +905,10 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 ```gitignore
 # Vitest browser-mode failure artifacts (screenshots, traces)
 .vitest
+# Playwright traces land beside the test files, not under .vitest/
+# (measured: .vitest/ gets the screenshots, test/integration/__traces__/
+# gets the zips -- Task 8 quality review, 2026-09-20)
+**/__traces__/
 # Library build output (produced since Task 4; never committed)
 dist
 ```
@@ -946,7 +958,7 @@ export default defineConfig({
                  * CI runners have no GPU, and a GPU-less browser hands back a
                  * null adapter -- which the guard would (correctly) turn into a
                  * red build. SwiftShader gives software WebGPU back, but only
-                 * with BOTH of these flags: --enable-unsafe-swiftshader and
+                 * with BOTH of these flags: --enable-unsafe-webgpu and
                  * --use-webgpu-adapter=swiftshader on their own each still
                  * return null. Measured; see also the CI job in Task 9.
                  *
@@ -1123,8 +1135,7 @@ function decode (dataUrl: string): Promise<HTMLImageElement> {
  * Reads `canvas` back as RGBA8, downscaled to `width`x`height`.
  *
  * @param canvas - Any canvas, WebGPU or 2D.
- * @param width - Output width. 64 keeps the readback near the 256-byte row
- *   alignment `copyTextureToBuffer` wants and keeps comparisons cheap.
+ * @param width - Output width. 64 keeps each readback and comparison cheap.
  * @param height - Output height.
  */
 export async function readCanvas (
@@ -1151,7 +1162,7 @@ export function maxChannelDiff (a: ArrayLike<number>, b: ArrayLike<number>): num
 }
 
 /**
- * How many pixels are not fully transparent black.
+ * How many pixels are not RGB-black (any channel above zero; alpha ignored).
  *
  * The question a "did anything render" test is really asking, and one an exact
  * comparison cannot answer: a viewer that drew the wrong thing still drew.
@@ -1172,12 +1183,15 @@ export function countNonBlack (image: ImageData): number {
 
 ```ts
 import { expect, test } from 'vitest'
-import { countNonBlack, readCanvas } from './support/canvas'
+import { countNonBlack, nextFrames, readCanvas } from './support/canvas'
 
 test('the browser has a real WebGPU adapter', async () => {
   // Non-null: require-webgpu.ts already asserted it. This test's job is to
   // report WHICH adapter, so a machine slipping to a software rasteriser is
-  // visible in the log rather than inferred from pixel tolerances later.
+  // visible in the log rather than inferred from pixel tolerances later --
+  // under a reporter that shows stdout. Vitest's default reporter swallows
+  // console.log from passing tests (measured, Task 8 quality review); the
+  // CI job (Task 9) is what makes this line visible on every run.
   const adapter = await navigator.gpu!.requestAdapter()
   // GPUAdapterInfo's fields are prototype getters on Chromium (measured on
   // 153 / playwright 1.63): JSON.stringify sees no own enumerable properties
@@ -1250,7 +1264,7 @@ test('a WebGPU canvas reads back as RGBA, after frames have passed', async () =>
   // Two frames, not one. The canvas is only presented after the submit has
   // been through the compositor, and reading inside the drawing task would
   // pass even if nothing were ever presented.
-  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+  await nextFrames(2)
 
   const image = await readCanvas(canvas)
   expect(countNonBlack(image), 'the canvas read back empty').toBe(image.width * image.height)
@@ -1272,8 +1286,10 @@ test('a WebGPU canvas reads back as RGBA, after frames have passed', async () =>
 import { expect, test } from 'vitest'
 
 test('this project really is the no-WebGPU one', () => {
-  // require-no-webgpu.ts asserts the substance; this asserts the plumbing,
-  // so a project that silently ran zero tests cannot look like a pass.
+  // require-no-webgpu.ts asserts the substance; this asserts the plumbing.
+  // It cannot catch an include pattern that matches zero files -- vitest
+  // exits 0 with no warning in that case (measured, Task 8 quality review);
+  // the CI job (Task 9) asserts the project counts instead.
   expect(navigator.gpu).toBeDefined()
   expect(document.createElement('canvas').getContext('webgl2')).not.toBeNull()
 })
@@ -1334,6 +1350,10 @@ provider factory. Neither reports an error; both are caught here."
 - Create: `eslint.config.js`
 - Create: `.github/workflows/ci.yml`
 - Delete: `.travis.yml`
+
+> **（Task 8 质量审查移交的两项，2026-09-20，随本任务的 ci.yml 一并落地）**：
+> ① **集成测试一步须以能透出 stdout 的 reporter 运行**（如 `--reporter=verbose`）。vitest 默认 reporter 不显示通过测试的 console.log（实测），`adapter: <vendor> <arch>` 日志在默认命令与 CI 下都不可见——而「机器滑向软渲染器时日志可见」正是该日志存在的理由，CI 是它每次运行都被看见的地方。
+> ② **ci.yml 须对两个 project 的测试数做断言**（跑完检查输出中 `integration` 与 `no-webgpu` 各至少含 1 个测试文件，或等价手段）。实测 include 空匹配时 vitest 静默 exit 0，结构上拦不住「project 静默跑零个测试」；P6 计划要改 no-webgpu 的 include，触发路径是现实日程。
 
 - [ ] **Step 1: 写 eslint 配置**
 
