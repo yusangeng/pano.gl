@@ -41,7 +41,6 @@
   },
   "scripts": {
     "build": "vite build",
-    "build:legacy": "node scripts/legacy-build.mjs",
     "prepublishOnly": "npm run build",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run --project unit",
@@ -60,6 +59,7 @@
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
+    "@types/node": "^26.6.2",
     "@vitest/browser": "^5",
     "@vitest/browser-playwright": "^5",
     "@vitest/coverage-v8": "^5",
