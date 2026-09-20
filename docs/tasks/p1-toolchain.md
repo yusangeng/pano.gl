@@ -5,7 +5,7 @@ verify: if [ -f vitest.config.ts ]; then npm run typecheck && if [ -f eslint.con
 bootstrap: npx playwright install chromium
 layer: foundation
 deps: [p0-freeze-baseline]
-state: open
+state: reported
 createdAt: 2026-09-19T08:51:52.237Z
 ---
 # 任务：P1 — 工具链骨架
