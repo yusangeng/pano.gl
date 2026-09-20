@@ -85,20 +85,41 @@ const CAMERA = { povLatitude: 10, povLongitude: 20 }
 // on pushErrorScope counts from 3, not 0.
 const CREATE_SCOPES = 3
 
-/**
- * Builds a full fake GPU stack and a backend on top of it.
- *
- * `navigator.gpu` is stubbed so `acquireDevice()` finds the fake adapter; the
- * stub is removed in `afterEach` so nothing leaks between tests.
- */
-async function makeBackend (options: {
+/** The fake GPU stack and canvas, before any backend is built on top of them. */
+type Fakes = Omit<Harness, 'backend'>
+
+/** Knobs the fake stack honours; see `makeFakes`. */
+interface FakesOptions {
   maxTextureDimension2D?: number
   compilationMessages?: object[]
   contextIsNull?: boolean
   /** Results the n-th popErrorScope returns, before the default `null`. */
   popScopeResults?: Array<object | null>
-} = {}): Promise<Harness> {
+}
+
+/**
+ * Builds the fake GPU stack alone. The throwing-create tests need it without a
+ * backend: the mocks are the only surviving handle on what the failure path
+ * did after the rejection has propagated.
+ *
+ * `navigator.gpu` is stubbed so `acquireDevice()` finds the fake adapter; the
+ * stub is removed in `afterEach` so nothing leaks between tests.
+ */
+function makeFakes (options: FakesOptions = {}): Fakes {
   const textures: Harness['textures'] = []
+
+  // Real GPUBindGroup objects are never deep-equal to each other, so the fake
+  // must not be either: returning deep-identical objects for every call is an
+  // unfaithful double, and it blinded every bind-group argument assertion --
+  // a fully swapped index pair could deep-match its way past them.
+  let bindGroupSequence = 0
+
+  // Declared before the fakes that reference it: the fake destroy() resolves
+  // `lost` exactly as the real one does, and needs the resolver in scope.
+  let resolveLost!: Harness['resolveLost']
+  const lost = new Promise<{ reason: string, message: string }>(resolve => {
+    resolveLost = resolve
+  })
 
   const mocks = {
     createBuffer: vi.fn(() => ({ label: 'camera', destroy: vi.fn() })),
@@ -112,25 +133,23 @@ async function makeBackend (options: {
       textures.push(texture)
       return texture
     }),
-    createBindGroup: vi.fn(() => ({ label: 'bind-group' })),
+    createBindGroup: vi.fn(() => ({ label: 'bind-group', n: bindGroupSequence++ })),
     importExternalTexture: vi.fn(() => ({ label: 'external' })),
     writeBuffer: vi.fn(),
     copyExternalImageToTexture: vi.fn(),
     submit: vi.fn(),
     pushErrorScope: vi.fn(),
     popErrorScope: vi.fn().mockResolvedValue(null),
-    destroyDevice: vi.fn(),
+    // The real GPUDevice.destroy() resolves `device.lost` with reason
+    // 'destroyed'; wiring that is what lets the disposal tests observe what
+    // the loss chain does on a deliberate teardown.
+    destroyDevice: vi.fn(() => resolveLost({ reason: 'destroyed', message: '' })),
     getCurrentTexture: vi.fn(() => ({ createView: vi.fn(() => ({ label: 'swapchain' })) })),
     configure: vi.fn()
   }
   for (const result of options.popScopeResults ?? []) {
     mocks.popErrorScope.mockResolvedValueOnce(result)
   }
-
-  let resolveLost!: Harness['resolveLost']
-  const lost = new Promise<{ reason: string, message: string }>(resolve => {
-    resolveLost = resolve
-  })
 
   const pass: Harness['pass'] = {
     setPipeline: vi.fn(),
@@ -185,10 +204,15 @@ async function makeBackend (options: {
     getContext: vi.fn(() => context)
   }
 
-  const backend = await WebGPUBackend.create(canvas as unknown as HTMLCanvasElement)
-  if (!backend) throw new Error('the stubbed navigator should always yield a backend')
+  return { device, mocks, pass, textures, canvas, resolveLost }
+}
 
-  return { backend, device, mocks, pass, textures, canvas, resolveLost }
+/** Builds a full fake GPU stack and a backend on top of it. */
+async function makeBackend (options: FakesOptions = {}): Promise<Harness> {
+  const fakes = makeFakes(options)
+  const backend = await WebGPUBackend.create(fakes.canvas as unknown as HTMLCanvasElement)
+  if (!backend) throw new Error('the stubbed navigator should always yield a backend')
+  return { backend, ...fakes }
 }
 
 beforeEach(() => {
@@ -286,6 +310,20 @@ describe('WebGPUBackend.create', () => {
       popScopeResults: [null, { message: 'bad layout' }]
     })).rejects.toThrow(/external pipeline.*bad layout/)
   })
+
+  it('destroys the acquired device when setup throws', async () => {
+    // Built from the fakes directly: the harness never materialises when
+    // create() rejects, and the mocks are the only surviving record of what
+    // the failure path did.
+    const fakes = makeFakes({
+      compilationMessages: [{ type: 'error', lineNum: 1, linePos: 1, message: 'boom' }]
+    })
+    await expect(WebGPUBackend.create(fakes.canvas as unknown as HTMLCanvasElement))
+      .rejects.toThrow(/WGSL compilation failed/)
+    // The device was acquired, so the throw path owns it and must release it:
+    // nothing else holds it, and browsers cap live devices per page.
+    expect(fakes.mocks.destroyDevice).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('device loss', () => {
@@ -336,6 +374,21 @@ describe('device loss', () => {
     await flushMicrotasks()
     // Reaching here without a throw is the assertion: the loss path must not
     // depend on an observer being present.
+  })
+
+  it('does not report a clean disposal as a device loss', async () => {
+    const h = await makeBackend()
+    const seen: object[] = []
+    h.backend.onDeviceLost(lost => { seen.push(lost) })
+
+    h.backend.dispose()
+    await flushMicrotasks()
+
+    // The fake's destroy() resolves device.lost (reason 'destroyed'), so this
+    // observes the real chain: the observer is unhooked before the loss
+    // microtask can run, because a deliberate teardown is not a loss and must
+    // not fire the viewer's device-lost event.
+    expect(seen).toEqual([])
   })
 })
 
@@ -420,6 +473,9 @@ describe('setSource and render', () => {
     h.backend.render()
     expect(h.mocks.pushErrorScope).toHaveBeenCalledTimes(CREATE_SCOPES)
     expect(h.mocks.submit).not.toHaveBeenCalled()
+    // The swapchain is never acquired on an early-out path: acquiring it and
+    // not submitting would itself be a validation error.
+    expect(h.mocks.getCurrentTexture).not.toHaveBeenCalled()
   })
 
   it('uploads a still source once and draws through the texture pipeline', async () => {
@@ -441,6 +497,12 @@ describe('setSource and render', () => {
     expect(h.pass.setPipeline).toHaveBeenCalledTimes(1)
     expect(h.pass.draw).toHaveBeenCalledWith(3)
     expect(h.pass.setBindGroup).toHaveBeenCalledTimes(2)
+    // Group 0 is the camera's (the one create() built), group 1 the source's:
+    // swapped indices would bind garbage with no validation error to say so.
+    const cameraBindGroup = h.mocks.createBindGroup.mock.results[0]!.value
+    const sourceBindGroup = h.mocks.createBindGroup.mock.results[1]!.value
+    expect(h.pass.setBindGroup).toHaveBeenCalledWith(0, cameraBindGroup)
+    expect(h.pass.setBindGroup).toHaveBeenCalledWith(1, sourceBindGroup)
     expect(h.mocks.submit).toHaveBeenCalledTimes(1)
     // An explicit target means the swapchain is never acquired -- acquiring it
     // and not submitting would be a validation error.
@@ -558,6 +620,8 @@ describe('setSource and render', () => {
     // be created with a zero extent.
     expect(h.mocks.pushErrorScope).toHaveBeenCalledTimes(CREATE_SCOPES)
     expect(h.mocks.createTexture).not.toHaveBeenCalled()
+    // And no swapchain texture either -- same rule as the no-source case.
+    expect(h.mocks.getCurrentTexture).not.toHaveBeenCalled()
   })
 
   it('destroys the texture when the source is cleared, and re-uploads when one returns', async () => {
@@ -586,6 +650,39 @@ describe('setSource and render', () => {
     h.backend.render()
     expect(h.mocks.getCurrentTexture).toHaveBeenCalledTimes(1)
   })
+
+  it('rethrows a synchronous failure inside the frame and still drains the scope', async () => {
+    const h = await makeBackend()
+    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setSource(videoSource(4, 4, 1))
+    // The spec-realistic throw between push and submit: the external-texture
+    // import raises SecurityError for non-origin-clean cross-origin media.
+    h.mocks.importExternalTexture.mockImplementationOnce(() => {
+      throw new Error('SecurityError: non-origin-clean media')
+    })
+
+    expect(() => h.backend.render()).toThrow('SecurityError')
+
+    // create() drained its three scopes; a fourth pop here means the failed
+    // frame's scope went too, rather than leaking onto whatever the device
+    // does next.
+    expect(h.mocks.popErrorScope).toHaveBeenCalledTimes(CREATE_SCOPES + 1)
+    // Nothing was submitted for the failed frame.
+    expect(h.mocks.submit).not.toHaveBeenCalled()
+  })
+
+  it('leaves no unhandled rejection when the pop itself fails on a lost device', async () => {
+    const h = await makeBackend()
+    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setSource(imageSource(4, 4, 1))
+    // The render's own pop rejects (a lost device rejects popErrorScope);
+    // swallowing it inside the drain is the contract.
+    h.mocks.popErrorScope.mockRejectedValueOnce(new Error('device was lost'))
+    h.backend.render()
+    await flushMicrotasks()
+    // Reaching here without an unhandled rejection -- which fails the run --
+    // is the assertion.
+  })
 })
 
 describe('resize', () => {
@@ -600,11 +697,35 @@ describe('resize', () => {
     expect(h.canvas.width).toBe(800)
     expect(h.canvas.height).toBe(600)
 
-    // 0.4 * 2 = 0.8 rounds to 1, and the floor keeps a 0 from ever reaching
-    // the canvas: a zero-sized drawing buffer is invalid.
+    // 0.4 * 2 = 0.8 rounds to 1 with no floor needed. 0.2 * 2 = 0.4 rounds
+    // to 0, and the floor is the only thing keeping a zero-sized drawing
+    // buffer off the canvas.
     h.backend.resize(0.4, 0.4, 2)
     expect(h.canvas.width).toBe(1)
     expect(h.canvas.height).toBe(1)
+
+    h.backend.resize(0.2, 0.2, 2)
+    expect(h.canvas.width).toBe(1)
+    expect(h.canvas.height).toBe(1)
+  })
+
+  it('repaints after a resize even when camera and source are unchanged', async () => {
+    const h = await makeBackend()
+    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setSource(imageSource(4, 4, 1))
+    h.backend.render()
+    // Unchanged inputs: the second render early-outs and nothing new draws.
+    h.backend.render()
+    expect(h.mocks.submit).toHaveBeenCalledTimes(1)
+
+    // Resizing clears the drawing buffer. If the resize did not mark the
+    // frame dirty, this render would early-out too and the canvas would stay
+    // blank until the camera moved.
+    h.backend.resize(9, 9, 1)
+    h.backend.render()
+
+    expect(h.pass.draw).toHaveBeenCalledTimes(2)
+    expect(h.mocks.submit).toHaveBeenCalledTimes(2)
   })
 })
 
