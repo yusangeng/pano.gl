@@ -1134,7 +1134,7 @@ needed a cube for the linear camera and a quad for the other three."
 - Create: `src/renderer/webgpu/device.ts`
 - Test: `test/unit/device-scopes.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/unit/device-scopes.test.ts`：
 
@@ -1194,12 +1194,12 @@ describe('withValidationScope', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- device-scopes`
 Expected: FAIL —— 无法解析 `../../src/renderer/webgpu/device`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/renderer/webgpu/device.ts`：
 
@@ -1292,12 +1292,12 @@ export async function acquireDevice (): Promise<AcquiredDevice | null> {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- device-scopes`
 Expected: 5 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/webgpu/device.ts test/unit/device-scopes.test.ts
