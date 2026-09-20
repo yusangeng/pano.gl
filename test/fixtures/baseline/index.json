@@ -1,0 +1,353 @@
+{
+  "canvasSize": 128,
+  "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+  "capturedAt": "2026-09-20T07:05:34.587Z",
+  "sourceSha256": "06d0c516fe117b36ccc4829d09afd370f67d98f4d3b7216ca78c0d1556a2412e",
+  "bundleSha256": "d81cf51bce825ea93b22862e6b60aca050da24b8836e2b812885b229eb6dc003",
+  "captures": [
+    {
+      "id": "perspective/origin",
+      "camera": "perspective",
+      "state": {
+        "id": "origin",
+        "lat": 0,
+        "lng": 0,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 7356,
+      "pngSha256": "1daad8aac3c699577b44b2034a93a864b093516450ee68db295905e57fc6e094",
+      "uniformsSha256": "f352a0e58c133e6c0489ea29a83654895e363a86a8041c5f4dec96f536092653",
+      "uniformNames": [
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "perspective/tilt",
+      "camera": "perspective",
+      "state": {
+        "id": "tilt",
+        "lat": 30,
+        "lng": 45,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 12106,
+      "pngSha256": "e9367674cd596c6f27998dec1a6014090c03261e3522267ea754a032a9cef159",
+      "uniformsSha256": "1662e84b5068c3d41a5b71004424d9d6120ddd2c0d833889b18bd4ef2dd37a4b",
+      "uniformNames": [
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "perspective/south",
+      "camera": "perspective",
+      "state": {
+        "id": "south",
+        "lat": -60,
+        "lng": 180,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 16745,
+      "pngSha256": "adcb5e72014e0e97ba16a74c84cc66dfdd534e02825747a481274593e01e5d45",
+      "uniformsSha256": "6bf66c580d3ba6457a8fab280e6b2025eb06fb0ecad382e185eba326660255a2",
+      "uniformNames": [
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "perspective/zoomed",
+      "camera": "perspective",
+      "state": {
+        "id": "zoomed",
+        "lat": 10,
+        "lng": 300,
+        "zoom": 1
+      },
+      "frameCount": 3,
+      "pngBytes": 10370,
+      "pngSha256": "dbf51893abac1e709092feff73ef5ee52980bc2806e9b8d83cde752356d8f97f",
+      "uniformsSha256": "59a28e993cd057b6a11e39a9a779c65cf9438d05e97da07a202be4c18ffc4784",
+      "uniformNames": [
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "cylindrical/origin",
+      "camera": "cylindrical",
+      "state": {
+        "id": "origin",
+        "lat": 0,
+        "lng": 0,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 1522,
+      "pngSha256": "172b56efde34826abf5b9814e5ba7bb493e5152cd8eeb411f25f7ddfbf432400",
+      "uniformsSha256": "93fbc41315bd41c6c45baea91c4f21bd75239d7feb30b008225f8f2babaaf8ef",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "cylindrical/tilt",
+      "camera": "cylindrical",
+      "state": {
+        "id": "tilt",
+        "lat": 30,
+        "lng": 45,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 1557,
+      "pngSha256": "6e705a01396dfa2a9d95047b00ba00528c1a26aedb1a5457d5a0b88869ae3da8",
+      "uniformsSha256": "0e8ccd7f0ba2b28af87d48e244fc73f486cc5f91fc204d67ecc10abba79354f6",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "cylindrical/south",
+      "camera": "cylindrical",
+      "state": {
+        "id": "south",
+        "lat": -60,
+        "lng": 180,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 1578,
+      "pngSha256": "52a6b8e451fb5e4acb360aff5e0aaf264d5a6acd6c8103466b5a8ad2eb57245e",
+      "uniformsSha256": "799eb4ba695d0569b969f3c97b49206099292f1432d54d8b59321f0bdb74fd24",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "cylindrical/zoomed",
+      "camera": "cylindrical",
+      "state": {
+        "id": "zoomed",
+        "lat": 10,
+        "lng": 300,
+        "zoom": 1
+      },
+      "frameCount": 3,
+      "pngBytes": 1522,
+      "pngSha256": "172b56efde34826abf5b9814e5ba7bb493e5152cd8eeb411f25f7ddfbf432400",
+      "uniformsSha256": "b27ad6faca91939dfd04da25e073128aa6b408d9c8bb61e35b92398e8bb51c20",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "planet/origin",
+      "camera": "planet",
+      "state": {
+        "id": "origin",
+        "lat": 0,
+        "lng": 0,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 19683,
+      "pngSha256": "132f1157c954fc8dce2b75a3e96f21bc502e53e2947aee46438bc949434ad610",
+      "uniformsSha256": "288b4a27c16bee7f5d394e7668f032c29124612d8040e860bd56f06ed726b8d6",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "planet/tilt",
+      "camera": "planet",
+      "state": {
+        "id": "tilt",
+        "lat": 30,
+        "lng": 45,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 19849,
+      "pngSha256": "42c2680c9b46e9086fc8d87c7d564eea134c21ad71f7e38f154ed48d3f179f53",
+      "uniformsSha256": "9ac20e2ee734be15fa1bda4d212113e2d14fb1659e478eadc6b5286e53b378bc",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "planet/south",
+      "camera": "planet",
+      "state": {
+        "id": "south",
+        "lat": -60,
+        "lng": 180,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 19933,
+      "pngSha256": "b8992bc7263ad1fa9abc0603b7b2ccf2c56dad7881f0bece51f0ecb1f40ec7d9",
+      "uniformsSha256": "e30af9ca2cc8793663606b04c01543fd1cb955b286a3af75315bd2ff7d082179",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "planet/zoomed",
+      "camera": "planet",
+      "state": {
+        "id": "zoomed",
+        "lat": 10,
+        "lng": 300,
+        "zoom": 1
+      },
+      "frameCount": 3,
+      "pngBytes": 19683,
+      "pngSha256": "132f1157c954fc8dce2b75a3e96f21bc502e53e2947aee46438bc949434ad610",
+      "uniformsSha256": "e3107e28e817046c7f4b5eb38091c4910d43e817075c12ff5b009f56b24cedfe",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "pannini/origin",
+      "camera": "pannini",
+      "state": {
+        "id": "origin",
+        "lat": 0,
+        "lng": 0,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 10127,
+      "pngSha256": "f236eccd83d5f9c99dd1dbff4f665235e61c07dba5a58664c7ab5a8d37239604",
+      "uniformsSha256": "b2df7fc4eeabb8f3cb791620b77351323b6b8db0083e85fd861774a539af3a23",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "pannini/tilt",
+      "camera": "pannini",
+      "state": {
+        "id": "tilt",
+        "lat": 30,
+        "lng": 45,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 9932,
+      "pngSha256": "ad4d5e0d89ded3a4b5c8c00afda7e5816964e02cb12e980871a8efdf5eb01cd1",
+      "uniformsSha256": "666944b22196580bc357208217deea8f487a4ff6107fda8da8e2cc100614e779",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "pannini/south",
+      "camera": "pannini",
+      "state": {
+        "id": "south",
+        "lat": -60,
+        "lng": 180,
+        "zoom": 0
+      },
+      "frameCount": 3,
+      "pngBytes": 9854,
+      "pngSha256": "e3503e05c9881615aa3763ed80c30e8c26315c6466e1461fe7b1db3c2fc8c5b5",
+      "uniformsSha256": "55bb3877e56a5cb7c4d7599979b1cda9025b19b4e1b75527b5bce73cabc039b7",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    },
+    {
+      "id": "pannini/zoomed",
+      "camera": "pannini",
+      "state": {
+        "id": "zoomed",
+        "lat": 10,
+        "lng": 300,
+        "zoom": 1
+      },
+      "frameCount": 3,
+      "pngBytes": 10142,
+      "pngSha256": "b4890499498ef9fde5e4fc11e0808143d0c1cd893755bae9955c5ec799df82ee",
+      "uniformsSha256": "79ef0358c2ef022216c8f459fd863665e6db919c0390c4deef9467ed1d7cf985",
+      "uniformNames": [
+        "u_CamPOVLongitude",
+        "u_CamProjType",
+        "u_CamTransMatrix",
+        "u_CamZoom",
+        "u_Sampler",
+        "u_TexProjType"
+      ]
+    }
+  ]
+}

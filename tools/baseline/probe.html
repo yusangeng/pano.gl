@@ -1,0 +1,327 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>pano.gl baseline probe</title></head>
+<body>
+  <!-- The renderer sizes its canvas from this container, so the container's
+       size is what fixes capture resolution. DPR is deliberately left at 1 by
+       the harness; v0.2.2 ignores devicePixelRatio anyway. -->
+  <div id="stage"></div>
+  <script src="/bundle.js"></script>
+  <script>
+  /*
+   * Captures what v0.2.2 actually sends to the GPU, without touching a line of
+   * product code. Every hook is installed before the viewer is constructed.
+   *
+   * Why monkey-patching rather than an instrumented build: the whole point of a
+   * baseline is that it measures the shipped artifact. If we edit the source to
+   * add logging we are measuring something else.
+   */
+  ;(function () {
+    'use strict'
+
+    var SIZE = __CANVAS_SIZE__
+    var FRAMES = __FRAMES_PER_CAPTURE__
+
+    // Location objects are opaque, so names have to be recovered by
+    // intercepting getUniformLocation. A WeakMap keeps this leak-free.
+    var nameOf = new WeakMap()
+    var pending = []          // uniform writes accumulated for the current frame
+    var frames = []           // completed frames for the current capture
+
+    /*
+     * Only one canvas is recorded at a time.
+     *
+     * This is not a nicety. v0.2.2's dispose() is broken: it calls the
+     * misspelled `window.removeEventLstener`, which throws on the first
+     * statement of RenderFlow.dispose, so `driver_.dispose()` is never reached
+     * and the requestAnimationFrame render loop keeps running forever. Building
+     * one viewer per capture therefore leaves every earlier viewer rendering
+     * into a detached canvas, and all of them draw through these same patched
+     * prototypes. Without this gate the "3 frames" of a capture would be an
+     * arbitrary interleaving of 16 live render loops.
+     */
+    var target = null
+
+    var origGetUniformLocation = WebGLRenderingContext.prototype.getUniformLocation
+    var origUniform1f = WebGLRenderingContext.prototype.uniform1f
+    var origUniform1i = WebGLRenderingContext.prototype.uniform1i
+    var origUniformMatrix4fv = WebGLRenderingContext.prototype.uniformMatrix4fv
+    var origDrawArrays = WebGLRenderingContext.prototype.drawArrays
+
+    WebGLRenderingContext.prototype.getUniformLocation = function (program, name) {
+      var loc = origGetUniformLocation.call(this, program, name)
+      if (loc) nameOf.set(loc, name)
+      return loc
+    }
+
+    WebGLRenderingContext.prototype.uniform1f = function (loc, v) {
+      if (loc && this.canvas === target) pending.push({ name: nameOf.get(loc) || '?', value: v })
+      return origUniform1f.call(this, loc, v)
+    }
+
+    WebGLRenderingContext.prototype.uniform1i = function (loc, v) {
+      if (loc && this.canvas === target) pending.push({ name: nameOf.get(loc) || '?', value: v })
+      return origUniform1i.call(this, loc, v)
+    }
+
+    WebGLRenderingContext.prototype.uniformMatrix4fv = function (loc, transpose, data) {
+      if (loc && this.canvas === target) pending.push({ name: nameOf.get(loc) || '?', value: Array.from(data) })
+      return origUniformMatrix4fv.call(this, loc, transpose, data)
+    }
+
+    /*
+     * drawArrays is the frame boundary. Reading pixels immediately after the
+     * original call is the only reliable moment: the drawing buffer is still
+     * intact inside this task regardless of preserveDrawingBuffer, which
+     * v0.2.2 does not set.
+     *
+     * Renderer.render issues exactly one drawArrays per frame, so one recorded
+     * frame here is one rendered frame there.
+     */
+    WebGLRenderingContext.prototype.drawArrays = function (mode, first, count) {
+      var r = origDrawArrays.call(this, mode, first, count)
+
+      // A non-target context must not touch `pending`: it belongs to the frame
+      // of whoever is currently recording.
+      if (this.canvas !== target) return r
+
+      var px = new Uint8Array(SIZE * SIZE * 4)
+      this.readPixels(0, 0, SIZE, SIZE, this.RGBA, this.UNSIGNED_BYTE, px)
+
+      frames.push({ uniforms: pending.slice(), pixels: px })
+      pending.length = 0
+      return r
+    }
+
+    /*
+     * Guard the uniform setters this probe does NOT record (review finding 7).
+     * Today's bundle calls only uniform1f / uniform1i / uniformMatrix4fv --
+     * verified against the artifact, not assumed -- so a future bundle that
+     * starts sending e.g. uniform4f would have its writes silently missing
+     * from the uniform stream while the pixels it influences still land in the
+     * fixture. That split (complete-looking stream, subtly wrong baseline) is
+     * the failure mode this exists to make loud: the moment an unhooked setter
+     * fires on the recording target, the capture fails instead of recording
+     * half the truth. Non-target contexts (the undead viewers) pass through
+     * untouched -- they are not being measured.
+     */
+    var HOOKED_SETTERS = { uniform1f: 1, uniform1i: 1, uniformMatrix4fv: 1 }
+    Object.keys(WebGLRenderingContext.prototype)
+      .filter(function (name) { return /^uniform/.test(name) })
+      .forEach(function (name) {
+        if (HOOKED_SETTERS[name]) return
+        var orig = WebGLRenderingContext.prototype[name]
+        if (typeof orig !== 'function') return
+        WebGLRenderingContext.prototype[name] = function () {
+          if (this.canvas === target) {
+            throw new Error('probe has no hook for ' + name + ' -- the uniform stream would be incomplete')
+          }
+          return orig.apply(this, arguments)
+        }
+      })
+
+    /*
+     * A deterministic equirectangular test pattern. Must be power-of-two and
+     * equal to the capture size: v0.2.2's updateTextureObject uses gl.RGB with
+     * LINEAR filtering and no mipmaps, so a non-power-of-two source is a
+     * texture-completeness bug, not a test.
+     *
+     * The pattern is a coordinate ramp rather than noise so that a projection
+     * error shows up as a smooth spatial shift instead of an unreadable hash.
+     */
+    function makeSourceDataUrl (size) {
+      var c = document.createElement('canvas')
+      c.width = size; c.height = size
+      var ctx = c.getContext('2d')
+      var img = ctx.createImageData(size, size)
+      for (var y = 0; y < size; y++) {
+        for (var x = 0; x < size; x++) {
+          var i = (y * size + x) * 4
+          img.data[i]     = Math.round((x / (size - 1)) * 255)   // longitude ramp
+          img.data[i + 1] = Math.round((y / (size - 1)) * 255)   // latitude ramp
+          img.data[i + 2] = ((x >> 4) + (y >> 4)) % 2 ? 200 : 60 // checker, 16px
+          img.data[i + 3] = 255
+        }
+      }
+      ctx.putImageData(img, 0, 0)
+      return c.toDataURL('image/png')
+    }
+
+    // Exposed so the capture driver gets the exact same source the probe would
+    // generate internally -- two copies of this generator would silently
+    // diverge and the fixtures would not match the probe.
+    window.__makeSource = function (size) { return makeSourceDataUrl(size) }
+
+    /*
+     * The unmasked renderer string, for the capture driver to record and gate
+     * on. `channel: 'chromium'` is supposed to buy the real rasterizer, but
+     * headless Chromium silently falls back to SwiftShader when its GPU
+     * process cannot start (CI containers, VMs) -- and a SwiftShader baseline
+     * is a baseline of a different rasterizer than any user has. The driver
+     * reads this once, before any capture, and refuses to run on software.
+     *
+     * Fresh context rather than the viewer's: same GPU process, same string,
+     * and this way the probe does not have to be mid-capture to answer. The
+     * context is released immediately -- v0.2.2's dispose is broken (L1), so
+     * every viewer ever constructed here stays alive to the end, and a
+     * context held open for one string is what tips the 16 live viewers over
+     * the browser's context limit on the last capture.
+     */
+    window.__rendererInfo = function () {
+      var c = document.createElement('canvas')
+      var gl = c.getContext('webgl')
+      if (!gl) return null
+      var dbg = gl.getExtension('WEBGL_debug_renderer_info')
+      var renderer = String(dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
+      var lose = gl.getExtension('WEBGL_lose_context')
+      if (lose) lose.loseContext()
+      return renderer
+    }
+
+    // -- harness API, driven from outside via page.evaluate ------------------
+    window.__probe = {
+      /*
+       * Point the recorder at one canvas and drop whatever was recorded before
+       * it. Everything else drawing through these hooks is ignored from here on.
+       */
+      setTarget: function (canvas) {
+        target = canvas
+        frames.length = 0
+        pending.length = 0
+      },
+      reset: function () { frames.length = 0; pending.length = 0 },
+      frames: function () { return frames },
+      /*
+       * Uniform values arrive as plain objects; the pixels are the only thing
+       * that needs a lossless wire format. PNG through a 2D canvas is lossless
+       * and compresses a smooth equirect pano down to a few KB.
+       */
+      encodePng: function (u8) {
+        var c = document.createElement('canvas')
+        c.width = SIZE; c.height = SIZE
+        var ctx = c.getContext('2d')
+        var img = ctx.createImageData(SIZE, SIZE)
+        // GL origin is bottom-left; flip so the PNG reads top-down like every
+        // other image tool expects.
+        for (var y = 0; y < SIZE; y++) {
+          var src = (SIZE - 1 - y) * SIZE * 4
+          img.data.set(u8.subarray(src, src + SIZE * 4), y * SIZE * 4)
+        }
+        ctx.putImageData(img, 0, 0)
+        return c.toDataURL('image/png')
+      }
+    }
+
+    /*
+     * One capture = one freshly constructed viewer. Reusing a viewer across
+     * cameras would carry over the previous camera's pov state, and reusing one
+     * across states makes the uniform stream depend on which states ran before
+     * it -- both destroy reproducibility.
+     */
+    window.__capture = function (camera, state, sourceUrl) {
+      return new Promise(function (resolve, reject) {
+        var stage = document.getElementById('stage')
+        stage.innerHTML = ''
+        stage.style.width = SIZE + 'px'
+        stage.style.height = SIZE + 'px'
+        var host = document.createElement('div')
+        host.style.width = SIZE + 'px'
+        host.style.height = SIZE + 'px'
+        stage.appendChild(host)
+
+        var viewer
+        try {
+          /*
+           * v0.2.2's real signature is
+           *   { el, src, projection = 'equiprectangular', frameSize, camera }
+           * -- `el`, not `container`; `camera`, not `cameraOptions`. The camera
+           * is effectively required: CameraFactory.create destructures
+           * `{ type }` and throws "Can NOT find camera class: undefined."
+           * when it is absent, and the `options || defaultOptions` fallback in
+           * createCamera cannot rescue it because the empty object is truthy.
+           */
+          viewer = new PanoGL.FramelessImageViewer({
+            el: host,
+            src: sourceUrl,
+            camera: { type: camera }
+          })
+        } catch (e) { return reject(e) }
+
+        // The renderer appends its canvas to `host` during construction, so it
+        // exists by now. Recording starts here; draws from any earlier viewer
+        // are ignored from this point on.
+        var canvas = host.querySelector('canvas')
+        /*
+         * readPixels always reads a fixed SIZE x SIZE rectangle from the origin,
+         * so a canvas of any other size would be captured as a silently wrong
+         * sub-rectangle instead of as a failure -- the one error mode this
+         * harness cannot afford, since nothing downstream could tell a
+         * cropped fixture from a correct one. The container is what sizes the
+         * canvas, so this checks that chain end to end rather than trusting the
+         * comment at the top of this file.
+         */
+        if (!canvas) return reject(new Error('viewer produced no canvas for ' + camera))
+        if (canvas.width !== SIZE || canvas.height !== SIZE) {
+          return reject(new Error(
+            'canvas is ' + canvas.width + 'x' + canvas.height + ', probe reads ' + SIZE + 'x' + SIZE
+          ))
+        }
+        window.__probe.setTarget(canvas)
+
+        var settled = false
+        var fail = function (e) { if (!settled) { settled = true; reject(e) } }
+        setTimeout(function () { fail(new Error('capture timed out for ' + camera)) }, 20000)
+
+        viewer.on('media-load', function () {
+          // Let the first frame after load land, then drive the camera.
+          requestAnimationFrame(function () {
+            window.__probe.reset()
+            /*
+             * RenderFlow.rotate(lat, lng) is misnamed and is a *delta* rotate:
+             * it forwards to camera.rotate(angleX, angleY), whose body does
+             * `povLongitude += angleX; povLatitude += angleY`. So the first
+             * argument moves longitude, not latitude. All four cameras start at
+             * (0, 0), so a delta from origin is an absolute set.
+             */
+            viewer.rotate(state.lng || 0, state.lat || 0)
+            // One step is viewer.zoom(1); the cameras implement it as
+            // `zoomValue += delta / 20`. Each fixture records the u_CamZoom it
+            // actually produced -- read that, not this line.
+            for (var i = 0; i < state.zoom; i++) viewer.zoom(1)
+
+            /*
+             * Collect three consecutive frames and take them all.
+             *
+             * Waiting on the recorded count rather than counting rAF ticks: the
+             * viewer's own driver and this probe both run on rAF, and tick
+             * arithmetic that is off by one silently yields two frames while
+             * still resolving successfully. A capture that reads its own state
+             * cannot drift from the thing it is measuring.
+             *
+             * All three frames are handed to the driver. The driver stores the
+             * last one as the fixture and refuses the capture unless all three
+             * agree -- evidence that nothing asserts is just three copies of
+             * an assumption.
+             */
+            var spins = 0
+            ;(function tick () {
+              if (window.__probe.frames().length < FRAMES && ++spins < 60) {
+                return requestAnimationFrame(tick)
+              }
+              var f = window.__probe.frames()
+              if (!f.length) return fail(new Error('no frame drawn for ' + camera))
+              resolve({
+                frames: f.map(function (fr) {
+                  return { uniforms: fr.uniforms, png: window.__probe.encodePng(fr.pixels) }
+                })
+              })
+            })()
+          })
+        })
+        viewer.on('media-error', fail)
+      })
+    }
+  })()
+  </script>
+</body>
+</html>
