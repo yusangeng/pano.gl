@@ -4,7 +4,7 @@ scope: [src/core/**, src/renderer/shaders/**, scripts/gen-shader-constants.mjs, 
 verify: if [ -f scripts/gen-shader-constants.mjs ]; then npm run gen:shaders -- --check; fi && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: domain
 deps: [p0-freeze-baseline, p1-toolchain]
-state: open
+state: doing
 createdAt: 2026-09-19T08:51:52.366Z
 ---
 # 任务：P2 — core 纯逻辑
