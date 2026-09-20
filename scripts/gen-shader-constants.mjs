@@ -32,7 +32,45 @@ const check = process.argv.includes('--check')
  */
 const screamingSnake = key => key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase()
 
-const kinds = JSON.parse(await readFile(sourcePath, 'utf8'))
+/**
+ * Prints the message to stderr and exits non-zero, so a rejected input is a
+ * named, local failure instead of a wrong shader surfacing far from the edit.
+ *
+ * @param {string} message
+ */
+const die = message => {
+  console.error(message)
+  process.exit(1)
+}
+
+const relSource = path.relative(repoRoot, sourcePath)
+
+let kinds
+try {
+  kinds = JSON.parse(await readFile(sourcePath, 'utf8'))
+} catch (err) {
+  die(`${relSource} could not be read or parsed as JSON: ${err instanceof Error ? err.message : String(err)}`)
+}
+
+/*
+ * A hand edit that puts a hyphen, a space or a capital in a key silently
+ * defines the wrong GLSL macro and breaks WGSL at P3 compile time, far from
+ * the edit that caused it; a fractional or negative value corrupts the upload
+ * the same way. Validating here makes the failure local, named and immediate.
+ */
+for (const section of ['camera', 'texture']) {
+  if (typeof kinds[section] !== 'object' || kinds[section] === null) {
+    die(`${relSource} is missing its "${section}" section`)
+  }
+  for (const [key, value] of Object.entries(kinds[section])) {
+    if (!/^[a-z][a-z0-9]*$/.test(key)) {
+      die(`${relSource}: key "${key}" in "${section}" must match /^[a-z][a-z0-9]*$/`)
+    }
+    if (!Number.isSafeInteger(value) || value < 0) {
+      die(`${relSource}: "${section}.${key}" must be a non-negative safe integer, got ${JSON.stringify(value)}`)
+    }
+  }
+}
 
 // Each entry line is `SECTION_KEY=VALUE`; the bare section headers carry no
 // '=' and are what the emitters' filter strips, leaving only the assignments.
