@@ -78,6 +78,9 @@ verify 里 `gen:shaders` 那条写成条件式是**自举悖论**：`scripts/gen
 6. Task 1 两个已接受 Minor 残留：texture 侧锁步不对称（camera 键有 PROJECTION_KINDS 钉死测试，texture 键靠单值现实）；JSON 未知节不校验
 7. coverage 文本报告器 per-file 表渲染为空是报告器怪癖——per-file 数值已用 `--coverage.reporter=json` 核实（src/core 各文件全 100%），非放水
 8. npm audit 2 条（brace-expansion HIGH / esbuild LOW，均 dev-only）——修复需动 package-lock.json，超出本卡白名单，交卷时报请用户裁决
+9. **（终末 review 补充，交卷后送达）coverage 门槛是 src/\*\* 的聚合值**——core 满 100% 时，后续阶段单个欠覆盖文件可藏在聚合 ≥90 后面；且本机文本报告器 per-file 表渲染为空（见风险 7）——后续阶段读 per-file 数值（`--coverage.reporter=json`），不看绿灯条
+10. **（终末 review 补充）门禁 B 两条准绳**：`project()` 不读 extent（只有 `ndcToSurface` 读）——表面点必须经 `ndcToSurface` 推导，勿手缩放 (y,z)；`project()` 对任何 kind 都不读 povLatitude（linear 的纬度在 `buildViewMatrix` 里；旧着色器声明了 u_CamPOVLatitude 但从未读）——门禁 B 的 linear 纬度必须走矩阵路径，不能走参考实现
+11. **（终末 review 补充）QUAD_FAR=1 是有据的故意偏离**（旧 far=1000），且被钉死只落在 M[2]/M[14]（matrix-baseline 的 DEPTH_ONLY_ENTRIES 断言）——门禁 A 比像素不受影响；任何「矩阵 vs P0 capture」的对比必须复用 DEPTH_ONLY_ENTRIES 语义，不能期待 16/16 全等
 
 ## 自审记录
 
@@ -91,6 +94,7 @@ verify 里 `gen:shaders` 那条写成条件式是**自举悖论**：`scripts/gen
 - Task 4：spec 审 4 项偏离全部裁定有据；质量审 Critical（整套性质断言无精确钉值，11/16 变异存活）→ 整改（398e92f）复审 APPROVED + 残余 R4 回炉（5072a6b）——16/16 变异全灭
 - 终末全分支 review（opus，master...HEAD 全量 16 提交）：**READY TO SUBMIT，Critical / Important / Minor 全零**。审查独立完成：四投影公式逐句 GLSL 转写审计（含文件域 lng、planet 取负、pannini 先加倍后修正、保留 tex_proj_equiprectangular 拼写）、注释中旧实现事实主张逐条核验（extents / Math.max(W/2,H/2) / near-far / v_Pos=a_Pos / zoom 钳制区间）、钉值字面量解析重推、跨任务端到端咬合（JSON → 生成器 → generated.ts → matrix/reference）、scope 白名单 20 文件全核对、plan diff 零非勾选变更确认、无调试残留
 - CRITICAL / INFORMATIONAL 计数：0 / 0
+- 追记：其被截断的证据表尾部于交卷后送达并核实——余下行全部确认（layering / DOM-free grep 零命中、16/16 前缀与 trailer 计数相等、树净于 032b973、lint exit 0、coverage 跑动只产出 gitignored 工件）；wrapLongitude 扰动界经审查员 2e6 随机样本实证复核为 5.684e-14；另产出 3 条 P3 向扩展风险（见风险 9–11）
 
 ### 测试质量结论
 
