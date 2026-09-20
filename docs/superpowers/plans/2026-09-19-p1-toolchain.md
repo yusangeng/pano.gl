@@ -766,7 +766,7 @@ git commit -m "task-p1-toolchain: build: drop the scripts pattern from lint unti
 
 Task 8 会往同一个文件里加 `integration` project。**一个配置文件、两个 project、一个 vitest** —— 单元测试跑 node，集成测试跑真浏览器，命令都是 `vitest run --project <名字>`。
 
-- [ ] **Step 1: 写配置**
+- [x] **Step 1: 写配置**
 
 ```ts
 import { defineConfig } from 'vitest/config'
@@ -810,7 +810,7 @@ export default defineConfig({
 })
 ```
 
-- [ ] **Step 2: 确认覆盖率门槛真的会拦人**
+- [x] **Step 2: 确认覆盖率门槛真的会拦人**
 
 Run: `npm run test:coverage`
 Expected: PASS（此时 `src/` 只有两个文件，且都有测试）
@@ -834,7 +834,7 @@ Expected: `exit=1`，且输出里有
 
 （已实测：`exit=1`，四个维度各报一条 ERROR。删掉探针文件后恢复正常。）
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add vitest.config.ts
