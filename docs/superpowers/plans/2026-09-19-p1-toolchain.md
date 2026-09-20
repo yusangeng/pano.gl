@@ -507,6 +507,7 @@ git commit -m "feat: opt-in trace channels built on debug"
 
 **Files:**
 - Create: `scripts/legacy-build.mjs`
+- Create: `webpack/package.json`（一行，把 `webpack/` 划回 CommonJS scope）
 - Modify: `package.json`
 
 - [ ] **Step 1: 把旧构建的依赖装回来**
@@ -526,6 +527,14 @@ Run: `npm i -D webpack@^3.10.0 webpack-bundle-analyzer@^2.9.2 babel-core@^6.24.1
 > 若 `npm install` 后 `build:legacy` 仍报缺包，以报错为准补装**迁移前 package.json 里的原版本**：`git show <Task 2 之前的提交>:package.json`，不要凭记忆写版本号。
 
 - [ ] **Step 2: 写 legacy 构建脚本**
+
+先建 `webpack/package.json`，内容一行：
+
+```json
+{"type": "commonjs"}
+```
+
+Task 2 的根 package.json 带了 `"type": "module"`，而两个 webpack 配置是 CommonJS 写法（`require` / `module.exports`）。**实测（Node 22.23.2）**：type:module scope 下 `createRequire(import.meta.url)('./webpack/debug.js')` 直接抛 `ReferenceError: require is not defined in ES module scope`，`createRequire` 不能豁免目标文件的 scope 判定。这个一行的嵌套 package.json 把 `webpack/` 重新划回 CommonJS，配置文件本身一字不动，bundle 产物不受影响（修法已实测验证）。
 
 `scripts/legacy-build.mjs`：
 
