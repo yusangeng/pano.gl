@@ -33,10 +33,10 @@ struct Camera {
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 
-// group(1) is the source. The two bindings are alternatives, not a pair:
-// `fs_main` reads `samp` + `tex`, `fs_main_external` reads `ext`. Each pipeline
-// layout declares only the ones its entry point uses -- see the note under the
-// fragment stage.
+// group(1) is the source. The bindings are alternatives, not a pair, except for
+// the sampler both paths share: `fs_main` reads `samp` + `tex`,
+// `fs_main_external` reads `samp` + `ext`. Each pipeline layout declares only
+// the ones its entry point uses -- see the note under the fragment stage.
 @group(1) @binding(0) var samp: sampler;
 @group(1) @binding(1) var tex: texture_2d<f32>;
 @group(1) @binding(2) var ext: texture_external;
@@ -272,11 +272,13 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
 //
 // Two entry points rather than one because `texture_external` is a different
 // WGSL type with a different sampling surface: there is no `textureSample`
-// overload for it and no sampler, so the only way to read it is
-// `textureSampleBaseClampToEdge`. A pipeline picks its entry point, so the
-// backend builds one pipeline per source kind from this one module, and a
-// texture_2d source never pays for the external path.
+// overload for it. It is read with `textureSampleBaseClampToEdge`, which takes
+// the same shared `samp` sampler the still path uses -- the sampler is a
+// required argument even though the base-clamp form ignores its address modes.
+// A pipeline picks its entry point, so the backend builds one pipeline per
+// source kind from this one module, and a texture_2d source never pays for the
+// external path.
 @fragment
 fn fs_main_external(in: VertexOut) -> @location(0) vec4f {
-  return textureSampleBaseClampToEdge(ext, panorama_uv(in.ndc));
+  return textureSampleBaseClampToEdge(ext, samp, panorama_uv(in.ndc));
 }
