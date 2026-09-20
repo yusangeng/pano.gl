@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development（无 subagent 则 executing-plans）；收尾走 superloop 的 task-finish，禁用 finishing-a-development-branch。
 
+> **（2026-09-20 登记，P1 终末全分支审查 MINOR 6；协调侧预补）**：`CLAUDE.md` 的 Commands 表与 Testing 节仍含 Playwright 时代的桥接写法（`npm run test:integration # playwright test`、`npx playwright test ...`、`playwright.config.ts`、`window.__panoTest` / `demo/test-entry-hooks`）。这些段落先于 P1 的 vitest 浏览器模式拍板、**已作废**：集成测试跑 vitest 浏览器模式、测试文件直接 import 被测代码、**没有桥**。本期的命令与测试约定（含三个门禁的写法）以本 plan 与任务卡为准，不以 CLAUDE.md 为准。CLAUDE.md 头部告示覆盖的是「还没造」，不覆盖「已废弃且现在要做相反的事」；该文件的重写归 P7 Task 4。
+
 **Goal:** 一个能画画的 WebGPU 后端。四个投影全部对上 P0 的基线像素（门禁 A）与基线 uniform 流（门禁 B）。
 
 **Architecture:** `renderer/` 定义 `Backend` 接口，`renderer/webgpu/` 实现它。几何是一个 3 顶点的全屏三角形 —— 顶点着色器只吐 NDC，画面里的一切由片元着色器算。投影公式与 CPU 参考实现（`src/core/reference.ts`）逐行同构。
