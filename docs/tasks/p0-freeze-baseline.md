@@ -4,7 +4,7 @@ scope: [tools/baseline/**, test/fixtures/baseline/**, .gitignore, docs/superpowe
 verify: if [ -f tools/baseline/verify-fixtures.mjs ]; then (cd tools/baseline && node verify-fixtures.mjs); fi
 bootstrap: (cd tools/baseline && npm install && npx playwright install chromium)
 layer: foundation
-state: fixing
+state: reported
 createdAt: 2026-09-19T08:51:52.107Z
 ---
 # 任务：P0 — 冻结基线
@@ -66,6 +66,8 @@ verify 写成条件式是**自举悖论**：`verify-fixtures.mjs` 是本卡自�
 
 **第 3 轮终审闭环**：整改后两位审查员均在 HEAD 亲自核实（非采信整改声明）——rev-harness2 逐行验证三帧深比较与 renderer 采样/拒绝/落盘；rev-tests2 重读三个修复点、复核 `decodePng` 解码正确性（chunk 遍历/形状守卫/五种滤波含 Paeth）并实跑套件 13/13。双方结论：No findings remain。随附两条已论证的非缺陷备注留档：decodePng 跳过 CRC（sha256 清单已钉住字节漂移）、不校验 inflate 后扫描线长度（损坏流要么 inflateSync 抛异常要么解码为全零、由内容神谕拦下）；"看起来合理但语义错误"的渲染不是 fixture 校验器的职责边界，属 gate-a/gate-b。CR 三轮全部闭环。
 
+**第 4 轮（协调者终审打回 ①–⑨，本卡整改轮）**：三轮闭环后协调者以独立变异实验打回——其 `u_CamPOVLongitude 20→999.5` 变异在 13/13 全绿下通过，证明 uniform 流无完整性锚（①），连带指出输入锚缺失（②）、软件栅格器谓词漏 llvmpipe 族（③）、对账单向（④）、黑帧出口码 0（⑤）五个阻断项与 ⑥–⑨ 四个顺带项。整改全录见上方「整改轮记录」。CR 结论：协调者的变异不是理论威胁——本轮自证时五个变异（锚点篡改 / source 翻字节 / llvmpipe 植入 / 孤儿文件 / 同步哈希黑帧）逐一复现"过去全绿"，逐一在新断言下变红；且 ④ 的新断言首跑抓获整改实现自身 walk 相对路径 bug、⑤ 的 fail-closed 在第 8 次全量捕获中真实拒收过一次产物——两个机制都经受了计划外实战。协调者要求的三个必红（锚点篡改、llvmpipe 植入、黑帧）均以实际红屏验证，非推演。CR 四轮全部闭环。
+
 ### 测试质量结论
 
 **手段**：effective-testing 清单（维度 0–4 + 反模式 A–F）审查 `fixtures.test.mjs` + `verify-fixtures.mjs`，缺陷思维实验驱动（逐类破坏基线数据，看套件是否变红）。
@@ -77,6 +79,15 @@ verify 写成条件式是**自举悖论**：`verify-fixtures.mjs` 是本卡自�
 4. 【WARNING 级】6 个测试重复读 `index.json` → 提升为模块级单次读取。
 
 **追加轮（独立测试审查，CR 第 2 轮的测试侧 3 条，commit `bbe131c`）**：套件升至 12 个——PNG 真·解码（IHDR 尺寸绑定 canvasSize）、内容神谕（≥1000 distinct 色，实测最低 5774，纯色帧 1）、投影/姿态像素级 pairwise 可区分（测量先行，仅有的字节相等对是已被有意钉住的两个简并态）、缩放针存在性断言。变异验证：合法纯色 PNG + 同步篡改的哈希能骗过清单对账，唯独内容神谕红——「结构合法但内容是垃圾」从此有网。
+
+**整改轮变异实验补（协调者打回后的自证，套件 12→14）**：本轮在整改断言落地后新跑五组变异，全部必红且报错指名要害：
+1. **锚点篡改必红**——`cylindrical/tilt` 的 `u_CamPOVLongitude` 20→999.5（协调者同款变异，上轮 13/13 全绿通过的那一个）→ 对账测试红，`uniforms.json on disk does not match index.json uniformsSha256`。
+2. **llvmpipe 植入必红**——renderer 字符串植入 `llvmpipe (LLVM 15.0.7, 256 bits)`（③ 扩族后的谓词目标）→ provenance 测试红。同族变异：谓词正则若仍只匹配 swiftshader/software 则此变异依旧全绿，这正是 ③ 成立的理由。
+3. **黑帧必红**——合法 143 字节纯黑 PNG + **同步篡改** pngSha256/pngBytes（哈希对账被刻意骗过）→ 唯内容神谕红（`only 1 distinct colours`）；且 capture 出口码经 ⑤ 改造后连带此红一起变 1，重捕获指令的信任链闭合。
+4. source.png 中位字节翻转 → 输入锚测试红（② 的正向验证）。
+5. 植入 `perspective/ghost.png` 孤儿 → 双向对账红并指名路径（④ 的正向验证）；该断言首跑即抓获实现自身 walk 相对路径 bug——断言有效性收到了一次计划外实证。
+
+另：⑨ 的 skipped-0 断言无法用变异验证（需泄漏 `BASELINE_VERIFY_NEGATIVE_TEST` 的完整环境），其逻辑以代码审读闭环——TAP footer 的 `# skipped N` 由 node:test 自身产出，非本套件可伪造。
 
 **覆盖陈述**（改动触及的路径，哪些有测试网 / 哪些没有 / 为什么）：
 - **有网**：`verify-fixtures.mjs` 两个分支（成功=每次 verify；失败=负面测试，含 env 剥离回归）；`states.mjs` 的 STATES/CAMERAS/CANVAS_SIZE（完整性测试遍历矩阵，间接消费 `captureId`）；`test/fixtures/baseline/**` 全部数据（每个 PNG 逐哈希、每份 uniforms.json 结构与身份、矩阵完备性、死 uniform、简并态合成）。
