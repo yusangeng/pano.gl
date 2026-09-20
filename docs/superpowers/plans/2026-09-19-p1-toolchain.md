@@ -263,7 +263,7 @@ legacy build keeps its own dependencies until P7 deletes the code."
 >
 > ```json
 > {
->   "extends": "../tsconfig.json",
+>   "extends": "../../tsconfig.json",
 >   "compilerOptions": { "types": ["@webgpu/types", "vite/client"] },
 >   "include": ["./**/*.ts"],
 >   "exclude": []
@@ -873,7 +873,7 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 
 ```json
 {
-  "extends": "../tsconfig.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "types": ["@webgpu/types", "vite/client"]
   },
@@ -883,6 +883,8 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 ```
 
 理由见 Task 3 Step 1 的说明。**`"exclude": []` 不能省** —— 少了它这个 program 会静默地什么都不检查（tsc 5.9 实测）。
+
+> **（路径勘误 2026-09-20，Task 8 落地实测）**：上方代码块初版的 `"extends": "../tsconfig.json"` 是 plan 撰写期笔误——`extends` 相对**声明它的文件**解析，从 `test/integration/` 出发 `"../"` 指到不存在的 `test/tsconfig.json`。tsc 对此报 TS5083 但**非致命**（以默认 ES5 继续编译，涌出大量 lib 报错），所以它被 typecheck 第一腿当场抓红而不是静默。落地与 Task 3 Step 1 注记里的同款 json 块（本 plan 已一并修正）都改为 `"../../tsconfig.json"`（指根 tsconfig，Task 3 注记的意图所在）。代码以修正后为准。
 
 `package.json` 里把 typecheck 改成三条（第三条跑 Task 6 建的 scripts program）：
 
@@ -1177,8 +1179,15 @@ test('the browser has a real WebGPU adapter', async () => {
   // report WHICH adapter, so a machine slipping to a software rasteriser is
   // visible in the log rather than inferred from pixel tolerances later.
   const adapter = await navigator.gpu!.requestAdapter()
-  console.log('adapter:', JSON.stringify(adapter!.info))
-  expect(adapter!.info).toBeTruthy()
+  // GPUAdapterInfo's fields are prototype getters on Chromium (measured on
+  // 153 / playwright 1.63): JSON.stringify sees no own enumerable properties
+  // and prints "{}", which would eat exactly the signal this log exists to
+  // surface.
+  console.log('adapter:', adapter!.info.vendor, adapter!.info.architecture)
+  expect(
+    adapter!.info.vendor,
+    'a machine slipping to a software rasteriser must be visible here, not inferred from tolerances later'
+  ).toBeTruthy()
 })
 
 test('a WebGPU canvas reads back as RGBA, after frames have passed', async () => {
@@ -1257,6 +1266,8 @@ test('a WebGPU canvas reads back as RGBA, after frames have passed', async () =>
 
 `test/integration/fallback/smoke.test.ts`（跑在 `no-webgpu` project）：
 
+> **（序列化勘误 2026-09-20，Task 8 落地实测）**：上方冒烟测试初版的日志行 `JSON.stringify(adapter!.info)` 在 Chromium 153（playwright 1.63）下恒打 `{}`——`GPUAdapterInfo` 的字段是原型 getter，`JSON.stringify` 只序列化自有可枚举属性。数据本身在（一次性探针实测 `info.vendor === "apple"`、`info.architecture === "metal-3"`，适配器是真 Metal GPU），但测试注释承诺的「机器滑向软渲染器时日志可见」会被序列化吃掉。已改为显式读 getter 打日志（见上方代码块），断言同步收紧到 `vendor` 非空（真 Metal 为 `"apple"`、SwiftShader 为 `"google"`，两条路径下都应非空）——原 `expect(info).toBeTruthy()` 对 getter-only 对象恒真，多收紧的这一步才真拦得住回归。
+
 ```ts
 import { expect, test } from 'vitest'
 
@@ -1274,6 +1285,8 @@ test('this project really is the no-WebGPU one', () => {
 npx playwright install chromium && npm run test:integration
 ```
 Expected: 两个 project 都 PASS；日志里有 `adapter: {"vendor":"apple","architecture":"metal-3",...}`（厂商随机器变）。
+
+> **（勘误 2026-09-20，Task 8 落地实录）**：日志格式随 Step 5 的序列化修正变为 `adapter: apple metal-3`（厂商随机器变）。另：下方改法 A 的注记「已实测：4 个测试文件全红」是 plan 撰写期更满的树；当前树 integration project 含 1 个测试文件，实测 1/1 红 + 2 skipped（守卫在 setup 拦下），语义一致——project 内全部文件被拦。
 
 **然后必须实测两种改法都会变红。这一步不能省** —— 一个从未失败过的守卫不算守卫。
 
