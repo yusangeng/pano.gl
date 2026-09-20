@@ -11,7 +11,8 @@
  *    not a control channel. If you find yourself grepping logs to decide what
  *    UI to show, the thing you want is an event.
  *
- * Usage from an application:
+ * Usage from an application (once P5 opens the public surface -- until then
+ * import from the module path directly):
  *
  *     import { enableChannels } from 'pano.gl'
  *     enableChannels('pano:gpu,pano:renderer')
@@ -59,16 +60,19 @@ export type ChannelName = keyof typeof channels
  * than per-instance. Returning the undo keeps tests from leaking an enabled
  * channel into the next test.
  *
+ * Enabling also persists through debug's own storage -- `process.env.DEBUG`
+ * in Node, localStorage in browsers -- so the setting survives page reloads.
+ * Inherited `debug` semantics, but surprising enough to an application
+ * developer to say out loud.
+ *
  * @param namespaces - A `debug` namespace pattern, e.g. `'pano:gpu'` or
- *   `'pano:*,-pano:media'`. An empty string enables nothing.
+ *   `'pano:*,-pano:media'`. An empty string enables nothing; an unparsable
+ *   string is silently treated the same way, exactly as `debug` does.
  * @returns A function restoring the enabled set that was in effect before.
  */
 export function enableChannels (namespaces: string): () => void {
   const previous = createDebug.disable()
   createDebug.enable(namespaces)
-  const enabled = createDebug.disable() ?? ''
-  createDebug.enable(previous)
-  createDebug.enable(enabled)
 
   return () => {
     createDebug.disable()
