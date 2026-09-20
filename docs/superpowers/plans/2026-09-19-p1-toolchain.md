@@ -6,7 +6,9 @@
 
 **Architecture:** 新实现与旧实现**并存于同一仓库、同一分支**：旧源码 `git mv` 到 `legacy/`（webpack 配置随之指向），新源码从零开始写在 `src/`。`legacy/` 的构建脚本原样保留并在 CI 里跑，保证 v0.2.x 全程可以发版。
 
-**Tech Stack:** TypeScript 5 (strict) · tsup (esbuild) · vitest（单元 = node project，集成 = browser project）· neostandard · GitHub Actions
+**Tech Stack:** TypeScript 5 (strict) · vite（lib mode 出包；demo dev server 与 vitest 同根同工具）· vitest（单元 = node project，集成 = browser project）· neostandard · GitHub Actions
+
+> **2026-09-20 拍板变更（用户裁决）**：出包工具由 tsup 换成 **vite library mode**。理由：demo dev server、vitest 浏览器模式、库打包三者本就共用 vite 作底层，再引入 tsup 是第五个构建工具；用户明确要求打包方案统一到 vite。tsup 相关内容已从本计划移除；Task 2 落地时（先于本变更提交）package.json 里仍是 tsup，由 Task 4 换掉——Task 2 的提交在当时规格下是合规的，不算偏离。
 
 ---
 
@@ -34,7 +36,7 @@ spec §10.5 写的是「旧代码不被触碰」。这次移动**不违背它的
 | `test/integration/` | vitest 浏览器模式集成测试，跑在真浏览器里 |
 | `scripts/` | 构建期脚本（P2 起是 shader 常量生成器） |
 | `tsconfig.json` | strict + `noUncheckedIndexedAccess`，库自身的 program |
-| `tsup.config.ts` | 打包配置，两套入口 |
+| `vite.config.ts` | 库构建（vite lib mode）：`dist/` 出 esm + cjs 双格式 |
 | `vitest.config.ts` | 三个 project：`unit`（node）、`integration`（浏览器，**含 WebGPU 守卫**）、`no-webgpu`（浏览器，反向守卫；P6 用） |
 
 ---
@@ -182,6 +184,8 @@ otherwise: npm run build-debug produces a byte-identical bundle."
 
 **与旧 package.json 的差异是刻意的**：`babel` / `babel-*` / `webpack` / `webpack-glsl-loader` / `isparta` / `istanbul` / `mocha` / `chai` / `litchy` / `konph` / `polygala` / `shortid` / `lodash` / `chivy` / `param-check` / `dodele` **全部退出**。
 
+> **上方 JSON 里的 `tsup` 两处（`"build": "tsup"` 脚本 + `tsup` devDependency）已被 2026-09-20 的 vite 拍板取代**（见文件头部 Tech Stack 注记），Task 4 Step 2 会把它们换掉。Task 2 的提交（74a3009）按当时的规格落地，含 tsup 是合规的，不构成偏离、不需要返工；spec 审查已按本节原文核过、通过。上方 JSON 保持 Task 2 审核时的原样不改，避免"审查过的内容事后被静默改写"；最终真相以 Task 4 落地后的 package.json 为准。
+
 > **发布元数据从旧文件原样携带**（`license` / `repository` / `author` / `keywords`，2026-09-20 拍板补入）：plan 初稿的 JSON 漏了它们——公共包丢 `license` 字段会让 npm 发版告警、下游 license 审计判 unknown。`keywords` 在旧表基础上加了 `webgpu`；更精细的营销性 keywords 属 P5/P7 的事，不在本卡扩。
 
 > **不再需要 `pngjs`。** 集成测试现在跑在真浏览器里，读一张基线图就是
@@ -306,30 +310,61 @@ git commit -m "build: strict TypeScript config with WebGPU types"
 ### Task 4: 打包配置
 
 **Files:**
-- Create: `tsup.config.ts`
+- Create: `vite.config.ts`
+- Create: `src/index.ts`
+- Modify: `package.json`、`package-lock.json`（build 脚本换 vite；devDeps 换掉 tsup）
 
 - [ ] **Step 1: 写配置**
 
 ```ts
-import { defineConfig } from 'tsup'
+import { defineConfig } from 'vite'
+import dts from 'vite-plugin-dts'
 
 export default defineConfig({
-  entry: { index: 'src/index.ts' },
-  format: ['esm', 'cjs'],
-  dts: true,
-  sourcemap: true,
-  clean: true,
-  target: 'es2022',
-  // The shaders are TypeScript string constants by the time they reach here
-  // (see scripts/gen-shader-constants.mjs), so there is no .glsl/.wgsl loader to
-  // configure. That is the whole point: the published artifact has no external
-  // resource dependencies, unlike the legacy lib/ which shipped unresolved
-  // require('../shader/vshader.glsl') calls.
-  external: ['debug']
+  plugins: [
+    // One .d.ts per source file, emitted next to the js. A single rollup'd
+    // index.d.ts would pull api-extractor in for no benefit while src/ still
+    // has one module; revisit if the public surface ever needs flattening.
+    dts()
+  ],
+  build: {
+    lib: {
+      entry: 'src/index.ts',
+      formats: ['es', 'cjs'],
+      fileName: format => (format === 'es' ? 'index.js' : 'index.cjs')
+    },
+    sourcemap: true
+    // No rollupOptions.external: lib mode externalizes package.json
+    // "dependencies" by default, so gl-matrix and debug are importable from
+    // the consumer's own install -- which is what a library dependency list
+    // means. Bundling them in would be the thing that needs justifying.
+    //
+    // Shaders: the .glsl/.wgsl files stay real files and reach the bundle via
+    // `import x from './panorama.wgsl?raw'` (P3). Vite handles that natively
+    // in dev and lib mode alike; the root tsc program never needs vite/client
+    // for it because a small local `declare module '*.wgsl?raw'` ambient file
+    // types the suffix. scripts/gen-shader-constants.mjs stays regardless --
+    // its job is the numeric projection-kind constants shared by TS + WGSL +
+    // GLSL, which has nothing to do with which bundler moves the bytes.
+  }
 })
 ```
 
-- [ ] **Step 2: 造一个最小入口让它能跑**
+- [ ] **Step 2: 换 package.json 的构建工具位**
+
+```bash
+npm rm tsup && npm i -D vite-plugin-dts@^5
+```
+
+`package.json` 两处改：
+
+```json
+    "build": "vite build",
+```
+
+（`tsup` 从 devDependencies 消失，`vite-plugin-dts@^5` 进来——peer `vite: >=3`，实测对 vite 7 兼容。`vite` 本来就在，demo / 测试 / 打包从此一个工具。）
+
+- [ ] **Step 3: 造一个最小入口让它能跑**
 
 `src/index.ts`：
 
@@ -344,12 +379,12 @@ export default defineConfig({
 export const VERSION = '1.0.0-alpha.0'
 ```
 
-- [ ] **Step 3: 构建**
+- [ ] **Step 4: 构建**
 
 Run: `npm run build && ls -la dist/`
-Expected：`index.js`、`index.cjs`、`index.d.ts`、`index.d.ts.map`、两个 `.map`
+Expected：`index.js`、`index.cjs`、`index.d.ts`，以及 `index.js.map` / `index.cjs.map`（lib mode 双格式各带 sourcemap；`emptyOutDir` 默认开，无需清理配置）
 
-- [ ] **Step 4: 确认产物可以被普通 Node 加载**
+- [ ] **Step 5: 确认产物可以被普通 Node 加载**
 
 ```bash
 node -e "import('./dist/index.js').then(m => console.log('esm ok:', m.VERSION))"
@@ -363,11 +398,11 @@ cjs ok: 1.0.0-alpha.0
 
 **这一条是本任务的核心验收**：它正是旧 `lib/` 做不到的事（`lib/index.js` 里有无法解析的 `.glsl` require）。
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add tsup.config.ts src/index.ts
-git commit -m "build: tsup bundle producing self-contained esm + cjs"
+git add vite.config.ts src/index.ts package.json package-lock.json
+git commit -m "task-p1-toolchain: build: vite lib mode producing self-contained esm + cjs"
 ```
 
 ---
@@ -1386,7 +1421,7 @@ git commit -m "docs(demo): minimal vite-served demo page"
 | `no-webgpu` project 与反向守卫 | P6 的降级路径测试 |
 | `CI=1` 的 SwiftShader 启动参数 | P3 门禁容差的跨环境验证 |
 | `src/diagnostics.ts` 的 trace 通道 | P2 起的每一层 |
-| 自包含的 tsup 产物 | P5 的公开 API |
+| 自包含的 vite 库产物 | P5 的公开 API |
 
 > **给 P3 的提醒**：门禁容差必须在**真 GPU 与 SwiftShader 两种环境**下都验证过。
 > CI 跑的是 SwiftShader，本机跑的是真 GPU —— 只在其中一边调出来的容差，另一边会红。
