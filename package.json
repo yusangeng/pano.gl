@@ -13,7 +13,9 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "sideEffects": false,
   "license": "MIT",
   "repository": {
@@ -46,14 +48,15 @@
     "doc": "typedoc"
   },
   "dependencies": {
-    "gl-matrix": "^3.4.3",
-    "debug": "^4.4.3"
+    "debug": "^4.4.3",
+    "gl-matrix": "^3.4.3"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
     "@vitest/browser": "^5",
     "@vitest/browser-playwright": "^5",
     "@vitest/coverage-v8": "^5",
+    "@webgpu/types": "^0.1.74",
     "eslint": "^9",
     "neostandard": "^0.12.0",
     "playwright": "^1.63.0",

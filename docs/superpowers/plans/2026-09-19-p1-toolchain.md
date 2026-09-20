@@ -221,7 +221,7 @@ legacy build keeps its own dependencies until P7 deletes the code."
 - Create: `tsconfig.json`
 - Create: `tsconfig.legacy.json`（让编辑器不为 `legacy/` 里的 JS 报错）
 
-- [ ] **Step 1: 写 tsconfig.json**
+- [x] **Step 1: 写 tsconfig.json**
 
 ```json
 {
@@ -276,7 +276,7 @@ legacy build keeps its own dependencies until P7 deletes the code."
 
 `@webgpu/types` 需要装：把它加进 devDependencies。
 
-- [ ] **Step 2: 写 legacy 的隔离配置**
+- [x] **Step 2: 写 legacy 的隔离配置**
 
 `tsconfig.legacy.json`：
 
@@ -290,7 +290,7 @@ legacy build keeps its own dependencies until P7 deletes the code."
 
 **目的**：让编辑器知道 `legacy/` 是 Babel 6 时代的 JS，不要拿新规则去检查它。它不参与 `npm run typecheck`。
 
-- [ ] **Step 3: 加 @webgpu/types 并确认类型可用**
+- [x] **Step 3: 加 @webgpu/types 并确认类型可用**
 
 ```bash
 npm i -D @webgpu/types
@@ -298,7 +298,7 @@ npm run typecheck
 ```
 Expected: 退出码 0（此时 `src/` 几乎是空的）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tsconfig.json tsconfig.legacy.json package.json package-lock.json
