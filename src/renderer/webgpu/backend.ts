@@ -30,6 +30,23 @@ import { channels } from '../../diagnostics'
 /** RGBA8, the one format both backends can render to and read from. */
 const TARGET_FORMAT: GPUTextureFormat = 'rgba8unorm'
 
+/**
+ * Pops a render-frame error scope, fire-and-forget.
+ *
+ * Validation errors are asynchronous and never throw, and the render loop
+ * cannot await, so both the post-submit pop and the throw-path pop report
+ * through the gpu channel instead of raising. A lost device rejects the pop
+ * itself; there is nothing left to report to at that point, so the rejection
+ * is swallowed rather than left unhandled.
+ */
+function drainRenderScope (device: GPUDevice): void {
+  device.popErrorScope()
+    .then(error => {
+      if (error !== null) channels.gpu('render validation error: %s', error.message)
+    })
+    .catch(() => {})
+}
+
 export class WebGPUBackend implements Backend {
   readonly kind = 'webgpu' as const
 
@@ -65,7 +82,13 @@ export class WebGPUBackend implements Backend {
   #state: CameraState | null = null
   #projection: Projection | null = null
 
-  /** The source as last passed to `setSource`. Metadata only, never the element. */
+  /**
+   * The source as last passed to `setSource`, element included. The element is
+   * retained by reference and touched only inside `render()`'s synchronous
+   * stretch; what is never retained is an imported frame -- the object with a
+   * use-after-free lifetime is the GPUExternalTexture, which is created and
+   * consumed inside a single `render()` call.
+   */
   #source: RenderableSource | null = null
   /** The version already uploaded to `#sourceTexture`, `-1` for "none yet". */
   #uploadedVersion = -1
@@ -166,146 +189,155 @@ export class WebGPUBackend implements Backend {
     if (!acquired) return null
     const { adapter, device } = acquired
 
-    const limits = adapter.limits
-    const capabilities: Capabilities = {
-      backend: 'webgpu',
-      adapter: adapter.info as unknown as Record<string, string>,
-      // The floor is applied here, not only inside `describeCapabilities`: this
-      // object is built by hand and is the one callers actually read, so an
-      // adapter reporting 0 would otherwise make every source look oversized.
-      maxTextureDimension: Math.max(MIN_TRUSTWORTHY_TEXTURE_DIMENSION, limits.maxTextureDimension2D),
-      externalTextures: true
-    }
+    // Everything below can throw -- a WGSL error, a null canvas context, a
+    // scoped validation failure -- and each of those throws would leak the
+    // device this method just acquired: it has no other owner, and browsers
+    // cap live devices per page. Destroy it before letting the failure escape.
+    try {
+      const limits = adapter.limits
+      const capabilities: Capabilities = {
+        backend: 'webgpu',
+        adapter: adapter.info as unknown as Record<string, string>,
+        // The floor is applied here, not only inside `describeCapabilities`: this
+        // object is built by hand and is the one callers actually read, so an
+        // adapter reporting 0 would otherwise make every source look oversized.
+        maxTextureDimension: Math.max(MIN_TRUSTWORTHY_TEXTURE_DIMENSION, limits.maxTextureDimension2D),
+        externalTextures: true
+      }
 
-    const module = device.createShaderModule({ code: PANORAMA_WGSL, label: 'panorama' })
+      const module = device.createShaderModule({ code: PANORAMA_WGSL, label: 'panorama' })
 
-    // Compilation errors never throw. Ask explicitly: a pipeline built from a
-    // broken module is invalid rather than an exception, and every subsequent
-    // draw is a no-op with a console message nobody reads.
-    const info = await module.getCompilationInfo()
-    const errors = info.messages.filter(m => m.type === 'error')
-    if (errors.length > 0) {
-      const detail = errors
-        .map(m => `${m.lineNum}:${m.linePos} ${m.message}`)
-        .join('\n')
-      throw new Error(`WGSL compilation failed:\n${detail}`)
-    }
+      // Compilation errors never throw. Ask explicitly: a pipeline built from a
+      // broken module is invalid rather than an exception, and every subsequent
+      // draw is a no-op with a console message nobody reads.
+      const info = await module.getCompilationInfo()
+      const errors = info.messages.filter(m => m.type === 'error')
+      if (errors.length > 0) {
+        const detail = errors
+          .map(m => `${m.lineNum}:${m.linePos} ${m.message}`)
+          .join('\n')
+        throw new Error(`WGSL compilation failed:\n${detail}`)
+      }
 
-    const cameraBuffer = device.createBuffer({
-      size: CAMERA_UNIFORM_SIZE,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      label: 'camera'
-    })
-
-    const cameraLayout = device.createBindGroupLayout({
-      label: 'camera',
-      entries: [
-        {
-          binding: 0,
-          // FRAGMENT only: the vertex stage emits clip space from the vertex
-          // index and reads no buffer at all. Declaring VERTEX here would work
-          // and would be a lie about what the shader does.
-          visibility: GPUShaderStage.FRAGMENT,
-          buffer: { type: 'uniform' }
-        }
-      ]
-    })
-
-    // Two source layouts because `texture_2d<f32>` (binding 1) and
-    // `texture_external` (binding 2) are different binding types. Both carry the
-    // shared sampler at binding 0: the external path samples through
-    // `textureSampleBaseClampToEdge`, whose signature takes the sampler even
-    // though that form ignores its address modes. Each pipeline layout names
-    // only the bindings its entry point uses, and a binding the entry point
-    // does not reference is not validated against it.
-    const sourceLayout = device.createBindGroupLayout({
-      label: 'source',
-      entries: [
-        { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } }
-      ]
-    })
-    const externalSourceLayout = device.createBindGroupLayout({
-      label: 'source-external',
-      entries: [
-        { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-        { binding: 2, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} }
-      ]
-    })
-
-    const texturePipeline = await withValidationScope(device, 'texture pipeline', () =>
-      device.createRenderPipeline({
-        label: 'panorama-texture',
-        layout: device.createPipelineLayout({
-          bindGroupLayouts: [cameraLayout, sourceLayout]
-        }),
-        vertex: { module, entryPoint: 'vs_main' },
-        fragment: {
-          module,
-          entryPoint: 'fs_main',
-          targets: [{ format: TARGET_FORMAT }]
-        },
-        primitive: { topology: 'triangle-list' },
-        // No depth or stencil attachment anywhere in this backend. The legacy
-        // renderer enabled depth testing and never cleared the buffer, so its
-        // output depended on the previous frame's depth values (defect F4).
-        // There is exactly one triangle and nothing to occlude. (The property is
-        // omitted rather than set to `undefined`: exactOptionalPropertyTypes
-        // rejects an explicit undefined here, and absence means the same thing.)
-        multisample: { count: 1 }
+      const cameraBuffer = device.createBuffer({
+        size: CAMERA_UNIFORM_SIZE,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        label: 'camera'
       })
-    )
 
-    const externalPipeline = await withValidationScope(device, 'external pipeline', () =>
-      device.createRenderPipeline({
-        label: 'panorama-external',
-        layout: device.createPipelineLayout({
-          bindGroupLayouts: [cameraLayout, externalSourceLayout]
-        }),
-        vertex: { module, entryPoint: 'vs_main' },
-        fragment: {
-          module,
-          entryPoint: 'fs_main_external',
-          targets: [{ format: TARGET_FORMAT }]
-        },
-        primitive: { topology: 'triangle-list' },
-        // See the texture pipeline above: no depth/stencil, stated by omission.
-        multisample: { count: 1 }
-      })
-    )
-
-    const sampler = createPanoramaSampler(device)
-
-    const cameraBindGroup = await withValidationScope(device, 'camera bind group', () =>
-      device.createBindGroup({
+      const cameraLayout = device.createBindGroupLayout({
         label: 'camera',
-        layout: cameraLayout,
-        entries: [{ binding: 0, resource: { buffer: cameraBuffer } }]
+        entries: [
+          {
+            binding: 0,
+            // FRAGMENT only: the vertex stage emits clip space from the vertex
+            // index and reads no buffer at all. Declaring VERTEX here would work
+            // and would be a lie about what the shader does.
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: { type: 'uniform' }
+          }
+        ]
       })
-    )
 
-    const context = canvas.getContext('webgpu')
-    if (!context) throw new Error('canvas.getContext("webgpu") returned null')
-    context.configure({
-      device,
-      format: TARGET_FORMAT,
-      alphaMode: 'opaque'
-    })
+      // Two source layouts because `texture_2d<f32>` (binding 1) and
+      // `texture_external` (binding 2) are different binding types. Both carry the
+      // shared sampler at binding 0: the external path samples through
+      // `textureSampleBaseClampToEdge`, whose signature takes the sampler even
+      // though that form ignores its address modes. Each pipeline layout names
+      // only the bindings its entry point uses, and a binding the entry point
+      // does not reference is not validated against it.
+      const sourceLayout = device.createBindGroupLayout({
+        label: 'source',
+        entries: [
+          { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+          { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } }
+        ]
+      })
+      const externalSourceLayout = device.createBindGroupLayout({
+        label: 'source-external',
+        entries: [
+          { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+          { binding: 2, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} }
+        ]
+      })
 
-    return new WebGPUBackend({
-      canvas,
-      acquired,
-      capabilities,
-      cameraBuffer,
-      sampler,
-      cameraLayout,
-      sourceLayout,
-      externalSourceLayout,
-      cameraBindGroup,
-      texturePipeline,
-      externalPipeline,
-      context
-    })
+      const texturePipeline = await withValidationScope(device, 'texture pipeline', () =>
+        device.createRenderPipeline({
+          label: 'panorama-texture',
+          layout: device.createPipelineLayout({
+            bindGroupLayouts: [cameraLayout, sourceLayout]
+          }),
+          vertex: { module, entryPoint: 'vs_main' },
+          fragment: {
+            module,
+            entryPoint: 'fs_main',
+            targets: [{ format: TARGET_FORMAT }]
+          },
+          primitive: { topology: 'triangle-list' },
+          // No depth or stencil attachment anywhere in this backend. The legacy
+          // renderer enabled depth testing and never cleared the buffer, so its
+          // output depended on the previous frame's depth values (defect F4).
+          // There is exactly one triangle and nothing to occlude. (The property is
+          // omitted rather than set to `undefined`: exactOptionalPropertyTypes
+          // rejects an explicit undefined here, and absence means the same thing.)
+          multisample: { count: 1 }
+        })
+      )
+
+      const externalPipeline = await withValidationScope(device, 'external pipeline', () =>
+        device.createRenderPipeline({
+          label: 'panorama-external',
+          layout: device.createPipelineLayout({
+            bindGroupLayouts: [cameraLayout, externalSourceLayout]
+          }),
+          vertex: { module, entryPoint: 'vs_main' },
+          fragment: {
+            module,
+            entryPoint: 'fs_main_external',
+            targets: [{ format: TARGET_FORMAT }]
+          },
+          primitive: { topology: 'triangle-list' },
+          // See the texture pipeline above: no depth/stencil, stated by omission.
+          multisample: { count: 1 }
+        })
+      )
+
+      const sampler = createPanoramaSampler(device)
+
+      const cameraBindGroup = await withValidationScope(device, 'camera bind group', () =>
+        device.createBindGroup({
+          label: 'camera',
+          layout: cameraLayout,
+          entries: [{ binding: 0, resource: { buffer: cameraBuffer } }]
+        })
+      )
+
+      const context = canvas.getContext('webgpu')
+      if (!context) throw new Error('canvas.getContext("webgpu") returned null')
+      context.configure({
+        device,
+        format: TARGET_FORMAT,
+        alphaMode: 'opaque'
+      })
+
+      return new WebGPUBackend({
+        canvas,
+        acquired,
+        capabilities,
+        cameraBuffer,
+        sampler,
+        cameraLayout,
+        sourceLayout,
+        externalSourceLayout,
+        cameraBindGroup,
+        texturePipeline,
+        externalPipeline,
+        context
+      })
+    } catch (err) {
+      device.destroy()
+      throw err
+    }
   }
 
   setCamera (state: CameraState, projection: Projection): void {
@@ -431,111 +463,120 @@ export class WebGPUBackend implements Backend {
     // split across branches.
     device.pushErrorScope('validation')
 
-    let bindGroup: GPUBindGroup
-    let pipeline: GPURenderPipeline
+    try {
+      let bindGroup: GPUBindGroup
+      let pipeline: GPURenderPipeline
 
-    if (source.kind === 'video') {
-      // Import, bind, encode, submit -- one synchronous stretch. An external
-      // texture is destroyed at the end of this microtask and the bind group
-      // does not keep it alive.
-      const external = device.importExternalTexture({
-        source: source.element as HTMLVideoElement,
-        label: 'source'
-      })
-      bindGroup = device.createBindGroup({
-        label: 'source-external',
-        layout: this.#externalSourceLayout,
-        // The sampler rides along at binding 0; see the externalSourceLayout
-        // note in `create()` for why it is required but inert.
-        entries: [
-          { binding: 0, resource: this.#sampler },
-          { binding: 2, resource: external }
-        ]
-      })
-      pipeline = this.#externalPipeline
-      // A video presents a new frame every rAF, so the next frame is always
-      // worth drawing. `version` is bumped by `markFramePresented`, which the
-      // render loop calls after this returns, so at this point it still
-      // describes the frame just drawn -- gating on it would draw every other
-      // frame.
-      this.#dirty = true
-    } else {
-      if (this.#sourceTexture === null || source.version !== this.#uploadedVersion) {
-        if (
-          this.#sourceTexture === null ||
-          this.#sourceTexture.width !== source.state.width ||
-          this.#sourceTexture.height !== source.state.height
-        ) {
-          this.#sourceTexture?.destroy()
-          this.#sourceTexture = device.createTexture({
-            label: 'source',
-            size: { width: source.state.width, height: source.state.height },
-            format: TARGET_FORMAT,
-            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
-          })
-          // The bind group holds the old texture, so a reallocation invalidates
-          // it. Dropping the reference is enough; it is garbage collected.
-          this.#sourceBindGroup = null
+      if (source.kind === 'video') {
+        // Import, bind, encode, submit -- one synchronous stretch. An external
+        // texture is destroyed at the end of this microtask and the bind group
+        // does not keep it alive.
+        const external = device.importExternalTexture({
+          source: source.element as HTMLVideoElement,
+          label: 'source'
+        })
+        bindGroup = device.createBindGroup({
+          label: 'source-external',
+          layout: this.#externalSourceLayout,
+          // The sampler rides along at binding 0; see the externalSourceLayout
+          // note in `create()` for why it is required but inert.
+          entries: [
+            { binding: 0, resource: this.#sampler },
+            { binding: 2, resource: external }
+          ]
+        })
+        pipeline = this.#externalPipeline
+        // A video presents a new frame every rAF, so the next frame is always
+        // worth drawing. `version` is bumped by `markFramePresented`, which the
+        // render loop calls after this returns, so at this point it still
+        // describes the frame just drawn -- gating on it would draw every other
+        // frame.
+        this.#dirty = true
+      } else {
+        if (this.#sourceTexture === null || source.version !== this.#uploadedVersion) {
+          if (
+            this.#sourceTexture === null ||
+            this.#sourceTexture.width !== source.state.width ||
+            this.#sourceTexture.height !== source.state.height
+          ) {
+            this.#sourceTexture?.destroy()
+            this.#sourceTexture = device.createTexture({
+              label: 'source',
+              size: { width: source.state.width, height: source.state.height },
+              format: TARGET_FORMAT,
+              usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+            })
+            // The bind group holds the old texture, so a reallocation invalidates
+            // it. Dropping the reference is enough; it is garbage collected.
+            this.#sourceBindGroup = null
+          }
+
+          // `flipY: false` is deliberate. See `to_uv` in panorama.wgsl: the shader
+          // absorbs the flip for BOTH source paths, because a flip here could not
+          // apply to the video path at all and the two would end up with opposite
+          // orientations. (It sits on the copy's SOURCE descriptor -- that is the
+          // argument the API defines it on; the destination has no such option.)
+          queue.copyExternalImageToTexture(
+            { source: source.element, flipY: false },
+            { texture: this.#sourceTexture },
+            { width: source.state.width, height: source.state.height }
+          )
+          this.#uploadedVersion = source.version
         }
 
-        // `flipY: false` is deliberate. See `to_uv` in panorama.wgsl: the shader
-        // absorbs the flip for BOTH source paths, because a flip here could not
-        // apply to the video path at all and the two would end up with opposite
-        // orientations. (It sits on the copy's SOURCE descriptor -- that is the
-        // argument the API defines it on; the destination has no such option.)
-        queue.copyExternalImageToTexture(
-          { source: source.element, flipY: false },
-          { texture: this.#sourceTexture },
-          { width: source.state.width, height: source.state.height }
-        )
-        this.#uploadedVersion = source.version
+        this.#sourceBindGroup ??= device.createBindGroup({
+          label: 'source',
+          layout: this.#sourceLayout,
+          entries: [
+            { binding: 0, resource: this.#sampler },
+            { binding: 1, resource: this.#sourceTexture!.createView() }
+          ]
+        })
+        bindGroup = this.#sourceBindGroup
+        pipeline = this.#texturePipeline
+        this.#dirty = false
       }
 
-      this.#sourceBindGroup ??= device.createBindGroup({
-        label: 'source',
-        layout: this.#sourceLayout,
-        entries: [
-          { binding: 0, resource: this.#sampler },
-          { binding: 1, resource: this.#sourceTexture!.createView() }
+      // Only now, and only in the canvas case. Acquiring the swapchain texture and
+      // not submitting it is a validation error, so every early-out above has to
+      // happen before this line.
+      const view = target ?? this.#context.getCurrentTexture().createView()
+      const encoder = device.createCommandEncoder({ label: 'panorama' })
+      const pass = encoder.beginRenderPass({
+        label: 'panorama',
+        colorAttachments: [
+          {
+            view,
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: 'clear',
+            storeOp: 'store'
+          }
         ]
       })
-      bindGroup = this.#sourceBindGroup
-      pipeline = this.#texturePipeline
-      this.#dirty = false
+      pass.setPipeline(pipeline)
+      pass.setBindGroup(0, this.#cameraBindGroup)
+      pass.setBindGroup(1, bindGroup)
+      // Three vertices, no buffer: `vs_main` computes the corner positions from
+      // `vertex_index` alone.
+      pass.draw(3)
+      pass.end()
+      queue.submit([encoder.finish()])
+    } catch (err) {
+      // A pushed scope that is never popped leaks onto everything after it:
+      // the next unrelated pop would report this frame's error. A synchronous
+      // throw between push and submit is spec-realistic -- the external-texture
+      // import raises SecurityError for non-origin-clean cross-origin media --
+      // so drain the scope before letting the error escape.
+      drainRenderScope(device)
+      throw err
     }
 
-    // Only now, and only in the canvas case. Acquiring the swapchain texture and
-    // not submitting it is a validation error, so every early-out above has to
-    // happen before this line.
-    const view = target ?? this.#context.getCurrentTexture().createView()
-    const encoder = device.createCommandEncoder({ label: 'panorama' })
-    const pass = encoder.beginRenderPass({
-      label: 'panorama',
-      colorAttachments: [
-        {
-          view,
-          clearValue: { r: 0, g: 0, b: 0, a: 1 },
-          loadOp: 'clear',
-          storeOp: 'store'
-        }
-      ]
-    })
-    pass.setPipeline(pipeline)
-    pass.setBindGroup(0, this.#cameraBindGroup)
-    pass.setBindGroup(1, bindGroup)
-    // Three vertices, no buffer: `vs_main` computes the corner positions from
-    // `vertex_index` alone.
-    pass.draw(3)
-    pass.end()
-    queue.submit([encoder.finish()])
-
-    // Popped, not awaited. Validation errors are asynchronous and never throw, so
-    // a frame that is wrong is indistinguishable from one that is fine until
-    // someone reads the console -- and the loop cannot await. The pop has to
-    // happen regardless of the branch taken, so it is not inside the `if`.
-    device.popErrorScope().then(error => {
-      if (error !== null) channels.gpu('render validation error: %s', error.message)
-    })
+    // Popped, not awaited. Validation errors are asynchronous and never throw,
+    // so a frame that is wrong is indistinguishable from one that is fine
+    // until someone reads the console -- and the loop cannot await. The pop
+    // has to happen regardless of the branch taken, so it is not inside the
+    // `if`. See `drainRenderScope` for the lost-device case.
+    drainRenderScope(device)
   }
 
   resize (cssWidth: number, cssHeight: number, dpr: number): void {
@@ -544,9 +585,12 @@ export class WebGPUBackend implements Backend {
     if (this.#canvas.width === width && this.#canvas.height === height) return
     this.#canvas.width = width
     this.#canvas.height = height
-    // The swapchain is reconfigured from the canvas size on the next acquire,
-    // so no explicit reconfiguration is needed here -- but the canvas drawing
-    // buffer is resized by this assignment, which is what the next frame sees.
+    // Assigning the size clears the drawing buffer, so the frame has to be
+    // repainted even with the camera and source unchanged: without this the
+    // next `render()` early-outs on the dirty flag and the canvas stays blank
+    // until the camera happens to move. The swapchain needs no explicit
+    // reconfiguration -- it follows the canvas size on the next acquire.
+    this.#dirty = true
   }
 
   dispose (): void {
