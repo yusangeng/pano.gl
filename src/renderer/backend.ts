@@ -108,6 +108,7 @@ export interface Backend {
    */
   onDeviceLost (fn: (lost: DeviceLost) => void): () => void
 
+  /** Releases the backend's GPU resources. Idempotent; the full lifecycle is specified on the interface. */
   dispose (): void
 }
 
