@@ -744,7 +744,7 @@ fn to_uv(theta: f32, phi: f32) -> vec2f {
 
 /*
  * The four projections are transcribed statement for statement from
- * cam_proj_* in `legacy/src/shader/fshader.glsl`, and line for line against
+ * cam_proj_* in `legacy/shader/fshader.glsl`, and line for line against
  * `src/core/reference.ts`. Two things that look like transcription errors and
  * are not:
  *
