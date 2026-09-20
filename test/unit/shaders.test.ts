@@ -2,6 +2,15 @@ import { describe, it, expect } from 'vitest'
 import { PANORAMA_WGSL } from '../../src/renderer/webgpu/shaders'
 import { CAMERA_UNIFORM_LAYOUT, CAMERA_UNIFORM_SIZE } from '../../src/renderer/uniforms'
 
+// Positive assertions run against code, not comments: the shader's comments
+// name `textureSampleBaseClampToEdge` and `TEXTURE_PROJECTION_EQUIRECTANGULAR`,
+// so a `toContain` against the raw source passes even when the call or
+// comparison is gone. Block comments are stripped before line comments so a
+// `//` inside a block comment cannot leave a dangling `*/` behind.
+const STRIPPED = PANORAMA_WGSL
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/\/\/[^\n]*/g, '')
+
 describe('panorama WGSL', () => {
   it('declares every field of the uniform layout, in the same order', () => {
     // Writes into the struct are positional, so a field that exists in the TS
@@ -34,6 +43,15 @@ describe('panorama WGSL', () => {
       const size = sizes[m[2]!]
       expect(size, `unknown WGSL type ${m[2]}`).toBeDefined()
       total += size!
+      // The kind fields are ABI-critical: `packCameraUniforms` writes them
+      // through a Uint32Array, so the shader must read them as u32. Declared
+      // f32, the bits of 1 read as a denormal (~1.4e-45): projKind matches no
+      // switch case and every fragment takes the default branch, texProjKind
+      // fails its equirectangular check. Both types score 4 bytes, which is
+      // why the size map alone cannot catch this.
+      if (m[1] === 'projKind' || m[1] === 'texProjKind') {
+        expect(m[2], `${m[1]} must be declared u32`).toBe('u32')
+      }
     }
     expect(total).toBe(CAMERA_UNIFORM_SIZE)
   })
@@ -44,8 +62,7 @@ describe('panorama WGSL', () => {
     // would put a seam in the panorama wherever theta is negative -- and it
     // would be a silent divergence from src/core/reference.ts, which uses the
     // floor-based form.
-    const body = PANORAMA_WGSL.replace(/\/\/[^\n]*/g, '')
-    expect(body).not.toMatch(/[^/%]\s*%\s*[^%]/)
+    expect(STRIPPED).not.toMatch(/[^/%]\s*%\s*[^%]/)
   })
 
   it('has no preprocessor directives', () => {
@@ -59,11 +76,11 @@ describe('panorama WGSL', () => {
     // Both are needed: `texture_external` has no `textureSample` overload, so a
     // single entry point cannot serve both source kinds. Losing either one
     // means one source kind silently falls back to the other's pipeline.
-    expect(PANORAMA_WGSL).toContain('fn fs_main(')
-    expect(PANORAMA_WGSL).toContain('fn fs_main_external(')
-    expect(PANORAMA_WGSL).toContain('var tex: texture_2d<f32>')
-    expect(PANORAMA_WGSL).toContain('var ext: texture_external')
-    expect(PANORAMA_WGSL).toContain('textureSampleBaseClampToEdge')
+    expect(STRIPPED).toContain('fn fs_main(')
+    expect(STRIPPED).toContain('fn fs_main_external(')
+    expect(STRIPPED).toContain('var tex: texture_2d<f32>')
+    expect(STRIPPED).toContain('var ext: texture_external')
+    expect(STRIPPED).toContain('textureSampleBaseClampToEdge')
   })
 
   it('dispatches on the generated constants rather than numeric literals', () => {
@@ -71,11 +88,16 @@ describe('panorama WGSL', () => {
     // worth anything: if the switch went back to `case 1u:`, the numbers would
     // be hand-maintained in two places again, which is exactly the defect the
     // legacy code had.
-    expect(PANORAMA_WGSL).toContain('case CAMERA_PROJECTION_LINEAR:')
-    expect(PANORAMA_WGSL).toContain('case CAMERA_PROJECTION_CYLINDRICAL:')
-    expect(PANORAMA_WGSL).toContain('case CAMERA_PROJECTION_PLANET:')
-    expect(PANORAMA_WGSL).toContain('case CAMERA_PROJECTION_PANNINI:')
-    expect(PANORAMA_WGSL).toContain('TEXTURE_PROJECTION_EQUIRECTANGULAR')
+    expect(STRIPPED).toContain('case CAMERA_PROJECTION_LINEAR:')
+    expect(STRIPPED).toContain('case CAMERA_PROJECTION_CYLINDRICAL:')
+    expect(STRIPPED).toContain('case CAMERA_PROJECTION_PLANET:')
+    expect(STRIPPED).toContain('case CAMERA_PROJECTION_PANNINI:')
+    // A bare `TEXTURE_PROJECTION_EQUIRECTANGULAR` token check cannot catch a
+    // numeric-literal comparison: the generated constants block is prepended
+    // as code, so its `const TEXTURE_PROJECTION_EQUIRECTANGULAR` declaration
+    // satisfies it no matter what the comparison says. The needle is the
+    // comparison itself.
+    expect(STRIPPED).toContain('camera.texProjKind != TEXTURE_PROJECTION_EQUIRECTANGULAR')
     expect(PANORAMA_WGSL).not.toMatch(/case \d+u:/)
   })
 
