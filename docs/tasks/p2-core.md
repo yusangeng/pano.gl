@@ -1,6 +1,6 @@
 ---
 plan: docs/superpowers/plans/2026-09-19-p2-core.md
-scope: [src/core/**, src/renderer/shaders/**, scripts/gen-shader-constants.mjs, test/**, package.json]
+scope: [src/core/**, src/renderer/shaders/**, scripts/gen-shader-constants.mjs, test/**, package.json, tsconfig.json]
 verify: if [ -f scripts/gen-shader-constants.mjs ]; then npm run gen:shaders -- --check; fi && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: domain
 deps: [p0-freeze-baseline, p1-toolchain]
@@ -20,6 +20,8 @@ verify 里 `gen:shaders` 那条写成条件式是**自举悖论**：`scripts/gen
 `test/support/baseline.ts` 是纯函数（浏览器和 node 都能用），`baseline-node.ts` 才是读盘的那一半（`node:fs` / `path`）。P3 会另建 `test/integration/support/baseline-browser.ts` 走 `?url` + `fetch` + `createImageBitmap`，三份分工不要混。
 
 > **scope 修订（2026-09-20，协调侧补正）**：P1 质量审查发现 eslint 9 对未匹配的显式 pattern 硬错——P1 期间 `scripts/` 目录尚不存在，lint 行被临时改为 `eslint src test`，回补步骤（plan Task 1 Step 9a：lint 行加回 `scripts` 参数）落在 P2。`package.json` 因此补进 scope，属清单与 plan 步骤的对齐修正，不是执行期扩权。
+
+> **scope 修订（2026-09-20，协调侧补正·二，用户裁决选项 a）**：plan Task 1 Step 4 明文要求根 `tsconfig.json` 开 `"resolveJsonModule": true`（`constants.ts` 要 import `projection-kinds.json`）；且 plan 自带的测试代码读盘/起子进程（`constants.test.ts` 的 `node:child_process`、`baseline-node.ts` / `matrix-baseline.test.ts` 的 `node:fs` + `__dirname`）在当前 `types: ["@webgpu/types"]` 下编译不过——探针实证同时报 TS2307（`node:fs` 模块解析失败）与 TS2304（`__dirname` 未声明），需 `types` 数组补 `"node"`。`tsconfig.json` 因此进 scope，属清单与 plan 的对齐修正，不是执行期扩权；改动限上述两处。
 
 ## 完成报告
 
