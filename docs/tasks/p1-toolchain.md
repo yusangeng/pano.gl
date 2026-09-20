@@ -1,7 +1,7 @@
 ---
 plan: docs/superpowers/plans/2026-09-19-p1-toolchain.md
 scope: [package.json, package-lock.json, tsconfig.json, tsconfig.legacy.json, tsconfig.scripts.json, vitest.config.ts, vite.config.ts, eslint.config.js, .gitignore, .travis.yml, .github/workflows/**, scripts/legacy-build.mjs, src/diagnostics.ts, src/index.ts, test/**, demo/**, webpack/**, legacy/**]
-verify: if [ -f vitest.config.ts ]; then npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build; fi
+verify: if [ -f vitest.config.ts ]; then npm run typecheck && if [ -f eslint.config.js ]; then npm run lint; fi && npm run test:coverage && npm run test:integration && npm run build; fi
 bootstrap: npx playwright install chromium
 layer: foundation
 deps: [p0-freeze-baseline]
@@ -15,6 +15,8 @@ createdAt: 2026-09-19T08:51:52.237Z
 **这是本卡最容易做错的地方：** devDependencies 里是 `playwright`（`@vitest/browser-playwright` 的 peer），**不是 `@playwright/test`**；仓库里不应该出现 `playwright.config.ts`，也不应该有 `page.goto`。测试文件本身就跑在页面里，`import` 就是全部。凡是看到 `demo/test-entry.ts` / `PanoTestApi` / `window.__panoTest` / `demo/test-entry-hooks/`，那都是 P3 切换前的写法，见到就删，不要补建。
 
 verify 写成条件式是**自举悖论**：`vitest.config.ts` 是本卡自己产出的，合并前主分支上还没有它。条件为假时整条跳过，为真时整条跑 —— 所以 `test:integration` 在里面是安全的。
+
+> **lint 段二次条件化（2026-09-20，Task 6 质量审查整改发现）**：`eslint.config.js` 是 Task 9 Step 1 的交付物，而 verify 的外层条件开关（`vitest.config.ts` 存在）在 Task 7 就打开——若 lint 不加自己的守卫，Task 7 落地后、Task 9 落地前的每次交卷检查闸 6 必红（eslint 9 无 flat config 硬错，实测 exit 2）。处理与 `vitest.config.ts` 同款：lint 段套 `if [ -f eslint.config.js ]`，Task 9 落地 config 后条件永真，不再有窗口期。
 
 bootstrap 里的 `npx playwright install chromium` 不能省：默认的 chrome-headless-shell 没有 GPU 栈，`requestAdapter()` 返回 null，所有 WebGPU 测试会静默空跑 —— 两个守卫（`require-webgpu.ts` / `require-no-webgpu.ts`）就是为此而设，Task 8 Step 5 要求验证它们真的会拦人。
 
