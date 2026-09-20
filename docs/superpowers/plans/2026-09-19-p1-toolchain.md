@@ -451,6 +451,8 @@ git commit -m "task-p1-toolchain: build: vite lib mode producing self-contained 
 
 - [x] **Step 1: 写失败测试**
 
+> **（2026-09-20 Task 5 质量审查整改版）**：初版 5 个测试有三处强度缺口——①TSDoc 旗舰示例 `'pano:*,-pano:media'`（skip 模式）零覆盖；②undo 只从全关默认态测过，一个把 skip 状态清掉的坏 undo 也能通过；③`pano:` 命名空间前缀没钉住（test 1 只查对象键，`createDebug('pano:gpu')` 改名 `createDebug('gpu')` 后 suite 依然绿，而所有文档化的 `DEBUG=pano:*` 示例全断）。下方为补强后的 9 测试版（skip 模式、非默认先前态 undo、namespace 断言、垃圾模式 = 无效输入路径；test 4 顺带补 try/finally，与同文件其余测试一致，断言失败时不向后续测试泄漏已启用通道）。
+
 ```ts
 import { describe, it, expect } from 'vitest'
 import { channels, enableChannels } from '../../src/diagnostics'
@@ -459,6 +461,15 @@ describe('diagnostics', () => {
   it('exposes the trace channels the library actually uses', () => {
     expect(Object.keys(channels).sort()).toEqual(
       ['camera', 'gpu', 'input', 'media', 'renderer', 'viewer'].sort()
+    )
+  })
+
+  it('pins the pano: namespace prefix of every channel', () => {
+    // The prefix is the module's whole contract with the DEBUG environment:
+    // every documented example (DEBUG=pano:*) silently breaks if a channel
+    // drifts to a bare name, while the object-key test above stays green.
+    expect(Object.entries(channels).map(([, fn]) => fn.namespace).sort()).toEqual(
+      ['pano:camera', 'pano:gpu', 'pano:input', 'pano:media', 'pano:renderer', 'pano:viewer'].sort()
     )
   })
 
@@ -480,16 +491,60 @@ describe('diagnostics', () => {
     }
   })
 
+  it('honours skip patterns, as the documented DEBUG example promises', () => {
+    const restore = enableChannels('pano:*,-pano:media')
+    try {
+      expect(channels.gpu.enabled).toBe(true)
+      expect(channels.media.enabled).toBe(false)
+    } finally {
+      restore()
+    }
+  })
+
   it('restores the previous state when the returned undo runs', () => {
     const before = channels.gpu.enabled
     const restore = enableChannels('pano:*')
-    expect(channels.gpu.enabled).toBe(true)
-    restore()
+    try {
+      expect(channels.gpu.enabled).toBe(true)
+    } finally {
+      restore()
+    }
     expect(channels.gpu.enabled).toBe(before)
+  })
+
+  it('undo restores a partially-enabled previous state, not just all-off', () => {
+    // The discriminating case for the undo: previous state carries its own
+    // enable list. An undo that clobbers it (e.g. drops to all-off, or loses
+    // skip entries) passes the all-off round-trip above and fails only here.
+    const restoreFirst = enableChannels('pano:gpu')
+    try {
+      const restoreSecond = enableChannels('pano:*')
+      try {
+        expect(channels.media.enabled).toBe(true)
+      } finally {
+        restoreSecond()
+      }
+      expect(channels.gpu.enabled).toBe(true)
+      expect(channels.media.enabled).toBe(false)
+    } finally {
+      restoreFirst()
+    }
   })
 
   it('treats an empty pattern as enable nothing', () => {
     const restore = enableChannels('')
+    try {
+      expect(Object.values(channels).some(fn => fn.enabled)).toBe(false)
+    } finally {
+      restore()
+    }
+  })
+
+  it('treats an unparsable pattern as enable-nothing, not an error', () => {
+    // debug's parser silently ignores garbage; pin that inherited leniency
+    // so a future debug major that starts throwing shows up as a red test
+    // here rather than as a crashed host page later.
+    const restore = enableChannels('not a pattern!')
     try {
       expect(Object.values(channels).some(fn => fn.enabled)).toBe(false)
     } finally {
@@ -524,7 +579,8 @@ Expected: FAIL —— `Failed to resolve import "../../src/diagnostics"`
  *    not a control channel. If you find yourself grepping logs to decide what
  *    UI to show, the thing you want is an event.
  *
- * Usage from an application:
+ * Usage from an application (once P5 opens the public surface -- until then
+ * import from the module path directly):
  *
  *     import { enableChannels } from 'pano.gl'
  *     enableChannels('pano:gpu,pano:renderer')
@@ -572,16 +628,19 @@ export type ChannelName = keyof typeof channels
  * than per-instance. Returning the undo keeps tests from leaking an enabled
  * channel into the next test.
  *
+ * Enabling also persists through debug's own storage -- `process.env.DEBUG`
+ * in Node, localStorage in browsers -- so the setting survives page reloads.
+ * Inherited `debug` semantics, but surprising enough to an application
+ * developer to say out loud.
+ *
  * @param namespaces - A `debug` namespace pattern, e.g. `'pano:gpu'` or
- *   `'pano:*,-pano:media'`. An empty string enables nothing.
+ *   `'pano:*,-pano:media'`. An empty string enables nothing; an unparsable
+ *   string is silently treated the same way, exactly as `debug` does.
  * @returns A function restoring the enabled set that was in effect before.
  */
 export function enableChannels (namespaces: string): () => void {
   const previous = createDebug.disable()
   createDebug.enable(namespaces)
-  const enabled = createDebug.disable() ?? ''
-  createDebug.enable(previous)
-  createDebug.enable(enabled)
 
   return () => {
     createDebug.disable()
@@ -590,14 +649,16 @@ export function enableChannels (namespaces: string): () => void {
 }
 ```
 
-> **实现上的坑**：`debug` 没有「读当前 enable 列表」的公开 API。`disable()` 返回上一次的列表（这是它的既有行为），所以上面用了一次「取出 → 恢复 → 再设」的往返。若 `@types/debug` 把 `disable()` 标成 `void`，用 `(createDebug.disable as () => string | undefined)()` 取。
+> **实现上的坑**：`debug` 没有「读当前 enable 列表」的公开 API，`disable()` 返回上一次的列表（既有行为）是唯一读出口——`previous` 靠它捕获。undo 里的 `disable()` 不是死代码：`.enabled` 的 getter 只在内部 namespaces marker **变化**时重算，先 disable（marker 清空）再 enable(previous) 保证 marker 经历一次跳变、getter 必然重算；直接 `enable(previous)` 在 previous 与当前 marker 相同时可能不触发重算。若 `@types/debug` 把 `disable()` 标成 `void`，用 `(createDebug.disable as () => string)()` 取。
 
-> **第二个坑（2026-09-20 Task 5 落地实测，debug@4.4.3，主控复现确认）**：DEBUG 未设时，debug 的 Node 引擎在模块初始化跑 `enable(undefined)`，内部 marker 停在 `undefined`；而 `.enabled` 的 getter 只在 marker **变化**时重算（`undefined !== undefined` 为假），于是在第一次 `enable()`/`disable()` 之前，每个通道的 `.enabled` 读出来是 `undefined` 而非 `false`——「默认全静默」在可观测层面不成立，Step 1 的测试 2 因此红（`expected undefined to be false`，确定性复现，非 flaky）。修法是 import 后加一段归一化（已并入上方代码块）：`names`/`skips` 双空（= host 没给 DEBUG）时 `createDebug.enable('')`，把「什么都没开」显式化成可观测的 `false`；host 设了 DEBUG 则双空不成立、原样透传（实测 `DEBUG='pano:*,-pano:media'` 下归一化不触发）。备选——放宽断言为 falsy、或测试里强制清 env——分别弱化规格与绕环境，均不取。附带结论：`@types/debug@4.1.12` 把 `disable()` 标为 `() => string`，上方 `?? ''` 编译干净；4.4.3 运行时 `disable()` 经 `.join()` 重建串，实际不会返回 undefined，该守卫纯防御性。
+> **（2026-09-20 Task 5 质量审查整改）**：初版实现里 enable 后还有一次「disable 读回 → 恢复 previous → 再设 enabled」的三行往返——审查以 9 模式对照探针证明它与删除可观察等价（读回值无任何消费者，previous 一次捕获就够），纯维护成本，已删；同时删掉的还有 `?? ''` 守卫（`disable()` 经 `.join()` 重建串，实测永不返回 undefined，且它是 90% 分支门槛下的永久未覆盖分支）。行为不变的证明与探针记录见质量审查报告。
+
+> **第二个坑（2026-09-20 Task 5 落地实测，debug@4.4.3，主控复现确认）**：DEBUG 未设时，debug 的 Node 引擎在模块初始化跑 `enable(undefined)`，内部 marker 停在 `undefined`；而 `.enabled` 的 getter 只在 marker **变化**时重算（`undefined !== undefined` 为假），于是在第一次 `enable()`/`disable()` 之前，每个通道的 `.enabled` 读出来是 `undefined` 而非 `false`——「默认全静默」在可观测层面不成立，Step 1 的「默认静默」测试因此红（`expected undefined to be false`，确定性复现，非 flaky）。修法是 import 后加一段归一化（已并入上方代码块）：`names`/`skips` 双空（= host 没给 DEBUG）时 `createDebug.enable('')`，把「什么都没开」显式化成可观测的 `false`；host 设了 DEBUG 则双空不成立、原样透传（实测 `DEBUG='pano:*,-pano:media'` 下归一化不触发）。备选——放宽断言为 falsy、或测试里强制清 env——分别弱化规格与绕环境，均不取。附带结论：`@types/debug@4.1.12` 把 `disable()` 标为 `() => string`，与实现用法一致。
 
 - [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run test/unit/diagnostics.test.ts`
-Expected: 5 个测试 PASS
+Expected: 9 个测试 PASS
 
 - [x] **Step 5: Commit**
 
