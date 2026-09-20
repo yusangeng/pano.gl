@@ -48,7 +48,7 @@
     "test:integration": "vitest run --project integration --project no-webgpu",
     "test:coverage": "vitest run --project unit --coverage",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/integration && tsc --noEmit -p tsconfig.scripts.json",
-    "lint": "eslint src test \"demo/**/*.ts\"",
+    "lint": "eslint src test scripts \"demo/**/*.ts\"",
     "gen:shaders": "node scripts/gen-shader-constants.mjs",
     "start": "vite demo",
     "doc": "typedoc --out doc"
