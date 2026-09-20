@@ -57,18 +57,22 @@ describe('diagnostics', () => {
   })
 
   it('undo restores a partially-enabled previous state, not just all-off', () => {
-    // The discriminating case for the undo: previous state carries its own
-    // enable list. An undo that clobbers it (e.g. drops to all-off, or loses
-    // skip entries) passes the all-off round-trip above and fails only here.
-    const restoreFirst = enableChannels('pano:gpu')
+    // The discriminating case for the undo: the previous state carries a
+    // skip entry of its own. An undo that drops skips (rebuilds the previous
+    // list without its '-pano:media' term) or clobbers everything to all-off
+    // passes the all-off round-trip above and fails only here.
+    const restoreFirst = enableChannels('pano:*,-pano:media')
     try {
-      const restoreSecond = enableChannels('pano:*')
+      const restoreSecond = enableChannels('pano:camera')
       try {
-        expect(channels.media.enabled).toBe(true)
+        expect(channels.camera.enabled).toBe(true)
+        expect(channels.gpu.enabled).toBe(false)
       } finally {
         restoreSecond()
       }
       expect(channels.gpu.enabled).toBe(true)
+      // The skip entry must survive the undo: an undo that loses the
+      // '-pano:media' term leaves media on, and only this line catches it.
       expect(channels.media.enabled).toBe(false)
     } finally {
       restoreFirst()
