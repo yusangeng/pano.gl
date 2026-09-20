@@ -1,6 +1,6 @@
 ---
 plan: docs/superpowers/plans/2026-09-19-p1-toolchain.md
-scope: [package.json, package-lock.json, tsconfig.json, tsconfig.legacy.json, tsup.config.ts, vitest.config.ts, eslint.config.js, .travis.yml, .github/workflows/**, scripts/legacy-build.mjs, src/diagnostics.ts, src/index.ts, test/**, demo/**, webpack/**, legacy/**]
+scope: [package.json, package-lock.json, tsconfig.json, tsconfig.legacy.json, tsconfig.scripts.json, vitest.config.ts, vite.config.ts, eslint.config.js, .gitignore, .travis.yml, .github/workflows/**, scripts/legacy-build.mjs, src/diagnostics.ts, src/index.ts, test/**, demo/**, webpack/**, legacy/**]
 verify: if [ -f vitest.config.ts ]; then npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build && npm run build:legacy; fi
 bootstrap: npx playwright install chromium
 layer: foundation
@@ -19,6 +19,11 @@ verify 写成条件式是**自举悖论**：`vitest.config.ts` 是本卡自己�
 bootstrap 里的 `npx playwright install chromium` 不能省：默认的 chrome-headless-shell 没有 GPU 栈，`requestAdapter()` 返回 null，所有 WebGPU 测试会静默空跑 —— 两个守卫（`require-webgpu.ts` / `require-no-webgpu.ts`）就是为此而设，Task 8 Step 5 要求验证它们真的会拦人。
 
 `.travis.yml` 在这一卡删除（Task 9 Step 4），所以它必须在 scope 里 —— scope 是改动白名单，**删除也算改动**。
+
+> **scope 修订（2026-09-20，用户裁决 A）**：初版白名单与 plan 对不上，缺三处，已补入上方 scope：
+> ①② `tsconfig.scripts.json`（Task 6 建，scripts program）与 `.gitignore`（Task 8 改，补 `.vitest` 与 `dist`）——纯漏列，用户裁决直接授权补正；
+> ③ `vite.config.ts`（Task 4 建，库打包配置）——同日 vite 拍板（tsup → vite lib mode）改了 plan，清单没跟着同步，条目 `tsup.config.ts` 已随之替换。此项是执行补正时的复查发现，按同一裁决原则（清单跟定稿图纸对上）延伸处理，已单独向用户报备。
+> 均属清单与定稿 plan 的对齐修正，不是执行期扩权。
 
 ## 完成报告
 
