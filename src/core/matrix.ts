@@ -128,9 +128,10 @@ const LEGACY_QUAD_VIEW: readonly [
  * @param projection - The projection to build. `zoom` is *not* folded in here:
  *   all four shader paths apply it themselves, the linear path by widening the
  *   fov before this call.
- * @param depth - Which backend's depth clip range to produce. Ignored by the
- *   non-linear path -- both conventions put the far plane at `ndcZ = 1`, which is
- *   the only plane reconstruction reads, so one matrix serves both backends.
+ * @param depth - Which backend's depth clip range to produce. On the non-linear
+ *   path it changes only the near-plane encoding (entries 2 and 14); both
+ *   conventions put the far plane at `ndcZ = 1`, the only plane reconstruction
+ *   reads, so either matrix serves both backends.
  * @param out - Destination matrix.
  */
 export function buildProjection (
