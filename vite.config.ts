@@ -14,7 +14,12 @@ export default defineConfig({
       formats: ['es', 'cjs'],
       fileName: format => (format === 'es' ? 'index.js' : 'index.cjs')
     },
-    sourcemap: true
+    sourcemap: true,
+    // Lib mode minifies by default; tsup did not. The toolchain pivot must
+    // not silently flip recorded behavior, and an unminified bundle is the
+    // one a consumer can actually read in node_modules while debugging
+    // GPU math. (Task 4 quality review, 2026-09-20.)
+    minify: false
     // No rollupOptions.external: lib mode externalizes package.json
     // "dependencies" by default, so gl-matrix and debug are importable from
     // the consumer's own install -- which is what a library dependency list
