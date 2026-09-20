@@ -104,6 +104,20 @@ describe('exact output pins', () => {
     expect(uv.v).toBeCloseTo(0.5, 12)
   })
 
+  it('cylindrical zoom scales z before the TWO_PI multiply', () => {
+    // cam_proj_cylindrical(1, 0, 0.5) at povLongitude 350, zoom 0.5 -- 0.5
+    // and not 2, because the legacy CylindricalCamera clamps its zoom to
+    // [0.1, 1] (CylindricalCamera.js:69), so this is a reachable viewer
+    // state where 2 is not (planet and pannini clamp to [0.1, 2], which is
+    // why their zoom rows use 2). Halving the scaled z shifts theta by
+    // exactly a quarter turn, so u lands a quarter of a turn below the
+    // zoom-1 row's literal after the same negative wrap; v stays exactly 0.5.
+    const projection: Projection = { kind: 'cylindrical', zoom: 0.5, extent: [1, 1] }
+    const uv = project(1, 0, 0.5, { povLatitude: 0, povLongitude: 350 }, projection)
+    expect(uv.u).toBeCloseTo(0.32394247945915744, 12)
+    expect(uv.v).toBeCloseTo(0.5, 12)
+  })
+
   it('planet negates z, takes the Q>0 && P<0 fixup, and subtracts lng in degrees', () => {
     // cam_proj_planet(1, 0.3, 0.7) at povLongitude 90, zoom 1: the negated z
     // makes P negative while y keeps Q positive -- the Q>0 && P<0 branch --
@@ -233,11 +247,11 @@ describe('output range', () => {
   it('is finite just off the degenerate set, and the predicate skips only the degenerate points', () => {
     // Guard for isDegenerate's exactness, asserted OUTSIDE the sweep skip
     // logic: these are the points adjacent to the degenerate set -- on the
-    // y=0 line but off the centre for planet, off the degenerate ray of the
-    // x=0 plane for linear and pannini. atan of +-Infinity is a perfectly
-    // good angle, so they are finite; and isDegenerate must return false for
-    // them, or a widened predicate (say, planet's y === 0) would silently
-    // hide those lines from the sweeps above while nothing failed.
+    // y=0 and z=0 lines but off the centre for planet, in the x=0 plane but
+    // off the y axis for linear and pannini. atan of +-Infinity is a
+    // perfectly good angle, so they are finite; and isDegenerate must return
+    // false for them, or a widened predicate (say, planet's y === 0) would
+    // silently hide those lines from the sweeps above while nothing failed.
     const adjacent: Array<[Projection, number, number, number]> = [
       [{ kind: 'planet', zoom: 1, extent: [4, 4] }, 1, 0, 0.25],
       [{ kind: 'planet', zoom: 1, extent: [4, 4] }, 1, 0.25, 0],
