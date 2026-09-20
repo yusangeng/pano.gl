@@ -730,7 +730,7 @@ git add tsconfig.scripts.json package.json package-lock.json
 git commit -m "task-p1-toolchain: build: scripts typecheck program; drop the dead build:legacy script"
 ```
 
-- [ ] **Step 5: 质量审查整改（2026-09-20）**
+- [x] **Step 5: 质量审查整改（2026-09-20）**
 
 两条独立发现，各自单独 commit：
 
