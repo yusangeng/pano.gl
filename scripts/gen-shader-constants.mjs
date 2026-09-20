@@ -54,9 +54,12 @@ const wgsl = lines
   })
   .join('\n')
 
+// GLSL wants `#define NAME VALUE`. The intermediate's '=' separator becomes
+// that space -- emitting `NAME=VALUE` would make the macro body the token
+// `=1`, and every comparison against the constant a syntax error.
 const glsl = lines
   .filter(l => l.includes('='))
-  .map(l => `#define ${l}`)
+  .map(l => `#define ${l.replace('=', ' ')}`)
   .join('\n')
 
 /**

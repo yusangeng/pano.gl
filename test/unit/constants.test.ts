@@ -79,10 +79,10 @@ describe('generated shader constants', () => {
       const value = cameraProjectionCode(kind)
       const snake = kind.toUpperCase()
       expect(WGSL_CONSTANTS).toContain(`const CAMERA_PROJECTION_${snake}: u32 = ${value}u;`)
-      expect(GLSL_CONSTANTS).toContain(`#define CAMERA_PROJECTION_${snake}=${value}`)
+      expect(GLSL_CONSTANTS).toContain(`#define CAMERA_PROJECTION_${snake} ${value}`)
     }
     const tex = textureProjectionCode('equirectangular')
     expect(WGSL_CONSTANTS).toContain(`const TEXTURE_PROJECTION_EQUIRECTANGULAR: u32 = ${tex}u;`)
-    expect(GLSL_CONSTANTS).toContain(`#define TEXTURE_PROJECTION_EQUIRECTANGULAR=${tex}`)
+    expect(GLSL_CONSTANTS).toContain(`#define TEXTURE_PROJECTION_EQUIRECTANGULAR ${tex}`)
   })
 })
