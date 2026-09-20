@@ -4,7 +4,7 @@ scope: [tools/baseline/**, test/fixtures/baseline/**, .gitignore, docs/superpowe
 verify: if [ -f tools/baseline/verify-fixtures.mjs ]; then (cd tools/baseline && node verify-fixtures.mjs); fi
 bootstrap: (cd tools/baseline && npm install && npx playwright install chromium)
 layer: foundation
-state: reported
+state: rejected
 createdAt: 2026-09-19T08:51:52.107Z
 ---
 # 任务：P0 — 冻结基线
@@ -85,4 +85,34 @@ verify 写成条件式是**自举悖论**：`verify-fixtures.mjs` 是本卡自�
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：打回整改**（2026-09-20，superloop-verify 第 5 关）
+
+**手段**：gstack /review 全流程——主审 CRITICAL 清单（本 diff 无 SQL/竞态/LLM 信任/注入命中；枚举三张映射 EXPECTED/CARRIER/EXPECTS_ZOOM 由 states.mjs 单源驱动、四相机全覆盖）＋ 三专家子代理并行（testing / maintainability / 对抗，对抗侧自行在 /tmp 导出副本跑变异实验）＋ 最重发现逐条亲验（主审独立复现两场变异实验，与对抗侧互证）。
+
+**整改项（阻断，逐条编号）**：
+
+1. **uniforms.json 内容无完整性锚**（capture.mjs:88、fixtures.test.mjs:225；变异实证：cylindrical/tilt 的 `u_CamPOVLongitude` 20→999.5 后 13/13 仍绿，主审独立复现）。index.json 钉了 pngSha256/pngBytes，却没给本阶段**自述的主要产物**（uniform 流，P2 对拍与 F10/F11 结论的唯一载体）任何哈希。对账测试只查 camera/state 身份、帧数、名字集——永不查值。意外向量：JSON 重排、坏合并、Windows autocrlf 对 .json 的 LF→CRLF 静默改写（PNG 二进制免疫，JSON 不免疫）。**整改：每条 capture 记 `uniformsSha256`（对落盘文件字节），对账测试补断言。**
+2. **两个基线输入均无锚**（capture.mjs:88；亲验：套件对 source.png/bundle.js 零引用，index.json 无对应字段）。source.png 是 16 组捕获的唯一输入函数，bundle.js 是被测物本身（1.5MB、17k 行）——截断/换错/静默漂移零信号，直到下游 gate-a 以"渲染器代码问题"的假象爆红。捕获时你已人工逐像素核验 source.png（16384 像素）并核过 bundle 标记——缺的是可重跑的永久断言。**整改：index.json 记 `sourceSha256`/`bundleSha256`，对账断言。与 ① 同机制，一次改完。**
+3. **软件栅格器门放行 llvmpipe 族**（capture.mjs:70、fixtures.test.mjs:264；变异实证：renderer 字符串植入 `llvmpipe (LLVM 15.0.7, 256 bits)` 后 provenance 测试照过，主审静态核正则一致）。`/swiftshader|software/i` 不含 llvmpipe/lavapipe/SoftPipe——恰是 headless Linux CI 的默认软栅格，即该门存在的目标环境；README 声称"refuses … on a software rasterizer (SwiftShader *et al*)"宽于实际执行。且正则在两文件重复，违背 states.mjs 自己申明的共享谓词原则。**整改：扩充模式（llvmpipe/lavapipe/softpipe），谓词提入 states.mjs 单源，两处消费。**
+4. **对账单向，孤儿文件对 verify 隐形**（fixtures.test.mjs:215 只走 manifest→磁盘；capture.mjs:99 的清理循环只遍历现存 CAMERAS）。矩阵里改名/移除相机或状态后，旧 fixture 永久滞留且 verify 常绿——capture.mjs:91–96 的注释自己点名了这个失败模式，却只堵了一半。**整改：对账补磁盘方向——递归枚举 fixture 树，断言 磁盘文件集 == manifest 条目 + 静态白名单（index.json/README.md/bundle.js/source.png）。**
+5. **capture.mjs 对结构合法的垃圾帧 exit 0**（capture.mjs:129–133；机制亲验：probe.html:57 先记后调，上下文丢失时 wrapper 照录、readPixels 零填充，三帧互等的黑帧通过全部捕获侧断言）。steady-state 只比帧与帧，从不比内容；内容神谕（≥1000 distinct 色）只在 verify 里，而 README 与 verify-fixtures.mjs 的再生指引都止于 `node capture.mjs`——按文档再生的操作者信出口码即提交黑基线。上下文逐出（L1 死循环 + 16 不死 viewer 恰在 ~16 上限、零余量）使这是活场景而非假设。**整改：fail-closed——capture.mjs 末尾 spawn `verify-fixtures.mjs`（红即 exit 1），或驱动侧对每帧断言 distinct 色数。**
+
+**顺带整改（非阻断，可声明跳过，但在 worktree 里顺手）**：
+
+6. 驱动侧无超时（capture.mjs：全文无 setDefaultTimeout；页/GPU 进程楔死时 page.evaluate 永挂，无输出无 index.json 无失败）。`page.setDefaultTimeout` 或每 evaluate 加 race。
+7. probe 只钩三种 uniform setter（probe.html:45–47；亲验 v0.2.2 bundle 今日确只调这三种——这是面向未来的加固而非当下缺陷）。给其余 `uniform*` setter 打"未钩即抛"补丁，防未来 bundle 静默漏录。
+8. 帧数 `3` 三处硬编码（capture.mjs:16 命名 / probe.html:280 / fixtures.test.mjs:232）——提入 states.mjs，probe 走 `__CANVAS_SIZE__` 同款占位替换。
+9. 负面测试护栏 `{ skip: env === '1' ? … : false }`：变量若泄漏进外层 env 即静默跳过（node:test 只在 `# skipped` 计数里可见，无断言查零）。加 `# skipped 0` 断言或反转护栏语义。
+
+**接受留档（不改，理由如下）**：
+
+- maintainability 五条（注释"six tests"过期、FIXTURE_ROOT 双拼、路径拼法三套、pairwise 循环 DRY）：纯打磨，随 ⑧ 顺带可做，不据此阻断。
+- 对抗 8（16 不死上下文恰在上限、零余量）：事实成立，但 ⑤ 的内容断言已封死其可观测后果（黑帧必红）；卡片留档为再生时的已知边界即可。
+- decodePng 短扫描线容忍：① 落地后字节被 sha256 锚死，内容神谕兜底——维持执行者自审时的例外裁决。
+- 套件未接根 CI：P1 起工具链属主，本卡不动根包配置（卡片遗留风险 2 已声明）。
+
+**行为性声明核验**：测试套件于分支导出副本亲跑 **13/13 绿**、verify 包装出口码 0（自报"12/12"为 round-3 加测前旧计数，与你方叙述自洽）；四项根因（u_CamPOVLatitude 死 uniform、非线性 pose 只走 u_CamPOVLongitude、`% 25` 归约 45→20/180→5/300→0、单向缩放夹取致 cyl/planet zoomed==origin 逐字节）全部亲验吻合；u_CamTransMatrix 非线性跨 4 态恒定 / perspective 4 态各异实证；bundle 含 PanoGL 与内联 GLSL，1.49MB。
+
+**门禁证据复核**：47 个 diff 文件全在 scope 白名单；17/17 commit 前缀合规；自审三轮收敛真实（含双方变异验证，非自查充数）；覆盖陈述如实枚举了有网/无网路径——但"完整性锚定"的覆盖面判断存在系统性盲区（①②④的根因）：网只织到 PNG 就停了。这不是流程违规，是校准问题，供你方后续自审参考。
+
+**整改路径**：主检出 `task-claim` 认领（rejected→fixing）→ 进原 worktree 续干（分支已存在，**不跑 task-go**）→ 重读本卡 → ①–⑤ 必改、⑥–⑨ 顺带 → 全量重捕获（你方已证逐字节可复现，index.json 预期只增锚点字段与 capturedAt/renderer 复现）→ 自审两节更新（变异实验补：锚点篡改必红、llvmpipe 植入必红、黑帧必红）→ `task-finish` 交卷。复审时我将重跑上述三组变异实验。
