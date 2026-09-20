@@ -105,4 +105,23 @@ bootstrap 里的 `npx playwright install chromium` 不能省：默认的 chrome-
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve，合并。**（2026-09-20，superloop-verify 第 5 关）
+
+**手段**：协调者直审——卡面"最易做错"点位静态核查 ＋ 关键配置逐文件亲读（tsconfig / vitest / vite / package.json）＋ **verify 全链在分支树上亲跑一遍**（不采信自报）＋ 发布面 npm pack 亲验 ＋ P0 冻结物完好性核验 ＋ master 侧提交审计。按收窄编排：工具链卡的"变异"以亲跑与产物检视替代（其失效模式是配置静默漂移，不是数据篡改）。
+
+**亲验记录**：
+
+- **verify 全链 EXIT=0**：typecheck 三条腿 → lint → coverage（Statements 100% 8/8、Branches 100% 4/4，90 失败线之上）→ test:integration 浏览器模式（integration 2 文件 + no-webgpu 1 文件共 3 测试全绿——**双守卫双向实证**：真适配器环境通过、--disable-gpu 降级环境同样通过，即守卫两侧都真的在拦）→ build 成功。
+- **卡面红线全过**：无 `playwright.config.ts`、无 `page.goto`、devDep 是 `playwright` 而非 `@playwright/test`、无旧桥接残留（test-entry/hooks 均不存在）、`.travis.yml` 已删、README 无 travis 死徽章。
+- **配置亲读**：strict + noUncheckedIndexedAccess + verbatimModuleSyntax + exactOptionalPropertyTypes 全开；coverage 阈值 90 挂在**根配置**（配 scoping 注释，project 内不生效的坑已规避）；`channel:'chromium'` 与 CI swiftshader 双 flag 均带实测注释；dts `include`/`entryRoot` 双钉在案（必修 #1 整改可见）。
+- **发布面亲验**：`npm pack --dry-run` 包内容 = LICENSE + README + package.json + dist/（index.js/.cjs/.d.ts 及 maps、diagnostics.d.ts）——`files:["dist"]` 生效、dts 扁平落 dist 根（双钉修复的可见证据）、ESM+CJS 双格式、未压缩。
+- **P0 冻结物完好**：分支未触碰 `tools/` 与 `test/fixtures/`；.gitignore 增量仅 .vitest/__traces__/dist；P0 的 `verify-fixtures.mjs` 在分支树上亲跑全绿（skipped 0）。
+- **门禁证据**：57/57 commit 前缀合规；全部改动路径在 scope 白名单（含三次已裁决修订）；分支侧 plan 56/56 全勾；自审两节实质（10 任务 × 双段评审 + 终审 3 轮闭环，整改全部带 commit 映射）。
+
+**master 侧提交审计**（plan 预补 5 个 + 裁决 2 个 + 卡面修订 3 个）：均用户 git 身份、时间线与卡面两次用户裁决吻合、内容为 plan 勘误与卡面修订、卡面透明登记——按用户监督下的协调侧提交认定，不构成"执行者碰主分支"违规。
+
+**留档（非阻断）**：
+
+1. `npm run gen:shaders` 指向尚不存在的 `scripts/gen-shader-constants.mjs`（P2 交付物）——与 CLAUDE.md 头部"命令可能尚不存在"的迁移约定一致的前向引用，P2 落地即闭合，不改。
+2. 登记债务按登记处理：typedoc→P7、`.npmignore`→P7、VERSION 双写→P5、CLAUDE.md 重写→P7 Task 4、`tsconfig.legacy.json` tsserver 注记→P7。理由均成立。
+3. **合并期环境预热（协调者操作留痕）**：主检出原无新工具链依赖，保护⑥会在合并后因缺依赖而红且回退后陷入无法安装的循环——已按"环境/工具问题协调者自修 main 侧"预热线（借分支 lockfile `npm ci` 后原样归还 package.json/package-lock.json，主检出保持干净）。此为环境准备，不涉任何代码改动。
