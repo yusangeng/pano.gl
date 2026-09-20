@@ -497,8 +497,10 @@ describe('diagnostics', () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `npm run test:unit -- diagnostics`
+Run: `npx vitest run test/unit/diagnostics.test.ts`
 Expected: FAIL —— `Failed to resolve import "../../src/diagnostics"`
+
+> **为什么不是 `npm run test:unit`（2026-09-20 实测修正）**：该脚本是 `vitest run --project unit`，而 `unit` project 由 Task 7 的 vitest.config.ts 定义——此刻配置不存在，vitest 直接抛错退出（不是"跑不了测试"意义上的红）。直跑测试文件即可；**显式路径同时是必需的**：vitest 零配置的默认 glob 会扫到 `tools/baseline/fixtures.test.mjs`（P0 的 node:test 产物），把它当自己的测试文件拾进来报 no tests。Task 7 建好 unit project（include 锁定 `test/unit/**`）后，`npm run test:unit` 才成为正式入口。
 
 - [ ] **Step 3: 实现**
 
@@ -576,7 +578,7 @@ export function enableChannels (namespaces: string): () => void {
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `npm run test:unit -- diagnostics`
+Run: `npx vitest run test/unit/diagnostics.test.ts`
 Expected: 5 个测试 PASS
 
 - [ ] **Step 5: Commit**
