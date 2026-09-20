@@ -250,7 +250,7 @@ legacy build keeps its own dependencies until P7 deletes the code."
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "include": ["src/**/*.ts", "test/**/*.ts", "demo/**/*.ts"],
   "exclude": ["test/integration"]
 }
 ```
@@ -281,6 +281,8 @@ legacy build keeps its own dependencies until P7 deletes the code."
 `@webgpu/types` 需要装：把它加进 devDependencies。
 
 > **include 里没有 `scripts/**/*.mjs`，这是 2026-09-20 实测后的修正（Task 3 质量审查）**：`.mjs` 在 `allowJs` 关闭时根本不是可被 include 的扩展名——tsc 对它静默跳过（有 .ts 时）或 TS18003 硬错（只有它时）。原来写着的那个条目是**惰性假覆盖**：「typecheck 是绿的」对 scripts 什么都没说。修法沿用本 plan 已有的"一种环境一个 program"模式：`scripts/` 的 node 环境 .mjs 由 **Task 6** 建的 `tsconfig.scripts.json` 覆盖（`types: ["node"]`，届时装 `@types/node`——**不要**把 @types/node 加进根 types 数组，那会把 `process`/`Buffer` 全局泄进 `src/`，库里手滑写 `process.env` 也能编译）。在那之前 scripts/ 没有文件，也无需覆盖。
+
+> **include 增加 `"demo/**/*.ts"`（2026-09-20 勘误，Task 10 质量审查 I-1 协调侧裁决，落地见收尾整改 commit）**：Task 10 落地 `demo/main.ts` 后，demo 的第一方 TS 不在任何 tsc program 里——`vite demo` 的 esbuild 只转译不检查，根 program 的 include 又只有 `src/**` 与 `test/**`，lint 同样只圈 `src test`：往 `demo/main.ts` 注入一个类型错误，`npm run typecheck` 与 `npm run lint` 全绿（质量审查实测）。这是本 plan 已打过四次的「绿灯没有信息量」病的第五个实例——而 demo 恰是公开 API 的第一个消费者，最该被检查。原以为「P5 会把 demo 带进检查面」，查证不成立：P5 的 plan 与卡没有任何 demo 任务（协调侧已在 master 预补：P5 plan 增 Task 6「demo 接上真 viewer」、P5 卡 scope 增 `demo/**`）。**落点选根 program 而不是 scripts program**：P5 的 demo 将 `import '../src/index'`，链式拉进 `src/viewer/**` → `src/renderer/backend`，那里引用 `GPUDevice` 等 `@webgpu/types` 全局——scripts program 的 `types: ["node"]`（替换语义，不含 @webgpu/types）会红，P5 就得改 tsconfig.scripts.json 的 types 数组并越出自己的 scope；根 program 本就带 `@webgpu/types`，P5 零摩擦。根 program 的纪律是「不需要 vite/client」——demo 不破坏它：素材走 vite dev 的静态路径（`/image/...`），无 `?url` 导入。三个子 tsconfig（integration/scripts/legacy）各自显式声明了 include，不受根 include 变化影响。协调侧探针实测（2026-09-20）：本 include 下 `tsc --noEmit` exit 0；往 `demo/main.ts` 注入 `const x: number = 'not a number'` 即报 `demo/main.ts(18,7): error TS2322` 咬红。lint 半边见 Task 6 Step 5b 的注记。
 
 - [x] **Step 2: 写 legacy 的隔离配置**
 
@@ -745,7 +747,7 @@ git commit -m "task-p1-toolchain: build: pin @types/node to the Node 22 runtime 
 **5b — lint 行去掉 `scripts` 参数（审查相邻发现，越出 Task 6 原文但等不到 Task 9）**。Task 2 落地的 `"lint": "eslint src test scripts"` 里，`scripts/` 目录要到 P2 Task 1 才创建——eslint 9 对未匹配的显式 pattern 硬错（实测 `npm run lint` exit 2：`No files matching the pattern "scripts" were found`）。这不是「Task 9 跑 lint 时才发现」的问题：**Task 7 落地 vitest.config.ts 后本卡 verify（含 `npm run lint`）就会执行，闸 6 必红**。现在去掉参数，P2 建目录时加回——master 上的 P2 plan 已由协调侧预补回补步骤（其 Task 1 的 Step 9a）。
 
 ```json
-    "lint": "eslint src test",
+    "lint": "eslint src test \"demo/**/*.ts\"",
 ```
 
 ```bash
@@ -754,6 +756,8 @@ git commit -m "task-p1-toolchain: build: drop the scripts pattern from lint unti
 ```
 
 验证：`npx tsc --noEmit -p tsconfig.scripts.json` 仍 exit 0；`npm ls @types/node` 为 22.x；lint 的**失败点后移**——`npm run lint` 从 `No files matching the pattern "scripts" were found`（5b 所修的缺陷）变为 `couldn't find an eslint.config`（config 是 Task 9 Step 1 的交付物，此刻不存在属预期），exit 0 留给 Task 9 Step 2 验证。
+
+> **（2026-09-20 补 `"demo/**/*.ts"`，Task 10 质量审查 I-1；随 Task 10 收尾整改落地）**：上方 json 块由协调侧就地改为三段形态。demo 的 TS 要进 lint，与 5b 同理——「lint 是绿的」必须对 demo 有信息量。用引号包住的 **glob** 而不是裸 `demo`：demo/ 里还躺着 2017 遗产 JS（`Index.js`、`webpack.config.js`、`libs/` 的 jquery/modernizr/groundwork min 文件，P7 清理对象），裸目录会把它们卷进 neostandard 报出上千个错——它们与 `legacy/**` 同类，lint 只圈第一方 TS。协调侧探针实测：`eslint "demo/**/*.ts"` exit 0。P2 的 Step 9a 已在 master 侧预补为合并形态（`eslint src test scripts "demo/**/*.ts"`）。
 
 > **（措辞修正 2026-09-20，整改轮实测取证）**：本验证行初版写的「`npm run lint` exit 0」没有算到 `eslint.config.js` 尚不存在——pattern 校验先于 config 解析，pattern 修复后失败点后移到 config 缺失，exit 0 在 Task 9 之前不可能达成。连带修正：任务卡 verify 的 lint 段改为 `if [ -f eslint.config.js ]` 条件式（与 `vitest.config.ts` 的自举悖论处理同款）——否则 Task 7 打开 verify 条件开关后、Task 9 落地 config 前，交卷检查闸 6 必红。另：`npm i -D @types/node@^22` 会把 spec 规范化成 `^22.20.4`（npm 在解析版本上应用 save-prefix），与「对齐运行时大版本」的意图不符——手动改回 `"^22"` 并 `npm install --package-lock-only` 同步镜像，解析结果 22.20.4 不变。
 
