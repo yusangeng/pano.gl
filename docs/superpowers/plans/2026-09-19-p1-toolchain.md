@@ -1578,13 +1578,13 @@ git commit -m "docs(demo): minimal vite-served demo page"
 
 ## 完成标准
 
-- [ ] `npm run typecheck` 退出码 0
-- [ ] `npm run lint` 退出码 0
-- [ ] `npm run test:coverage` 通过，且**门槛已验证会拦人**（Task 7 Step 2）
-- [ ] `npm run build` 后 `node -e "import('./dist/index.js')"` 成功
-- [ ] `npm run test:integration` 通过（本机与 `CI=1` 两条路径都跑过），且**两个守卫都验证过会拦人**（Task 8 Step 5）
-- [ ] `legacy/` 已建立，`src/` 里没有任何旧代码
-- [ ] `.travis.yml` 已删除
+- [x] `npm run typecheck` 退出码 0
+- [x] `npm run lint` 退出码 0
+- [x] `npm run test:coverage` 通过，且**门槛已验证会拦人**（Task 7 Step 2）
+- [x] `npm run build` 后 `node -e "import('./dist/index.js')"` 成功
+- [x] `npm run test:integration` 通过（本机与 `CI=1` 两条路径都跑过），且**两个守卫都验证过会拦人**（Task 8 Step 5）
+- [x] `legacy/` 已建立，`src/` 里没有任何旧代码
+- [x] `.travis.yml` 已删除
 
 ## 交给下游的东西
 
