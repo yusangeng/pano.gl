@@ -1,6 +1,6 @@
 ---
 plan: docs/superpowers/plans/2026-09-19-p2-core.md
-scope: [src/core/**, src/renderer/shaders/**, scripts/gen-shader-constants.mjs, test/**]
+scope: [src/core/**, src/renderer/shaders/**, scripts/gen-shader-constants.mjs, test/**, package.json]
 verify: if [ -f scripts/gen-shader-constants.mjs ]; then npm run gen:shaders -- --check; fi && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: domain
 deps: [p0-freeze-baseline, p1-toolchain]
@@ -18,6 +18,8 @@ verify 里 `gen:shaders` 那条写成条件式是**自举悖论**：`scripts/gen
 **不要建 `src/core/index.ts` barrel。** P5 的前置依赖第 3 条点名禁止：barrel 会让「谁依赖谁」变得看不出来，而依赖方向是这套设计最在意的东西。
 
 `test/support/baseline.ts` 是纯函数（浏览器和 node 都能用），`baseline-node.ts` 才是读盘的那一半（`node:fs` / `path`）。P3 会另建 `test/integration/support/baseline-browser.ts` 走 `?url` + `fetch` + `createImageBitmap`，三份分工不要混。
+
+> **scope 修订（2026-09-20，协调侧补正）**：P1 质量审查发现 eslint 9 对未匹配的显式 pattern 硬错——P1 期间 `scripts/` 目录尚不存在，lint 行被临时改为 `eslint src test`，回补步骤（plan Task 1 Step 9a：lint 行加回 `scripts` 参数）落在 P2。`package.json` 因此补进 scope，属清单与 plan 步骤的对齐修正，不是执行期扩权。
 
 ## 完成报告
 
