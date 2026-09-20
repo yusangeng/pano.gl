@@ -58,6 +58,8 @@ jobs:
           # Assert each browser project executed tests: the verbose reporter
           # prefixes every test-result line with "|<project> (<browser>)|",
           # which stays correct even when P6 changes what no-webgpu includes.
+          # The "|project (browser)|" prefix only exists in non-color output;
+          # the `| tee` pipe guarantees no TTY, hence no color.
           for project in 'integration' 'no-webgpu'; do
             count=$(grep -cF "|$project (" integration-tests.log || true)
             if [ "$count" -eq 0 ]; then
@@ -72,9 +74,12 @@ jobs:
         if: failure()
         with:
           name: vitest-browser-artifacts
-          # Failure screenshots (always) and Playwright traces
-          # (browser.trace: 'retain-on-failure'). Both live under .vitest/.
+          # Failure screenshots (always) land under .vitest/attachments/;
+          # Playwright traces (browser.trace: 'retain-on-failure') land next
+          # to the test files under __traces__/, not under .vitest/.
           path: |
             .vitest/attachments/
             **/__traces__/
-          if-no-files-found: ignore
+          # warn, not ignore: a glob that drifts out of match must be visible,
+          # not a silently empty artifact on exactly the runs that need it.
+          if-no-files-found: warn
