@@ -1355,7 +1355,7 @@ provider factory. Neither reports an error; both are caught here."
 > ① **集成测试一步须以能透出 stdout 的 reporter 运行**（如 `--reporter=verbose`）。vitest 默认 reporter 不显示通过测试的 console.log（实测），`adapter: <vendor> <arch>` 日志在默认命令与 CI 下都不可见——而「机器滑向软渲染器时日志可见」正是该日志存在的理由，CI 是它每次运行都被看见的地方。
 > ② **ci.yml 须对两个 project 的测试数做断言**（跑完检查输出中 `integration` 与 `no-webgpu` 各至少含 1 个测试文件，或等价手段）。实测 include 空匹配时 vitest 静默 exit 0，结构上拦不住「project 静默跑零个测试」；P6 计划要改 no-webgpu 的 include，触发路径是现实日程。
 
-- [ ] **Step 1: 写 eslint 配置**
+- [x] **Step 1: 写 eslint 配置**
 
 ```js
 import neostandard from 'neostandard'
@@ -1385,12 +1385,12 @@ export default [
 
 > 选择 `neostandard` 而不是裸 eslint + 一堆插件：它就是把 standardjs 的规则以可维护的形式重新打包，和项目既有的无分号/单引号/2 空格风格一致。spec 里说的「match the surrounding code by hand」在有了 linter 之后可以自动化。
 
-- [ ] **Step 2: 跑 lint 并修**
+- [x] **Step 2: 跑 lint 并修**
 
 Run: `npm run lint`
 Expected: 退出码 0。若有报错，**修源码而不是加 ignore** —— 唯一的例外是 `legacy/`，它已经在 ignores 里。
 
-- [ ] **Step 3: 写 CI**
+- [x] **Step 3: 写 CI**
 
 `.github/workflows/ci.yml`：
 
@@ -1457,7 +1457,7 @@ jobs:
 
 > **（2026-09-20 用户裁决 II：CI 不设 legacy job。）** 本步的 yaml 里原本还有第三个 job——checkout 后跑 `npm run build:legacy`，守住「v0.2.x 全程可发版」；该约束废弃后 job 一并删除（见文件头部拍板变更 II）。旧版构建的保险是 git 历史：需要发 0.2.x hotfix 时 checkout 迁移前提交构建发布，Task 1 已实测本机 Node 22 能跑旧 webpack 构建。
 
-- [ ] **Step 4: 删掉 travis**
+- [x] **Step 4: 删掉 travis**
 
 ```bash
 git rm .travis.yml
@@ -1465,7 +1465,7 @@ git rm .travis.yml
 
 （它指向 Node 9，早已失效。）
 
-- [ ] **Step 5: 本地预演 CI**
+- [x] **Step 5: 本地预演 CI**
 
 ```bash
 npm run typecheck && npm run lint && npm run test:coverage && npm run build
@@ -1482,7 +1482,7 @@ Expected: PASS。
 （已实测：本机与 `CI=1` 两种路径下，集成测试均全绿。`CI=1` 用的是
 `google/swiftshader` 软件适配器。）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add eslint.config.js .github/workflows/ci.yml
