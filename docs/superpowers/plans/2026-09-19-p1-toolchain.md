@@ -867,7 +867,7 @@ git commit -m "test: vitest unit project with a 90% branch threshold that fails 
 1. Playwright 自带的 headless chromium **没有 GPU**（`channel: 'chromium'` 才指到带 GPU 的那个完整构建）。此时 `navigator.gpu` **存在**、`requestAdapter()` 返回 **null**、WebGL2 照常工作 —— 所以「测试跑过了」和「测试什么都没测」在输出上长得一模一样。
 2. **Vitest 5 的 `instances[].launch` / `instances[].context` 会被静默忽略** —— 见 Step 2 的说明。配置被吞掉不会有任何报错，你只是拿到了上面那个没 GPU 的浏览器。
 
-- [ ] **Step 1: 集成测试的 tsconfig，并把 typecheck 改成三条**
+- [x] **Step 1: 集成测试的 tsconfig，并把 typecheck 改成三条**
 
 `test/integration/tsconfig.json`：
 
@@ -901,7 +901,7 @@ dist
 
 > **`dist` 这一行是 Task 4 质量审查（2026-09-20）补的**：webpack 时代的 .gitignore 只 ignore `lib`/`.package`/`doc`/`wasm`，`dist` 从 Task 4 起产生却无人 ignore——原 plan 没有任何一步加它。Task 6 Step 3 会两次 `npm run build`，未跟踪的 `dist/` 会一直躺在工作区，任何一次手滑的 `git add -A` 都会把构建产物提进去。本步反正要开 .gitignore，一并补上。
 
-- [ ] **Step 2: 往 vitest.config.ts 里加两个 browser project**
+- [x] **Step 2: 往 vitest.config.ts 里加两个 browser project**
 
 ```ts
 import { defineConfig } from 'vitest/config'
@@ -1004,7 +1004,7 @@ export default defineConfig({
 
 **为什么两个环境是两个 project 而不是两个 instance**：launch 选项挂在 provider 层，同一个 provider 下的所有 instance 共用一套启动参数。想拿两套，只能两个 project。已实测。
 
-- [ ] **Step 3: 写两个守卫**
+- [x] **Step 3: 写两个守卫**
 
 守卫做成 **setup 文件**，不是「每个测试记得调一下的 helper」：setup 文件在 project 的每个测试文件之前自动跑，忘不掉。
 
@@ -1068,7 +1068,7 @@ beforeAll(async () => {
 })
 ```
 
-- [ ] **Step 4: 写像素回读原语**
+- [x] **Step 4: 写像素回读原语**
 
 `test/integration/support/canvas.ts`。P5 的每个 User Story 都靠它把「画面上有没有东西」变成断言，所以它自己必须先被证明过 —— Step 5 的冒烟测试就是那个证明。
 
@@ -1164,7 +1164,7 @@ export function countNonBlack (image: ImageData): number {
 }
 ```
 
-- [ ] **Step 5: 写两个冒烟测试**
+- [x] **Step 5: 写两个冒烟测试**
 
 `test/integration/smoke.test.ts`（跑在 `integration` project）：
 
@@ -1268,7 +1268,7 @@ test('this project really is the no-WebGPU one', () => {
 })
 ```
 
-- [ ] **Step 6: 跑，并证明守卫真的会拦人**
+- [x] **Step 6: 跑，并证明守卫真的会拦人**
 
 ```bash
 npx playwright install chromium && npm run test:integration
@@ -1296,7 +1296,7 @@ Expected: **同样的 FAIL**。这正是这条守卫最大的价值：这个配�
 
 （已实测：同样全红。）改回来。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add vitest.config.ts test/integration/tsconfig.json test/integration/ package.json .gitignore
