@@ -990,16 +990,9 @@ export function createPanoramaSampler (device: GPUDevice): GPUSampler {
 }
 ```
 
-> **`?raw` 是 Vite 的语法。** 它在 vitest 和 demo 里可用，但 **tsup 不认**。让 tsup 也认它的办法是在 `tsup.config.ts` 里加 esbuild 的 raw loader：
+> **（2026-09-20 勘误，P1 终末复审补遗 S1）** 本注原写「tsup 不认 `?raw`，需在 `tsup.config.ts` 加 esbuild 的 raw loader，并把 import 改成 `./panorama.wgsl`（无后缀）」。P1 已把库打包器裁决换为 **vite lib mode**（`build` = `vite build`，仓库无 tsup / tsup.config.ts），该办法作废：`?raw` 是 Vite 的原生约定，vitest、demo 与 `vite build`（lib mode）**全部直接支持，构建侧零配置**，上方代码的 `import panoramaSource from './panorama.wgsl?raw'` 原样成立、不要去掉后缀。
 >
-> ```ts
-> esbuildOptions (options) {
->   options.loader = { ...options.loader, '.wgsl': 'text' }
-> }
-> ```
-> 并把 import 改成 `import panoramaSource from './panorama.wgsl'`。
->
-> **两条路径都要验证**：`npm run test:unit`（vitest）与 `npm run build`（tsup）。**如果哪一边不认，说出来，不要改成把着色器内联进 TS** —— 那会牺牲着色器文件的语法高亮，而这是长期维护里最值钱的东西。
+> **两条路径都要验证**：`npm run test:unit`（vitest）与 `npm run build`（vite lib mode，随后 grep 产物，见 Step 5）。**如果哪一边不认，说出来，不要改成把着色器内联进 TS** —— 那会牺牲着色器文件的语法高亮，而这是长期维护里最值钱的东西。
 
 - [ ] **Step 4: 加一条着色器可编译性测试**
 
@@ -1118,13 +1111,13 @@ describe('panorama WGSL', () => {
 
 - [ ] **Step 5: 跑测试**
 
-Run: `npm run test:unit -- shaders && npm run build`
-Expected: 单元测试 PASS，且 tsup 构建成功（证明 `.wgsl` loader 配好了）
+Run: `npm run test:unit -- shaders && npm run build && grep -c "fn to_uv" dist/index.js`
+Expected: 单元测试 PASS；构建成功且 grep 输出 ≥ 1（`.wgsl` 源码经 `?raw` 真的进了产物，而不是被解析成外部资源引用）
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/renderer/webgpu/shaders/ test/unit/shaders.test.ts tsup.config.ts
+git add src/renderer/webgpu/shaders/ test/unit/shaders.test.ts
 git commit -m "feat(renderer): WGSL panorama shader over a single fullscreen triangle
 
 The vertex stage emits clip space from the vertex index alone. The fragment

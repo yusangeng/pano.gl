@@ -4,6 +4,8 @@
 
 > **（2026-09-20 登记，P1 终末全分支审查 MINOR 6；协调侧预补）**：`CLAUDE.md` 的 Commands 表与 Testing 节仍含 Playwright 时代的桥接写法（`npm run test:integration # playwright test`、`npx playwright test ...`、`playwright.config.ts`、`window.__panoTest` / `demo/test-entry-hooks`）。这些段落先于 P1 的 vitest 浏览器模式拍板、**已作废**：集成测试跑 vitest 浏览器模式、测试文件直接 import 被测代码、**没有桥**。本期的命令与测试约定（含门禁 C 的写法与 `no-webgpu` project 的用法）以本 plan 与任务卡为准，不以 CLAUDE.md 为准。CLAUDE.md 头部告示覆盖的是「还没造」，不覆盖「已废弃且现在要做相反的事」；该文件的重写归 P7 Task 4。
 
+> **（2026-09-20 登记，P1 终末复审补遗 S1；协调侧预补）**：P1 已把库打包器从 tsup 裁决换为 **vite lib mode**（`build` = `vite build`，仓库无 tsup / tsup.config.ts——本文旧版「P1 创建 tsup.config.ts」的前提为假，P1 创建的是 `vite.config.ts`）。本文凡涉及 tsup / `tsup.config.ts` / esbuild `?raw` 插件处均已按此勘误：`?raw` 是 Vite 原生约定，vitest、demo 与 `vite build`（lib mode）**全部直接支持，构建侧零配置**；构建侧验证 = `npm run build` 后 grep dist（Task 1 Step 5）。
+
 **Goal:** 第二个后端。四个投影在 WebGL2 下与 WebGPU 逐像素一致（门禁 C），P5 的全部用户故事在 WebGL2 下同样通过。
 
 **Architecture:** 同一个 `Backend` 接口的第二个实现。**着色器是转写的，不是生成的** —— 四个投影公式在两份源码里各写一遍，门禁 C 是它们不漂移的唯一保证。
@@ -38,7 +40,7 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 | `describeCapabilities` | P3 Task 1，`src/renderer/capabilities.ts` | 能力上报的唯一入口。**不要在这里重写它的钳位规则**，见下面「能力上报」 |
 | `PANORAMA_WGSL` 的**最终**形态 | P3 Task 3 + Task 8 Step 3 | P3 的 Task 8 会给三个非线性投影的 `phi` 加 `- lat` 并同步改 `src/core/reference.ts`。**转写 Task 3 的中间版本会漏掉纬度**，门禁 C 在非零纬度上立刻红 |
 | `src/core/reference.ts` | P2，P3 Task 8 Step 3 同步 | 门禁 C 的裁判。它必须和着色器同步读到 `povLatitude`，否则裁判自己就是错的 |
-| `?raw` 着色器导入通道 | P3 Task 3 的说明 + 本计划 Task 1 | vitest 与 demo 走 Vite 的 `?raw`；**tsup 走 esbuild，没有 `?raw` 这个约定**。缺 loader 会让 `npm run test:unit` 全绿而 `npm run build` 失败 |
+| `?raw` 着色器导入通道 | P3 Task 3 的说明 + 本计划 Task 1 | `?raw` 是 Vite 的原生约定，vitest、demo 与 `vite build`（lib mode）均直接支持，**构建侧零配置**；Task 1 Step 5 的「build 后 grep dist」把源码进产物钉成断言，防的是配置回归 |
 | P1 的 `integration` / `no-webgpu` 两个 project 与它们的守卫 | P1 Task 8 | 门禁 C 与后端冒烟测试都要求真适配器，由 `integration` 的 `require-webgpu.ts` 保证；降级测试跑在 `no-webgpu` 里，由 `require-no-webgpu.ts` 保证它**真的**没有适配器 |
 | `extent` 由调用方给 | P2 | `Projection` 的非线性分支带 `extent`（圆柱 1×1，planet/pannini 4×4）。它不在几何里，也不由后端推导 |
 | 浏览器模式的测试写法 | P3 / P4 / P5 | 测试文件本身就在页面里，直接 `import` 被测代码。**没有页面侧出口、没有 hook、没有 `window.__panoTest`** —— 本计划的 Task 3/4/6 全部照此办理 |
@@ -117,7 +119,6 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 
 | 文件 | 改动 | 归属 |
 |---|---|---|
-| `tsup.config.ts` | esbuild 的 `?raw` 插件（Task 1） | P1 创建，P3 已经在改同一个对象 |
 | `src/viewer/backend-factory.ts` | `createBackend` 加 WebGL2 分支（Task 3） | P5 |
 | `test/integration/support/spies.ts` | `countDraws` 同时包住两个后端的 `render`（Task 5） | P5 |
 | `vitest.config.ts` | `no-webgpu` project 的 `include` 扩到四个用户故事（Task 5） | P1 |
@@ -134,7 +135,6 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 **Files:**
 - Create: `src/renderer/webgl2/shaders/panorama.glsl`
 - Create: `src/renderer/webgl2/shaders/index.ts`
-- Modify: `tsup.config.ts`
 - Test: `test/unit/webgl2-shaders.test.ts`
 
 - [ ] **Step 1: 转写**
@@ -438,52 +438,11 @@ export const PANORAMA_GLSL_VERTEX = VERTEX_SOURCE
 export const PANORAMA_GLSL_FRAGMENT = FRAGMENT_SOURCE
 ```
 
-- [ ] **Step 2: 让 tsup 也认 `?raw`**
+- [ ] **Step 2: （已随 tsup → vite 裁撤——读一遍本注即可，无代码要写）**
 
-`?raw` 是 Vite 的约定（vitest 与 demo 都走 Vite）。**esbuild 没有这个约定** —— 它会把 `./panorama.glsl?raw` 当成一个真实的文件名去找，然后解析失败。所以 `npm run test:unit` 会通过而 `npm run build` 会失败，这是最难受的一种失败顺序。在 `tsup.config.ts` 里加一个 resolve 插件：
-
-```ts
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
-import { defineConfig, type Options } from 'tsup'
-
-/**
- * Vite's `?raw` suffix, for esbuild.
- *
- * The shaders live in real `.glsl` / `.wgsl` files so that editors highlight
- * them, and `?raw` is how the Vite-based builds (vitest, the demo) read one as
- * text. esbuild has no such convention, so without this plugin `tsup` looks for
- * a file named "panorama.glsl?raw" and fails -- while `npm run test:unit` stays
- * green. The query is stripped here and the file is loaded as text.
- *
- * A plain `loader: { '.glsl': 'text' }` does NOT work: the loader is chosen
- * after resolution, and resolution is what the query breaks.
- */
-function rawQueryPlugin (): NonNullable<Options['esbuildPlugins']>[number] {
-  const namespace = 'raw-query'
-
-  return {
-    name: 'raw-query',
-    setup (build) {
-      build.onResolve({ filter: /\?raw$/ }, args => ({
-        path: path.resolve(args.resolveDir, args.path.replace(/\?raw$/, '')),
-        namespace
-      }))
-      build.onLoad({ filter: /.*/, namespace }, async args => ({
-        contents: await readFile(args.path, 'utf8'),
-        loader: 'text'
-      }))
-    }
-  }
-}
-
-export default defineConfig({
-  // ...existing options unchanged...
-  esbuildPlugins: [rawQueryPlugin()]
-})
-```
-
-> 现在 `tsup` 与 `vite` 用**同一个 import 写法**（`from './x.glsl?raw'`）读同一份文件。**不要退回到把着色器内联进 TS**：那会牺牲着色器文件的语法高亮，而这是长期维护里最值钱的东西。
+> **（2026-09-20 勘误，P1 终末复审补遗 S1）** 本步原为「在 `tsup.config.ts` 里加 esbuild 的 `?raw` resolve 插件」（原注的理由：esbuild 会把 `./panorama.glsl?raw` 当真实文件名去解析，造出 `npm run test:unit` 全绿而 `npm run build` 失败的失败顺序）。P1 已把库打包器裁决换为 **vite lib mode**（`build` = `vite build`，仓库无 tsup / tsup.config.ts），本步整体作废：`?raw` 是 Vite 的原生约定，vitest、demo 与 `vite build` 全部直接支持，**构建侧零配置**——不存在要写的插件，也不存在要建的 `tsup.config.ts`（更不要把 tsup 装回来）。防配置回归的构建侧验证保留在 Step 5。
+>
+> 仍然成立的那条告诫：**不要退回到把着色器内联进 TS**——那会牺牲着色器文件的语法高亮，而这是长期维护里最值钱的东西。
 
 - [ ] **Step 3: 写结构与一致性测试**
 
@@ -648,7 +607,7 @@ Expected: 11 个测试 PASS
 
 - [ ] **Step 5: 证明构建也认这份着色器**
 
-`?raw` 的接线是否成立，单元测试证明不了 —— vitest 走 Vite，它当然认。这一步是唯一能证明 tsup 也认的地方：
+`?raw` 的接线是否成立，单元测试证明不了 —— vitest 走 Vite，它当然认；`vite build`（lib mode）走的是同一个 Vite，但这一步把「着色器源码真的进了产物」钉成断言，防的是 lib mode 资源处理的配置回归：
 
 ```bash
 npm run build
@@ -660,7 +619,7 @@ Expected: 构建成功，`grep` 输出 ≥ 1（着色器源码真的进了产物
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/renderer/webgl2/shaders/ test/unit/webgl2-shaders.test.ts tsup.config.ts
+git add src/renderer/webgl2/shaders/ test/unit/webgl2-shaders.test.ts
 git commit -m "feat(renderer): GLSL ES 3.00 transcription of the panorama shader
 
 Transcribed by hand from the post-Task-8 WGSL: the two languages are far
@@ -668,9 +627,9 @@ enough apart that a translator would be its own project, and a subtly wrong
 translator is worse than two files a human can read side by side. Gate C is
 what keeps them from drifting.
 
-The ?raw suffix is Vite's convention, so tsup gets a resolve plugin; an
-esbuild text loader alone would not work, because resolution is what the
-query breaks."
+The ?raw suffix is Vite's native convention, so vitest, the demo and
+vite build (lib mode) all read the file with no build-side plugin; the
+dist grep pins that the shader source really lands in the bundle."
 ```
 
 ---
