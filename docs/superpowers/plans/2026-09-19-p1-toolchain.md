@@ -753,7 +753,9 @@ git add package.json
 git commit -m "task-p1-toolchain: build: drop the scripts pattern from lint until the directory exists"
 ```
 
-验证：`npm run lint` exit 0；`npx tsc --noEmit -p tsconfig.scripts.json` 仍 exit 0；`npm i -D @types/node@^22` 后 lockfile 里 `@types/node` 为 22.x。
+验证：`npx tsc --noEmit -p tsconfig.scripts.json` 仍 exit 0；`npm ls @types/node` 为 22.x；lint 的**失败点后移**——`npm run lint` 从 `No files matching the pattern "scripts" were found`（5b 所修的缺陷）变为 `couldn't find an eslint.config`（config 是 Task 9 Step 1 的交付物，此刻不存在属预期），exit 0 留给 Task 9 Step 2 验证。
+
+> **（措辞修正 2026-09-20，整改轮实测取证）**：本验证行初版写的「`npm run lint` exit 0」没有算到 `eslint.config.js` 尚不存在——pattern 校验先于 config 解析，pattern 修复后失败点后移到 config 缺失，exit 0 在 Task 9 之前不可能达成。连带修正：任务卡 verify 的 lint 段改为 `if [ -f eslint.config.js ]` 条件式（与 `vitest.config.ts` 的自举悖论处理同款）——否则 Task 7 打开 verify 条件开关后、Task 9 落地 config 前，交卷检查闸 6 必红。另：`npm i -D @types/node@^22` 会把 spec 规范化成 `^22.20.4`（npm 在解析版本上应用 save-prefix），与「对齐运行时大版本」的意图不符——手动改回 `"^22"` 并 `npm install --package-lock-only` 同步镜像，解析结果 22.20.4 不变。
 
 ---
 
