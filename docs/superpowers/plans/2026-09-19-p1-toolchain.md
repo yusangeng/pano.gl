@@ -1507,7 +1507,7 @@ on a SwiftShader adapter since hosted runners have no GPU)."
 - Create: `demo/index.html`
 - Modify: `demo/webpack.config.js`（若 Task 1 未完全处理）
 
-- [ ] **Step 1: 写最小 demo 页**
+- [x] **Step 1: 写最小 demo 页**
 
 `demo/index.html`：
 
@@ -1532,7 +1532,7 @@ on a SwiftShader adapter since hosted runners have no GPU)."
 </html>
 ```
 
-- [ ] **Step 2: 写 demo 入口（此时只是占位）**
+- [x] **Step 2: 写 demo 入口（此时只是占位）**
 
 `demo/main.ts`：
 
@@ -1556,14 +1556,14 @@ note.textContent = `pano.gl ${VERSION} -- viewer lands in P5`
 host.appendChild(note)
 ```
 
-- [ ] **Step 3: 跑起来看一眼**
+- [x] **Step 3: 跑起来看一眼**
 
 Run: `npm start`
 Expected: Vite 起在 5173，页面显示 `pano.gl 1.0.0-alpha.0 -- viewer lands in P5`
 
 （用 `/browse` skill 打开确认，不要用 `mcp__claude-in-chrome__*`。）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add demo/index.html demo/main.ts
