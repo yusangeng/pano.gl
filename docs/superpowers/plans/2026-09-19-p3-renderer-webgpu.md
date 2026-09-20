@@ -375,7 +375,7 @@ git commit -m "feat(renderer): backend interface and a testable capability decis
 
 **背景**：WebGPU **没有 uniform 反射**（没有 `getUniformLocation` 的等价物）。JS 侧写错一个偏移，**不会报错，会静默读到垃圾**。所以布局必须由一份可测的描述驱动。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/unit/uniforms.test.ts`：
 
@@ -490,12 +490,12 @@ describe('packCameraUniforms', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- uniforms`
 Expected: FAIL —— 无法解析 `../../src/renderer/uniforms`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/renderer/uniforms.ts`：
 
@@ -607,12 +607,12 @@ export function packCameraUniforms (target: ArrayBuffer, values: CameraUniformVa
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- uniforms`
 Expected: 9 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/uniforms.ts test/unit/uniforms.test.ts
