@@ -1,10 +1,13 @@
 import { expect, test } from 'vitest'
-import { countNonBlack, readCanvas } from './support/canvas'
+import { countNonBlack, nextFrames, readCanvas } from './support/canvas'
 
 test('the browser has a real WebGPU adapter', async () => {
   // Non-null: require-webgpu.ts already asserted it. This test's job is to
   // report WHICH adapter, so a machine slipping to a software rasteriser is
-  // visible in the log rather than inferred from pixel tolerances later.
+  // visible in the log rather than inferred from pixel tolerances later --
+  // under a reporter that shows stdout. Vitest's default reporter swallows
+  // console.log from passing tests (measured, Task 8 quality review); the
+  // CI job (Task 9) is what makes this line visible on every run.
   const adapter = await navigator.gpu!.requestAdapter()
   // GPUAdapterInfo's fields are prototype getters on Chromium (measured on
   // 153 / playwright 1.63): JSON.stringify sees no own enumerable properties
@@ -77,7 +80,7 @@ test('a WebGPU canvas reads back as RGBA, after frames have passed', async () =>
   // Two frames, not one. The canvas is only presented after the submit has
   // been through the compositor, and reading inside the drawing task would
   // pass even if nothing were ever presented.
-  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+  await nextFrames(2)
 
   const image = await readCanvas(canvas)
   expect(countNonBlack(image), 'the canvas read back empty').toBe(image.width * image.height)
