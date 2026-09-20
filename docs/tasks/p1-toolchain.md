@@ -72,11 +72,36 @@ bootstrap 里的 `npx playwright install chromium` 不能省：默认的 chrome-
 
 ### CR 结论
 
-（执行者填：用了什么 review 手段（gstack review / codex review 等）、发现什么、整改了什么、循环了几轮）
+**手段**：superpowers:subagent-driven-development 双段评审（每 Task 先 spec 合规审查、后代码质量审查，T1–T10 共 10 轮 × 2 段，发现即整改即复审）＋ 终末全分支审查（独立评审 agent final-review-p1，独立上下文，审 `main...HEAD` 全量提交及与 master 侧 plan 的一致性）。
+
+**各级发现数与整改**：
+
+- 逐任务阶段：各 Task 质量审查发现均当场整改并复审通过。代表性整改：minify:false（eac9208）、unset-DEBUG 归一化（cddadbb）、测试强度（3907eb8+be30c41）、`__traces__` ignore 与 adapter-info getter（0129a5f+580cf61）、CI drifted-glob 可见性（d828aec）、lint fixtures ignore（0f1b30d）、demo 纳管根 program + 引号 glob（6c0b2aa+1fa3ca5）。
+- 终审第一轮 NEEDS_FIXES，共 CRITICAL 1 + IMPORTANT 3 + MINOR 3：
+  - CRITICAL #1 dts `include`/`entryRoot` 双钉缺失 → 分支侧 13fa5eb + 勘误计数 ff0e132；
+  - IMPORTANT #2 P2/P3 plan legacy 路径预补、#3 P7 plan tsup 残留 → master 侧协调提交 12d0143 / a9eac83 / cb34610；
+  - MINOR #4 typedoc 输出 `doc/`（36ef881）、#5 `tsconfig.legacy.json` 头注释（d764437）在分支侧；MINOR #6 CLAUDE.md 作废段落登记（94fa3f6）在 master 侧。
+- 终审第二轮复审：上述六项全部确认，新增 IMPORTANT S1（P3/P6 plan 的 tsup 残留）→ master 侧 04336ee（含勘误注记、tombstone 步、按语言选验证 token；残留 grep 命中仅存在于日期注记内，by design）。
+- 终审第三轮：**APPROVED**（判定基准 d764437；登记债务按登记处理——VERSION 双写→P5、`.npmignore`→P7、CLAUDE.md 重写→P7 Task 4）。
+
+**轮数**：终审 3 轮闭环（NEEDS_FIXES → 整改 → 复审新增 S1 → 整改 → APPROVED）；连同逐任务双段评审，全程 10 × 2 段 + 3 轮。
 
 ### 测试质量结论
 
-（执行者填：effective-testing 评估发现什么、整改了什么）
+**手段**：effective-testing 审查清单逐文件评估本卡全部变更测试（8 文件 +383 行，在最终提交树上通读）：`test/unit/diagnostics.test.ts`（9 条）、`test/unit/diagnostics.init.test.ts`（1 条）、`test/integration/smoke.test.ts`（2 条）、`test/integration/fallback/smoke.test.ts`（1 条）、守卫 `require-webgpu.ts` / `require-no-webgpu.ts`、支撑 `support/canvas.ts`、`test/integration/tsconfig.json`；覆盖率以 `npm run test:coverage` 为准（分支 ≥90% 是失败线，不是目标）。
+
+**发现与整改**：
+
+- 断言强度：diagnostics 用精确清单断言（toEqual 全量键表 / 命名空间表）加区分性用例——「undo 必须保留 skip 项」那条对丢 skip 的弱实现是唯一会红的用例（注释写明）；集成冒烟用精确像素 `[255,0,0,255]`（专抓通道交换）与全量非黑计数（专抓空读回）。唯一弱断言（adapter 信息 `toBeTruthy`）属有意设计：硬断言在守卫，日志可见性归 CI，注释已说明实测依据。无需整改项。
+- 负面路径：默认静默、skip 模式、空模式、不可解析模式、无适配器环境（守卫响亮红而非静默空跑）、WebGL2 缺失——单测层占比约四成；两个守卫整体就是负面路径护栏。
+- 依赖真实性：单元层仅 stub 环境变量（`vi.stubEnv`），debug 库真实运行；集成层真浏览器真适配器，无核心依赖 mock，无「伪装成单测的集成测试」。
+- 本轮评估 **0 条新增 CRITICAL / WARNING**；遗留观察均已在「风险」节记录（Task 9 M-2/M-3/M-4/M-6 规则集观察项、Task 8 Minor 8）。
+- 执行期已落地的测试整改：3907eb8+be30c41（Task 5 强度）、0129a5f+580cf61（Task 8）、d828aec+0f1b30d（Task 9）、6c0b2aa+1fa3ca5（Task 10）。
+
+**覆盖陈述**（改动触及的路径，哪些有测试网、哪些没有、为什么）：
+
+- **有网**：`src/diagnostics.ts` 行为面 9 条单测 + import 时序 1 条（独立文件隔离模块注册表，动态 import 前 stub DEBUG）；集成工具链端到端——双守卫钉环境前提，两条冒烟钉「配置-编译-绘制-提交-跨帧-读回」全链；`canvas.ts` 的 happy path（readCanvas / nextFrames / countNonBlack）由冒烟实际调用证明；`tsconfig.json` ×3 由 typecheck 三条腿证明，`vitest.config.ts` 由双 project 实际运行证明，`eslint.config.js` 由 lint 绿证明（含 fixtures ignore 生效）。
+- **没有网 + 理由**：① `canvas.ts` 异常分支（decode 失败、2D context 为 null、`maxChannelDiff` 尺寸不一致的 throw）——测试支撑代码，plan 把它的证明职责放在冒烟 happy path（Task 8 Minor 8，记录在案）；② 配置文件的分支行为（include glob 漂移等）无法在单元层表达，其失效模式由 CI 兜底（d828aec 的 `if-no-files-found: warn` 让 drifted-glob 可见 + project 计数断言）；③ `diagnostics.init` 的「nothing-enabled 归一化为 `''`」半边无直接断言——host-pattern 半边有直接测试，nothing-enabled 半边由「默认静默」测试在无 DEBUG 的运行环境观察（运行环境若泄漏 DEBUG 会响亮地红，属可见失效而非静默漂移）。
 
 ## 审查意见
 
