@@ -73,6 +73,84 @@ describe('homogeneity', () => {
   })
 })
 
+describe('exact output pins', () => {
+  /*
+   * Everything else in this file asserts a property -- a range, a homogeneity,
+   * a finiteness -- and a mutant that shifts every output by a constant can
+   * survive all of them. These are exact literals instead. They were derived
+   * by transcribing `legacy/shader/fshader.glsl` into a scratch script
+   * (from the GLSL text, NOT from src/core/reference.ts -- expectations
+   * generated from the code under test are an echo chamber that passes on any
+   * transcription error) and then cross-checked against a second independent
+   * transcription: the two agree to under 1e-15 on every literal below.
+   */
+  it('linear at x<0 applies the PI fixup after a plain atan', () => {
+    // cam_proj_linear(-1, 0.3, 0.7): atan(0.7 / -1) is negative and the x<0
+    // branch adds PI to land theta in the correct half. Linear reads neither
+    // the camera angles nor zoom, so the projection record is inert here.
+    const uv = project(-1, 0.3, 0.7, state, { kind: 'linear', fov: 1, aspect: 1 })
+    expect(uv.u).toBeCloseTo(0.40279994389289264, 12)
+    expect(uv.v).toBeCloseTo(0.5767104994935404, 12)
+  })
+
+  it('cylindrical scales z by zoom, subtracts the degree-mixed lng, and wraps negative', () => {
+    // cam_proj_cylindrical(1, 0, 0.5) at povLongitude 350, zoom 1: theta is
+    // 0.5 * TWO_PI - 350/4 = -84.358..., deeply negative, so u only lands in
+    // [0, 1) through wrap01's negative branch -- the seam behaviour. phi is
+    // atan(0) + HALF_PI = exactly PI/2, so v is exactly 0.5.
+    const projection: Projection = { kind: 'cylindrical', zoom: 1, extent: [1, 1] }
+    const uv = project(1, 0, 0.5, { povLatitude: 0, povLongitude: 350 }, projection)
+    expect(uv.u).toBeCloseTo(0.5739424794591574, 12)
+    expect(uv.v).toBeCloseTo(0.5, 12)
+  })
+
+  it('planet negates z, takes the Q>0 && P<0 fixup, and subtracts lng in degrees', () => {
+    // cam_proj_planet(1, 0.3, 0.7) at povLongitude 90, zoom 1: the negated z
+    // makes P negative while y keeps Q positive -- the Q>0 && P<0 branch --
+    // and theta then crosses zero through the -22.5 subtraction, exercising
+    // the negative wrap as well.
+    const projection: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }
+    const uv = project(1, 0.3, 0.7, { povLatitude: 0, povLongitude: 90 }, projection)
+    expect(uv.u).toBeCloseTo(0.23345430963693303, 12)
+    expect(uv.v).toBeCloseTo(0.41435639705845567, 12)
+  })
+
+  it('planet zoom moves v through m and leaves u untouched through P/Q', () => {
+    // Same input at zoom 2. P/Q is a ratio of zoom-scaled values, so theta --
+    // and therefore u -- is invariant, asserted against the SAME literal as
+    // the zoom-1 row; R = (m - 2)/m reads m = 1 + (zoom^2)(y^2 + z^2), so v
+    // moves. Dropping the zoom factor anywhere in this formula fails one of
+    // the two assertions.
+    const projection: Projection = { kind: 'planet', zoom: 2, extent: [4, 4] }
+    const uv = project(1, 0.3, 0.7, { povLatitude: 0, povLongitude: 90 }, projection)
+    expect(uv.u).toBeCloseTo(0.23345430963693303, 12)
+    expect(uv.v).toBeCloseTo(0.6301534806039966, 12)
+  })
+
+  it('pannini applies the x<0 fixup AFTER doubling theta', () => {
+    // cam_proj_pannini(-1, 0.3, 0.7) at povLongitude 90, zoom 1: theta is
+    // 2 * atan(-0.35) = -0.673... first, and only then does the x<0 branch
+    // add PI. This is the row an atan2 "simplification" gets wrong: atan2
+    // yields a different angle before the doubling, and the fixup then lands
+    // in another quadrant -- exactly the trap the module header warns about.
+    const projection: Projection = { kind: 'pannini', zoom: 1, extent: [4, 4] }
+    const uv = project(-1, 0.3, 0.7, { povLatitude: 0, povLongitude: 90 }, projection)
+    expect(uv.u).toBeCloseTo(0.8118468569924171, 12)
+    expect(uv.v).toBeCloseTo(0.5767104994935404, 12)
+  })
+
+  it('pannini zoom enters both the doubled atan and phi', () => {
+    // cam_proj_pannini(1, 0.3, 0.7) at povLongitude 90, zoom 2: z scales to
+    // 1.4, so theta = 2 * atan(0.7) with no fixup (x>0, z>0), and phi reads
+    // the scaled y against sqrt(x^2 + z^2) with the scaled z. Both halves of
+    // the formula see the zoom, so dropping it fails either assertion.
+    const projection: Projection = { kind: 'pannini', zoom: 2, extent: [4, 4] }
+    const uv = project(1, 0.3, 0.7, { povLatitude: 0, povLongitude: 90 }, projection)
+    expect(uv.u).toBeCloseTo(0.6134138926465695, 12)
+    expect(uv.v).toBeCloseTo(0.6068103096969111, 12)
+  })
+})
+
 describe('output range', () => {
   const projections: Projection[] = [
     { kind: 'linear', fov: 1, aspect: 1 },
@@ -150,6 +228,28 @@ describe('output range', () => {
     // Cylindrical divides by nothing that can be zero, even at the origin.
     const cylindrical: Projection = { kind: 'cylindrical', zoom: 1, extent: [1, 1] }
     expect(project(0, 0, 0, state, cylindrical).u).toBe(0)
+  })
+
+  it('is finite just off the degenerate set, and the predicate skips only the degenerate points', () => {
+    // Guard for isDegenerate's exactness, asserted OUTSIDE the sweep skip
+    // logic: these are the points adjacent to the degenerate set -- on the
+    // y=0 line but off the centre for planet, off the degenerate ray of the
+    // x=0 plane for linear and pannini. atan of +-Infinity is a perfectly
+    // good angle, so they are finite; and isDegenerate must return false for
+    // them, or a widened predicate (say, planet's y === 0) would silently
+    // hide those lines from the sweeps above while nothing failed.
+    const adjacent: Array<[Projection, number, number, number]> = [
+      [{ kind: 'planet', zoom: 1, extent: [4, 4] }, 1, 0, 0.25],
+      [{ kind: 'planet', zoom: 1, extent: [4, 4] }, 1, 0.25, 0],
+      [{ kind: 'linear', fov: 1, aspect: 1 }, 0, 0.3, 0.7],
+      [{ kind: 'pannini', zoom: 1, extent: [4, 4] }, 0, 0.3, 0.7]
+    ]
+    for (const [projection, x, y, z] of adjacent) {
+      const uv = project(x, y, z, state, projection)
+      expect(Number.isFinite(uv.u), `${projection.kind} (${x}, ${y}, ${z}) u`).toBe(true)
+      expect(Number.isFinite(uv.v), `${projection.kind} (${x}, ${y}, ${z}) v`).toBe(true)
+      expect(isDegenerate(projection.kind, x, y, z), `${projection.kind} (${x}, ${y}, ${z})`).toBe(false)
+    }
   })
 })
 
