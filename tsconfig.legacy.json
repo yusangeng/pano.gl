@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "checkJs": false, "allowJs": true, "noEmit": true },
+  "compilerOptions": { "checkJs": false, "allowJs": true, "declaration": false, "noEmit": true },
   "include": ["legacy/**/*.js"]
 }
