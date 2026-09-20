@@ -15,11 +15,11 @@
 
 import { channels } from '../../diagnostics'
 
-/** A device together with the promises it must be watched with. */
+/** A device together with the promise it must be watched with. */
 export interface AcquiredDevice {
   readonly adapter: GPUAdapter
   readonly device: GPUDevice
-  /** Resolves with the reason string when the device is lost. */
+  /** Resolves with `{ reason, message }` when the device is lost. */
   readonly lost: Promise<{ reason: string, message: string }>
 }
 
@@ -38,8 +38,14 @@ export async function withValidationScope<T> (
   fn: () => T | Promise<T>
 ): Promise<T> {
   device.pushErrorScope('validation')
+  // Exactly one pop per invocation, on every path. When the scope reports an
+  // error the throw below lands in the catch that was written for callback
+  // failures; without the flag it would pop a second time and steal the scope
+  // of an enclosing withValidationScope call.
+  let popped = false
   try {
     const result = await fn()
+    popped = true
     const error = await device.popErrorScope()
     if (error) {
       throw new Error(`WebGPU validation error during ${operation}: ${error.message}`)
@@ -49,7 +55,9 @@ export async function withValidationScope<T> (
     // The scope must come off the stack even when the callback threw.
     // A leaked scope shifts every later pop by one, so the next unrelated
     // operation reports this one's error -- or, worse, reports nothing.
-    await device.popErrorScope().catch(() => null)
+    if (!popped) {
+      await device.popErrorScope().catch(() => null)
+    }
     throw e
   }
 }
