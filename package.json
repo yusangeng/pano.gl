@@ -51,7 +51,7 @@
     "lint": "eslint src test \"demo/**/*.ts\"",
     "gen:shaders": "node scripts/gen-shader-constants.mjs",
     "start": "vite demo",
-    "doc": "typedoc"
+    "doc": "typedoc --out doc"
   },
   "dependencies": {
     "debug": "^4.4.3",
