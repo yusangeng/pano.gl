@@ -44,6 +44,29 @@ verify 写成条件式是**自举悖论**：`verify-fixtures.mjs` 是本卡自�
 3. `bundle.js`（1.5MB，v0.2.2 产物）占了交付字节的大头。它是「冻结 v0.2.2 渲染行为」的物证与重捕获前提，保留；若 P7 清理时判定可由重捕获产物替代，届时裁决。
 4. 【休眠，审查员留档】栅格器取证依赖 `WEBGL_debug_renderer_info`：若未来 Chromium 禁用该扩展，探针回退到 masked `gl.RENDERER` 的泛型字符串（"WebKit WebGL" 之类）——它可通过 `/swiftshader|software/i` 正则但不携带任何来源。信号是 `index.json` 的 `renderer` 字段**内容变模糊**（字段存在性测试不会红，这是设计而非漏洞）。处置：regeneration 时 renderer 出现在 diff 里即显式决策点，先查明扩展是否被禁用再决定基线动不动。今日 chromium 暴露该扩展，风险未激活。
 
+## 整改轮记录（2026-09-20，审查意见 ①–⑨）
+
+**阻断项 ①–⑤ 全部整改**：
+
+1. **uniform 流完整性锚**：每条 capture 记 `uniformsSha256`（对落盘文件字节），manifest 对账测试补断言。变异实证：`cylindrical/tilt` 的 `u_CamPOVLongitude` 20→999.5（协调者同款变异）→ 对账红，报 `uniforms.json on disk does not match index.json uniformsSha256`。
+2. **基线输入锚**：index.json 顶层记 `sourceSha256`/`bundleSha256`（bundle 改为 Buffer 读，路由注入与哈希同源字节），新增「the two baseline inputs are pinned」测试。变异实证：source.png 翻中间一字节 → 输入锚测试红。
+3. **软件栅格器谓词扩族并单源**：`isSoftwareRenderer` 提入 states.mjs（`/swiftshader|software|llvmpipe|lavapipe|softpipe/i`），capture.mjs 与 fixtures 测试共同消费，正则不再有两份拷贝。变异实证：renderer 植入 `llvmpipe (LLVM 15.0.7, 256 bits)` → provenance 测试红。README 措辞同步（不再声称宽于实际）。
+4. **对账补磁盘方向**：manifest 测试升级为「the manifest and the fixture tree agree, in both directions」——递归枚举 fixture 树，磁盘文件集必须 == manifest 条目 ∪ `STATIC_FIXTURE_FILES`（README.md/index.json/bundle.js/source.png，白名单同在 states.mjs 单源）。变异实证：植入 `perspective/ghost.png` → 双向对账红并**指名孤儿路径**。意外收获：该断言首跑即抓获整改实现自身的 walk bug（`path.relative` 误放递归每层，子目录相对串被相对 cwd resolve 成幻影路径）——修复后断言与实现互证。
+5. **capture 出口码 fail-closed**：capture.mjs 末尾 spawn `verify-fixtures.mjs`（剥 `NODE_TEST_CONTEXT`），suite 红即 `exit 1` 并明示 `capture completed but the fixture suite rejected the result`。README 再生指引同步声明出口码语义。端到端实证 ×2：第 8 次全量运行（walk bug 使 suite 红）capture 拒收自己的产物；黑帧变异（合法 143 字节纯黑 PNG + **同步篡改** pngSha256/pngBytes 骗过哈希对账）→ 唯内容神谕红（`only 1 distinct colours`）。
+
+**顺带项 ⑥–⑨ 一并整改**（未声明跳过）：
+
+6. 驱动侧超时：`page.setDefaultTimeout(60_000)`——GPU 进程楔死时不再无输出永挂。
+7. 未钩 setter 守卫：probe 对原型上**全部** `uniform*` 方法动态枚举，除已钩三种外，在录制 target 上调用即抛 `probe has no hook for <name>`；非 target（不死 viewer）透传。未来 bundle 若启用 `uniform4f` 等即刻炸响，不再静默半录。
+8. 帧数单源：`FRAMES_PER_CAPTURE` 入 states.mjs，capture/probe（`__FRAMES_PER_CAPTURE__` 占位，正向+反向校验防占位符丢失）/fixtures 测试三处消费。占位符校验重写为"源含 marker + 替换后无残留"双向（原单向校验是死码）。
+9. skipped-0 断言：verify-fixtures.mjs 改 pipe 收集 TAP，`status !== 0 || !/^# skipped 0$/m` 即红——`BASELINE_VERIFY_NEGATIVE_TEST` 泄漏进外层环境时，负面测试的静默 skip 变成响亮的闸 6 红（消息指明 unset 该变量）。负拷贝场景不受影响（空 manifests 本就 status 1，先走老分支）。
+
+**接受留档项确认不动**：maintainability 五条纯打磨（注释计数过期一条已随本套件 12→14 失效口径一并修正为不写死数字）、对抗 8（16 不死上下文零余量）以 ⑤ 的内容断言封死可观测后果、decodePng 短扫描线容忍维持原裁决、根 CI 归 P1。
+
+**自测结果**：第 8–11 次全量捕获（8 因 walk bug 被 ⑤ 机制当场拒收——机制本身的端到端红；9–11 全绿）。第 11 次终态：16/16、capture 内嵌 verify **14/14**、出口码 0；git diff 中 32 个数据文件与上轮提交**逐字节相同**，index.json 仅 +锚点字段与 capturedAt——第十次实证基线幂等可重推导。
+
+**整改中的失误如实记录**：变异实验恢复手段踩坑——对**未提交的新 index.json** 用 `git checkout --` 恢复会回到无锚点的 HEAD 版，造成 8/9 两测试假红；正确恢复手段是重跑 capture（幂等）。方法论留档：manifest 类未提交产物的变异恢复，一律走重跑生成器，不走 git。
+
 ## 自审记录
 
 ### CR 结论
