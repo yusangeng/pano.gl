@@ -2,7 +2,7 @@ var path = require('path')
 var BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin
 
 var config = {
-  entry: path.resolve(__dirname, '../src/index.js'),
+  entry: path.resolve(__dirname, '../legacy/index.js'),
   output: {
     library: 'PanoGL',
     libraryTarget: 'umd',
