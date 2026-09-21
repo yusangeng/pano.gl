@@ -4,7 +4,7 @@ scope: [src/renderer/**, src/core/reference.ts, test/unit/**, test/integration/*
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: foundation
 deps: [p2-core]
-state: reported
+state: rejected
 createdAt: 2026-09-19T08:51:52.509Z
 ---
 # 任务：P3 — renderer + WebGPU
@@ -123,3 +123,39 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：项目的规则
 1. **Task 3 Step 5 的 grep 证据结构性落空**（协调者验收时发现）：`grep -c "fn to_uv" dist/index.js` 在本卡树上必为 0——`src/index.ts` 仍是 P1 stub，`vite build` 只变换可达模块（实测输出「1 modules transformed」，dist/index.js 0.09 kB）。该步被勾选但无勘误块。vitest 侧（`shaders.test.ts` 的 `?raw` 断言）真实跑过、build 真实跑过，故不阻断本卡；但 **`?raw` 经 `vite build` 的通路从未被证明**，P1 S1 勘误「vite lib mode 全部直接支持」仍是 build 未证状态。**移交 P5 硬要求**：P5 接线 viewer → renderer 后，必须实际跑一次 dist 产物含着色器源的断言（grep 或等价物），并在卡面回填证据。
 2. npm audit 2 条 dev-only（brace-expansion HIGH / esbuild LOW）维持 P2 移交口径，处置待用户裁决。
 3. 下游移交风险 9 条（P4 version 契约、P6 门禁 C 硬要求、P6 复用纪律、N3/N4 残留等）均在卡面登记，属正常移交。
+
+4. **合并后 verify 红，已自动回退（2026-09-21T04:23:15.219Z）**：合并前主分支 verify 已证绿，红归因于本次合并；主分支已 reset 回 d2446bf（未 push，本地回退安全）。分支 feature/p3-renderer-webgpu 原样保留——按下方失败输出整改后重跑 task-finish 重新交卷。
+
+失败输出尾部：
+```
+For a stable experience, add the newly optimized dependencies to your config's `optimizeDeps.include` field manually.
+
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration (chromium)| test/integration/backend-smoke.test.ts [ test/integration/backend-smoke.test.ts ]
+Error: Failed to import test file /Users/yusangeng/workspace/pano.gl/test/integration/backend-smoke.test.ts
+Caused by: TypeError: Cannot read properties of undefined (reading 'config')
+ ❯ test/integration/backend-smoke.test.ts:11:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  |integration (chromium)| test/integration/gate-a-pixels.test.ts [ test/integration/gate-a-pixels.test.ts ]
+Error: Failed to import test file /Users/yusangeng/workspace/pano.gl/test/integration/gate-a-pixels.test.ts
+Caused by: TypeError: Cannot read properties of undefined (reading 'config')
+ ❯ test/integration/gate-a-pixels.test.ts:70:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  |integration (chromium)| test/integration/gate-b-projection.test.ts [ test/integration/gate-b-projection.test.ts ]
+Error: Failed to import test file /Users/yusangeng/workspace/pano.gl/test/integration/gate-b-projection.test.ts
+Caused by: TypeError: Failed to fetch dynamically imported module: http://localhost:63315/Users/yusangeng/workspace/pano.gl/test/integration/gate-b-projection.test.ts?import&browserv=1789964594469
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  |integration (chromium)| test/integration/uniform-layout.test.ts [ test/integration/uniform-layout.test.ts ]
+Error: Failed to import test file /Users/yusangeng/workspace/pano.gl/test/integration/uniform-layout.test.ts
+Caused by: TypeError: Cannot read properties of undefined (reading 'config')
+ ❯ test/integration/uniform-layout.test.ts:19:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+```
