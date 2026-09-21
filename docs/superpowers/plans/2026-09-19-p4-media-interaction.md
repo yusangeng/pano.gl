@@ -816,7 +816,7 @@ is what makes an upside-down source and a frozen pan both detectable."
 - Create: `src/media/image-source.ts`
 - Test: `test/integration/image-source.test.ts`
 
-- [ ] **Step 1: 写集成测试**
+- [x] **Step 1: 写集成测试**
 
 `test/integration/image-source.test.ts`：
 
@@ -887,7 +887,7 @@ describe('ImageSource', () => {
 >
 > **不要把它换成包装 `addEventListener`/`removeEventListener` 的全局计数。** `AbortController` 摘监听器时不调 `removeEventListener`，那样的计数会把一个已经清干净的源报成满的。
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 `src/media/image-source.ts`：
 
@@ -1030,17 +1030,23 @@ export class ImageSource extends Disposable implements MediaSource {
 }
 ```
 
-- [ ] **Step 3: 跑测试**
+- [x] **Step 3: 跑测试**
 
 Run: `npm run test:integration -- image-source`
 Expected: 4 个测试 PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/media/image-source.ts test/integration/image-source.test.ts
 git commit -m "feat(media): image source with abortable listeners and a load-state guard"
 ```
+
+> **（2026-09-21 登记，Task 3 勘误与质量审查，落地于 83a8fde / b67c1f1 / 43105a6）**
+> 1. **覆盖率兜底（83a8fde，走卡内预写路径）**：`image-source.ts` 入库后 `test:coverage` 红（Stmts 89.84 / Branches 86.66 / Funcs 85.91 / Lines 90.52）——该类每条路径都要真实 `<img>` 与浏览器事件，node 项目执行不到，浏览器项目不报覆盖率。按任务卡「确实测不到才加 exclude 并写明理由」：`vitest.config.ts` 追加该文件至 coverage exclude，附 8 行英文理由（mock DOM 只会把作者假设回放成「测试」）；thresholds 未动，全仓回到基线 99.13 / 97.94 / 100 / 99.69。实现代码零偏离：plan 的 image-source.ts 与测试经 /tmp 转写 `cmp` 逐字节核对相同（136 + 61 行）。
+> 2. **质量审查补测（b67c1f1）**：变异测试（14 个变异体，6 杀 8 活）证明 plan 自带 4 条测试有六类行为未被观测（代码正确，测试因错误理由通过）：dispose 的 `abort()`（僵尸监听仍向新订阅者派发）、`maxTextureDimension` 选项与 `uploadScale` getter（零覆盖，回归即超限上传撞设备校验——正是 downscale 要防的）、media-error 载荷（`error`/`target` 是公开 API）、`markFramePresented` 的 no-op 与 `version === 1` 精确值（回归即每渲染帧重传纹理）、dispose 的 `src=''` 释放（回归即已销毁源永远可上传）。补 3 条新测试 + 原测试内 3 处加固断言（7/7）；测试 4 更名「dispose zeroes the listener count」——原名声称了断言没测的事。复审重放：六个存活非等价变异体（M3/M5/M7/M8a/M9/M10）全灭、各命中设计断言、零误杀。
+> 3. **注释修正（b67c1f1 / 43105a6）**：`u_TexProjType` 这个 uniform 不存在（真实链路 `textureProjectionCode` → 相机 uniform 的 `texProjKind` 字段，uniforms.ts:46 / panorama.wgsl:25；stale 名承自 constants.ts:57，属 P3 遗留不在本 diff）；「Uploads exactly once.」→「Uploaded exactly once.」（类不上传任何东西，上传的是后端，且只传一次，因为 version 只动一次）；`listenerCount` TSDoc 两轮修正：计数随 abort 手工归零，认证的是「dispose 跑了」而非「监听器已摘」，其独有可观测物是监听器簿记——「did dispose run」由继承的 `isDisposed` 公开回答。
+> 4. **等价变异体裁定（登记不测）**：M1c（无条件 bump：img 只发 `load`，分歧态经 `frame`（0×0 抛出）公开不可读）；M6（删 `crossOrigin`：击杀需第二源 + ACAO 头，同源 fixture 下不可分，跨源污染会在 gate 层暴露）；8192 **默认值**不补钉（需 >8192px 素材，与选项路径已钉的精度不成比例——控制器裁定）；M8b（scale↔width 互换）被 M8a 的 `toBe(0.5)` 击杀吸收。
 
 ---
 
