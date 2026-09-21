@@ -122,9 +122,10 @@ export class VideoSource extends Disposable implements MediaSource {
    * cap on draw calls; v1 has no such cap (a cap is a fixed-rate loop pretending
    * to be a reactive one), so the bound has to come from the video's own state.
    *
-   * `ended` and not only `paused`: they are separate properties, `ended` stays
-   * true after the last frame, and reading `paused` alone would leave a finished
-   * video re-uploading at the refresh rate.
+   * `ended` and not only `paused`: they are separate properties and `ended`
+   * stays true after the last frame. Chromium sets `paused` at the end too
+   * (measured), so this term is defensive there; an engine that left `paused`
+   * false would otherwise re-upload at the refresh rate.
    *
    * The cost of reading the element here is one property read per drawn frame,
    * and the alternative -- a timer, or a `requestVideoFrameCallback` -- would
@@ -160,8 +161,9 @@ export class VideoSource extends Disposable implements MediaSource {
   get frame (): MediaFrame {
     const { videoWidth: w, videoHeight: h } = this.#element
     if (w === 0 || h === 0) {
-      // `HAVE_NOTHING`/`HAVE_METADATA` report 0x0. Creating a texture from that
-      // is a validation error whose message says nothing about metadata.
+      // `HAVE_NOTHING` reports 0x0; `loadedmetadata` is what changes that.
+      // Creating a texture from that is a validation error whose message says
+      // nothing about metadata.
       throw new Error('video source metadata has not loaded yet')
     }
     const plan = planDownscale(w, h, this.#options.maxTextureDimension)
@@ -206,8 +208,8 @@ export class VideoSource extends Disposable implements MediaSource {
     this.#abort.abort()
     this.#listenerCount = 0
     this.#events.removeAllListeners()
-    // Stop decoding and release the network. Without pause() first, removing
-    // the src leaves a video that keeps buffering in the background.
+    // Stop decoding and release the network. `pause()`, then the `load()`
+    // algorithm -- which aborts any in-flight fetch and resets the element.
     this.#element.pause()
     this.#element.removeAttribute('src')
     this.#element.load()

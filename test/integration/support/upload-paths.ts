@@ -89,10 +89,10 @@ export async function renderVideoBothPaths (
   video.muted = true
   video.src = url
   // `loadeddata`, not `loadedmetadata`: metadata describes the size while
-  // `loadeddata` is the first event that guarantees there is a frame to
-  // sample. A paused frame is also what makes the two paths comparable --
-  // there is exactly one frame in play, so a difference is orientation rather
-  // than timing.
+  // `loadeddata` is the first event that guarantees a frame exists at all. A
+  // paused frame is also what makes the two paths comparable -- there is
+  // exactly one frame in play, so a difference is orientation rather than
+  // timing.
   await new Promise((resolve, reject) => {
     video.addEventListener('loadeddata', resolve, { once: true })
     video.addEventListener('error', () => reject(new Error(`video failed: ${url}`)), { once: true })
