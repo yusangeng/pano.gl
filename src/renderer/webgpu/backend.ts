@@ -504,7 +504,11 @@ export class WebGPUBackend implements Backend {
               label: 'source',
               size: { width: source.state.width, height: source.state.height },
               format: TARGET_FORMAT,
-              usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+              // RENDER_ATTACHMENT is required by copyExternalImageToTexture (the
+              // spec spells the copy as a blit) even though this texture is
+              // never rendered into -- dropping it gets the whole command
+              // buffer rejected, silently, frame after frame.
+              usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
             })
             // The bind group holds the old texture, so a reallocation invalidates
             // it. Dropping the reference is enough; it is garbage collected.

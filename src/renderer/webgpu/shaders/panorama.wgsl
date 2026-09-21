@@ -81,10 +81,15 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOut {
 //
 //   1. `fract` is applied to u. The legacy shader did no wrapping at all -- it
 //      handed `texture2D` a raw ratio and the texture object's default REPEAT
-//      wrap did the work. Wrapping is done explicitly here instead, because the
-//      external-texture entry point below has no wrap-capable sampler
-//      (`textureSampleBaseClampToEdge` clamps). Doing it in the shader means
-//      both source paths wrap identically.
+//      wrap did the work. `fract` stands in for that wrapping because the
+//      external-texture entry point below samples through
+//      `textureSampleBaseClampToEdge`, which cannot wrap at all. For the still
+//      path `fract` is redundant -- the sampler's own repeat address mode
+//      handles any u -- but harmless, and what the sampler adds over `fract`
+//      is the LINEAR blend across the seam that clamp-to-edge cannot express
+//      (see sampler.ts). The two paths therefore differ by one boundary blend
+//      at the seam and the v poles, video being the clamped one: an API limit
+//      of its entry point, not a decision to treat it differently.
 //
 //      `fract` and not `%`: WGSL's `%` truncates toward zero while `fract` is
 //      `x - floor(x)`, matching GLSL's `mod`. `%` would put a seam in the
