@@ -25,9 +25,10 @@ export default defineConfig({
         // author's assumptions back instead of testing anything. They are
         // exercised by the browser integration project, which does not report
         // coverage; excluding them here keeps this gate about code the node
-        // project can genuinely reach. video-source.ts and input-controller.ts
-        // join this list when they land, same rule.
-        'src/media/image-source.ts'
+        // project can genuinely reach. input-controller.ts joins this list when
+        // it lands, same rule.
+        'src/media/image-source.ts',
+        'src/media/video-source.ts'
       ],
       thresholds: {
         branches: 90,
