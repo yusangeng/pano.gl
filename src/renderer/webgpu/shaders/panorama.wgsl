@@ -121,6 +121,13 @@ fn to_uv(theta: f32, phi: f32) -> vec2f {
  *     `2 * atan(b/a)` and `atan2` then `* 2` land in different quadrants.
  *   - Nothing wraps `theta`. Wrapping is the sampler's job.
  *
+ * One thing that is a departure rather than a transcription: the `- lat` term
+ * in the three non-linear projections' `phi`. v0.2.2 read latitude nowhere on
+ * these cameras -- the shader declared `u_CamPOVLatitude` and never read it,
+ * and the viewer never uploaded it either (defect F5) -- so there is nothing
+ * to transcribe. Making latitude work is v1's one deliberate behaviour change
+ * here, pinned by gate B.
+ *
  * Keep all four in the same shape as the reference so the two can be read side
  * by side.
  */
@@ -149,7 +156,7 @@ fn project_linear(s: vec3f) -> vec2f {
  * needing to know the extent.
  */
 
-fn project_cylindrical(s: vec3f, zoom: f32, lng: f32) -> vec2f {
+fn project_cylindrical(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
   // `s.x` is deliberately unread, exactly as in the legacy shader, where the
   // quad pinned it at 1. See `project_pannini` for the one projection that
   // does read it.
@@ -157,11 +164,11 @@ fn project_cylindrical(s: vec3f, zoom: f32, lng: f32) -> vec2f {
   let z = s.z * zoom;
 
   let theta = z * TWO_PI - lng;
-  let phi = atan(y) + HALF_PI;
+  let phi = atan(y) + HALF_PI - lat;
   return to_uv(theta, phi);
 }
 
-fn project_planet(s: vec3f, zoom: f32, lng: f32) -> vec2f {
+fn project_planet(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
   let y = s.y * zoom;
   // The negation is in the legacy shader and is easy to drop. Without it the
   // planet projection renders mirrored and inside out.
@@ -183,11 +190,11 @@ fn project_planet(s: vec3f, zoom: f32, lng: f32) -> vec2f {
 
   theta -= lng;
 
-  let phi = atan(r / sqrt(p * p + q * q)) + HALF_PI;
+  let phi = atan(r / sqrt(p * p + q * q)) + HALF_PI - lat;
   return to_uv(theta, phi);
 }
 
-fn project_pannini(s: vec3f, zoom: f32, lng: f32) -> vec2f {
+fn project_pannini(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
   let y = s.y * zoom;
   let z = s.z * zoom;
 
@@ -207,7 +214,7 @@ fn project_pannini(s: vec3f, zoom: f32, lng: f32) -> vec2f {
 
   theta -= lng;
 
-  let phi = atan(y / sqrt(s.x * s.x + z * z)) + HALF_PI;
+  let phi = atan(y / sqrt(s.x * s.x + z * z)) + HALF_PI - lat;
   return to_uv(theta, phi);
 }
 
@@ -237,18 +244,19 @@ fn panorama_uv(ndc: vec2f) -> vec2f {
   // consequence.
   let lng = camera.povLongitude / 4.0;
 
-  // `povLatitude` is read by nothing here. That is not an omission: the legacy
-  // non-linear cameras ignored latitude too (defect F5), and reproducing that is
-  // this phase's acceptance criterion. Task 8 Step 3 of this plan makes it a
-  // deliberate, separately-tested behaviour change -- not a later phase's job.
-  // It stays in the struct because removing
-  // it would move every uniform offset after it, and that layout belongs to P2.
+  // Unlike `lng` above, this one is a real degrees-to-radians conversion.
+  // Latitude is the F5 fix, not a preserved bug: v0.2.2's non-linear cameras
+  // ignored it entirely (the shader never read `u_CamPOVLatitude`, and the
+  // viewer never uploaded it), so there is no legacy behaviour to reproduce
+  // and the term is born with correct units. Gate B pins the new behaviour.
+  let lat = camera.povLatitude * PI / 180.0;
+
   var uv: vec2f;
   switch camera.projKind {
     case CAMERA_PROJECTION_LINEAR: { uv = project_linear(surface); }
-    case CAMERA_PROJECTION_CYLINDRICAL: { uv = project_cylindrical(surface, camera.zoom, lng); }
-    case CAMERA_PROJECTION_PLANET: { uv = project_planet(surface, camera.zoom, lng); }
-    case CAMERA_PROJECTION_PANNINI: { uv = project_pannini(surface, camera.zoom, lng); }
+    case CAMERA_PROJECTION_CYLINDRICAL: { uv = project_cylindrical(surface, camera.zoom, lng, lat); }
+    case CAMERA_PROJECTION_PLANET: { uv = project_planet(surface, camera.zoom, lng, lat); }
+    case CAMERA_PROJECTION_PANNINI: { uv = project_pannini(surface, camera.zoom, lng, lat); }
     // WGSL requires a `switch` to be exhaustive. This is the one place a silent
     // fallback is allowed, because `projKind` can only come from the generated
     // constants above.
