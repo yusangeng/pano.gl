@@ -3,7 +3,7 @@
  * kind of element it is.
  *
  * The snapshot design matters for one specific reason: a video frame is only
- * valid inside the microtask that produced it. WebGPU's `importExternalTexture`
+ * valid inside the task that produced it. WebGPU's `importExternalTexture`
  * is destroyed at the end of the current task and a bind group holding one does
  * NOT keep it alive. So the renderer must never store the source beyond the
  * frame it is drawing, and the type says so -- a frame is a plain snapshot of
