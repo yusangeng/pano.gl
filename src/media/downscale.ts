@@ -5,7 +5,7 @@
  * source through an intermediate 2D canvas. It also carried a power-of-two
  * requirement inherited from WebGL1 -- the old upload path used gl.RGB with
  * LINEAR filtering, no mipmaps and no CLAMP_TO_EDGE, which requires the source
- * to be power-of-two and to match the canvas region exactly.
+ * to be power-of-two.
  *
  * WebGPU has no such requirement: rgba8unorm with linear filtering and
  * clamp-to-edge address mode is valid at any size. So there is no power-of-two
@@ -26,7 +26,7 @@ export interface DownscalePlan {
  * @param width - Source width in pixels.
  * @param height - Source height in pixels.
  * @param max - The device's `maxTextureDimension2D`.
- * @throws If either dimension is zero. Media elements report 0x0 before their
+ * @throws If either dimension is not positive. Media elements report 0x0 before their
  *   metadata loads; treating that as "fits" defers the failure to texture
  *   creation, far from the actual cause.
  */
