@@ -47,9 +47,12 @@ export const CAMERA_UNIFORM_LAYOUT: readonly UniformField[] = [
   { name: 'povLatitude', offset: 72, byteLength: 4 },
   { name: 'povLongitude', offset: 76, byteLength: 4 },
   { name: 'zoom', offset: 80, byteLength: 4 },
-  // Alignment padding, not dead uniforms. The legacy struct uploaded
-  // u_CamGeoWidth and u_CamGeoHeight every frame and the shader read neither;
-  // those are gone. These exist only to round the block up to 16 bytes.
+  // Alignment padding, not dead uniforms. The legacy renderer asked for
+  // u_CamGeoWidth and u_CamGeoHeight every frame, but the linker eliminated
+  // the never-read declarations, so the writes were short-circuited on a null
+  // location and never reached the GL -- the captured stream shows six
+  // uniforms per frame and neither of these. They are gone. This padding
+  // exists only to round the block up to 16 bytes.
   { name: '_pad0', offset: 84, byteLength: 4 },
   { name: '_pad1', offset: 88, byteLength: 4 },
   { name: '_pad2', offset: 92, byteLength: 4 }

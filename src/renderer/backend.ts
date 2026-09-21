@@ -29,7 +29,9 @@ export interface RenderableSource {
   /** The upload description: layout and size. */
   readonly state: SourceState
   readonly kind: 'image' | 'video'
-  /** Where the pixels come from. Never retained past the current task. */
+  /**
+   * Where the pixels come from. May be retained between frames (the backend keeps the last source); what must not outlive a render call is any GPU resource imported from it.
+   */
   readonly element: HTMLImageElement | HTMLVideoElement
   /**
    * Bumped whenever the underlying pixels change.
@@ -39,6 +41,16 @@ export interface RenderableSource {
    * video bumps it on every frame it presents. It replaces the legacy
    * `needUpdate_` latch, which the *consumer* had to clear -- and "who clears
    * it" is where that kind of flag goes wrong.
+   *
+   * The value is the backend's ONLY pixel identity, and it is compared across
+   * consecutive `setSource` calls including different source objects: the
+   * upload gate is `version !== lastUploadedVersion`, nothing else. Producers
+   * must therefore hand out versions that are unique to the pixel content --
+   * two different sources that both report version 1 are assumed to be the
+   * same picture, and swapping between them will keep showing the first one's
+   * texture. Metadata arrival counts as a change too: a source whose
+   * width/height grow from zero must bump its version when they do, or the
+   * backend will conclude there is nothing new to draw and never render it.
    */
   readonly version: number
 }
@@ -74,10 +86,12 @@ export interface Backend {
    * Called once per frame by the render loop, not once per source: a video's
    * pixels change every frame and the only value that says so is `version`.
    *
-   * Implementations must not retain `source.element` beyond the current task --
-   * a video frame is invalidated when the task that produced it ends, and a
-   * retained reference is a use-after-free rather than a stale frame. Retaining
-   * the rest of the object is fine.
+   * Retaining the source (element included) between frames is fine and
+   * expected -- a plain element reference keeps nothing alive on the GPU. What
+   * must not outlive the render call that consumed it is any GPU resource
+   * derived from a video element: an imported external texture dies at the end
+   * of the task that imported it, which is why the import happens inside
+   * `render()` rather than here.
    */
   setSource (source: RenderableSource | null): void
 
