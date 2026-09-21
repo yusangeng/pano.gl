@@ -82,7 +82,7 @@ import { ImageSource } from '../../src/media/image-source'
 - Create: `src/core/events.ts`
 - Test: `test/unit/events.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/unit/events.test.ts`：
 
@@ -213,12 +213,12 @@ describe('Disposable', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- events`
 Expected: FAIL —— 无法解析 `../../src/core/events`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/core/events.ts`：
 
@@ -355,12 +355,12 @@ export abstract class Disposable {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- events`
 Expected: 11 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/core/events.ts test/unit/events.test.ts
@@ -371,6 +371,12 @@ function, so the common leak -- a handler registered as an inline arrow
 that nobody can name at teardown -- stops being the path of least
 resistance."
 ```
+
+> **（2026-09-21 登记，Task 1 勘误，落地于 4fdb84a）**两处 plan 代码被本任务自己的测试 / 类型检查否决，逐字照抄不可能，按最小修复落地：
+> 1. `Disposable.dispose` 的 plan 函数体（仅 `this.#disposed = true`）过不了本任务自己的「runs dispose exactly once」测试——子类约定是「先做自己的清理、最后 `super.dispose()`」，动态分发会先进入 override，基类里的任何守卫都拦不住第二次公有调用重入 override。已改为：首次 dispose 置位 `#disposed` 后，用 `Object.defineProperty` 在实例上盖一个 no-op 影子方法（自有属性查找先于原型链，第二次公有调用成为真正的 no-op，含 override）；基类顶部保留 `if (this.#disposed) return` 守卫，覆盖「子类在一次 override 里直接连调两次 `super.dispose()`」的原型查找路径。规格审查用 node 镜像实证了 plan 原函数体确实失败，且基类守卫 / 模板方法钩子两种更简单的方案都过不了这条测试。
+> 2. `on()` 退订闭包里的 `fn as (event: never) => void` 被 tsc 拒绝（TS2345，strictFunctionTypes 在调用点的逆变检查）。改为 `fn as unknown as (event: M[keyof M & string]) => void`——与 plan 自己在 wildcard 分支用的双重断言同一惯用法，删除仍按同一函数引用进行。
+>
+> **（2026-09-21 登记，Task 1 质量审查补测，落地于 fdf9348）**变异测试证明「拷贝后再迭代」未被钉住：自删在活 Set 上恰好是安全的（删除当前正在访问的元素不影响后续），真正区分活迭代与快照的是「删除**尚未访问**的监听器」——而原测试只测了自删，plan 原注释还按数组语义把这个机制写错了。补两条测试（later-listener 与 wildcard-later-listener，预期 `['a','b','a']`，活迭代变异体得 `['a','a']` 被抓）、修正原注释、给 `EventMap` 补「必须带索引签名」的 TSDoc（下游三个消费者第一天就会撞）。13/13 通过；events.ts 函数覆盖 100%，唯一未覆盖分支是 `#disposed` 守卫（防御性代码，可观测性为零，全局门槛吸收）。
 
 ---
 
