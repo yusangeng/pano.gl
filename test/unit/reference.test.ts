@@ -302,3 +302,43 @@ describe('glslMod', () => {
     expect(uv.u).toBeLessThanOrEqual(1)
   })
 })
+
+describe('latitude on the non-linear cameras (the F5 fix)', () => {
+  /*
+   * Derived, not observed: each non-linear phi is `... + HALF_PI - latRad`, and
+   * v is phi / PI, so raising povLatitude from 0 to 30 must shift v by exactly
+   * -(30 * PI / 180) / PI = -1/6 and leave theta -- therefore u -- untouched.
+   * The size of the shift also pins the units: subtracting the raw degrees
+   * instead of the radians would move v by -30/PI, and folding latitude into
+   * theta would move u instead of v.
+   */
+  const nonLinear: Array<[string, Projection]> = [
+    ['cylindrical', { kind: 'cylindrical', zoom: 1, extent: [1, 1] }],
+    ['planet', { kind: 'planet', zoom: 1, extent: [4, 4] }],
+    ['pannini', { kind: 'pannini', zoom: 1, extent: [4, 4] }]
+  ]
+
+  it.each(nonLinear)(
+    '%s shifts v by exactly -latRad / PI when povLatitude goes 0 -> 30',
+    (_name, projection) => {
+      const latRad = (30 * Math.PI) / 180
+      const a = project(1, 0.3, 0.7, { povLatitude: 0, povLongitude: 90 }, projection)
+      const b = project(1, 0.3, 0.7, { povLatitude: 30, povLongitude: 90 }, projection)
+      expect(b.v - a.v).toBeCloseTo(-latRad / Math.PI, 12)
+      // theta has no latitude term, and identical inputs compute identical
+      // bits, so u is not merely close -- it is the same number.
+      expect(b.u).toBe(a.u)
+    }
+  )
+
+  it('linear output is unchanged by povLatitude', () => {
+    // Linear latitude lives in buildViewMatrix, not in project: the reference
+    // formula itself must not read the angle. All four numbers are pinned so a
+    // term that leaks latitude into either coordinate fails loudly.
+    const projection: Projection = { kind: 'linear', fov: 1, aspect: 1 }
+    const a = project(1, 0.3, 0.7, { povLatitude: 0, povLongitude: 90 }, projection)
+    const b = project(1, 0.3, 0.7, { povLatitude: 45, povLongitude: 90 }, projection)
+    expect(b.u).toBe(a.u)
+    expect(b.v).toBe(a.v)
+  })
+})

@@ -12,7 +12,8 @@
  *
  * **Everything here is transcribed line by line from
  * `legacy/shader/fshader.glsl`, including its quirks, and must stay that
- * way.** That is not laziness -- it is the requirement. v1's acceptance
+ * way** -- with exactly one exception, the latitude term of the F5 fix (see
+ * `latOffset`). That is not laziness -- it is the requirement. v1's acceptance
  * criterion is "renders what v0.2.2 rendered", so the reference must encode what
  * v0.2.2 actually computed, not what it should have. Two consequences worth
  * stating up front, because they look like transcription errors and are not:
@@ -23,6 +24,13 @@
  *     A `+ 0.5` here would rotate the panorama half a turn.
  *   - The longitude subtraction is `povLongitude / 4`, in *degrees*, subtracted
  *     from a value in *radians*. See `lngOffset` below.
+ *
+ * And one departure, which is neither a quirk nor an error: the three
+ * non-linear projections subtract a properly-converted latitude from `phi`.
+ * v0.2.2 read latitude nowhere on those cameras -- the shader declared
+ * `u_CamPOVLatitude` and never read it, and the recorded uniform stream shows
+ * the viewer never uploaded it either (defect F5). There is nothing to
+ * transcribe, so the term is v1's own, with correct units. See `latOffset`.
  */
 
 import type { CameraState, Projection } from './types'
@@ -65,6 +73,21 @@ export interface UV {
 function lngOffset (state: CameraState): number {
   const lng = state.povLongitude / 2
   return lng / 2
+}
+
+/**
+ * The latitude offset the three non-linear projections subtract from `phi`.
+ *
+ * This is the ONE term in this module that is not a transcription of v0.2.2:
+ * on the non-linear cameras the legacy shader never read latitude and the
+ * legacy viewer never uploaded it (defect F5), so latitude influenced no pixel
+ * and there is no legacy number to preserve. Making it work is v1's explicit
+ * behaviour change, pinned by gate B -- and because it is a new term rather
+ * than a retained bug, it is a proper degrees-to-radians conversion, the
+ * opposite of `lngOffset`'s deliberately mixed units above.
+ */
+function latOffset (state: CameraState): number {
+  return (state.povLatitude * PI) / 180
 }
 
 /**
@@ -118,18 +141,18 @@ function projectLinear (x: number, y: number, z: number): UV {
  * property of geometry.
  */
 
-function projectCylindrical (x: number, y: number, z: number, zoom: number, lng: number): UV {
+function projectCylindrical (x: number, y: number, z: number, zoom: number, lng: number, lat: number): UV {
   // `x` is deliberately unread, exactly as in the shader. On the legacy quad it
   // was the constant 1.
   const yy = y * zoom
   const zz = z * zoom
 
   const theta = zz * TWO_PI - lng
-  const phi = Math.atan(yy) + HALF_PI
+  const phi = Math.atan(yy) + HALF_PI - lat
   return toUV(theta, phi)
 }
 
-function projectPlanet (x: number, y: number, z: number, zoom: number, lng: number): UV {
+function projectPlanet (x: number, y: number, z: number, zoom: number, lng: number, lat: number): UV {
   const yy = y * zoom
   // The negation is in the shader and is easy to drop. Without it the planet
   // projection renders mirrored and inside out.
@@ -151,11 +174,11 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
 
   theta -= lng
 
-  const phi = Math.atan(r / Math.sqrt(p * p + q * q)) + HALF_PI
+  const phi = Math.atan(r / Math.sqrt(p * p + q * q)) + HALF_PI - lat
   return toUV(theta, phi)
 }
 
-function projectPannini (x: number, y: number, z: number, zoom: number, lng: number): UV {
+function projectPannini (x: number, y: number, z: number, zoom: number, lng: number, lat: number): UV {
   const yy = y * zoom
   const zz = z * zoom
 
@@ -173,16 +196,18 @@ function projectPannini (x: number, y: number, z: number, zoom: number, lng: num
 
   theta -= lng
 
-  const phi = Math.atan(yy / Math.sqrt(x * x + zz * zz)) + HALF_PI
+  const phi = Math.atan(yy / Math.sqrt(x * x + zz * zz)) + HALF_PI - lat
   return toUV(theta, phi)
 }
 
 /**
  * Projects a point on the camera's surface to an equirectangular coordinate.
  *
- * `state.povLatitude` is deliberately unread: `fshader.glsl` declares
- * `u_CamPOVLatitude` and never reads it either, so tilting the non-linear
- * cameras here would render something v0.2.2 never did.
+ * `state.povLatitude` is read by the three non-linear projections, as the `phi`
+ * offset computed by `latOffset` -- the F5 fix, and this module's one
+ * deliberate departure from v0.2.2 (which read latitude nowhere on those
+ * cameras). The linear projection ignores it here because its latitude lives
+ * in `buildViewMatrix` instead.
  *
  * @param x - Surface position. For the linear projection only the direction
  *   matters; for the others the magnitude is part of the projection.
@@ -190,22 +215,25 @@ function projectPannini (x: number, y: number, z: number, zoom: number, lng: num
  *   `zoom` by the three non-linear ones.
  * @param z - Surface position. Drives `theta` in every projection; scaled by
  *   `zoom` by the three non-linear ones, and negated by planet.
- * @param state - Camera angles, used by the non-linear projections as a
- *   longitude offset. Only `povLongitude` is read.
+ * @param state - Camera angles. The non-linear projections read both fields as
+ *   offsets -- `povLongitude` through the legacy `lngOffset`, `povLatitude`
+ *   through `latOffset`; the linear projection reads neither, because its
+ *   angles are already baked into the view matrix it is paired with.
  * @param projection - Which formula to apply.
  */
 export function project (x: number, y: number, z: number, state: CameraState, projection: Projection): UV {
   const lng = lngOffset(state)
+  const lat = latOffset(state)
 
   switch (projection.kind) {
     case 'linear':
       return projectLinear(x, y, z)
     case 'cylindrical':
-      return projectCylindrical(x, y, z, projection.zoom, lng)
+      return projectCylindrical(x, y, z, projection.zoom, lng, lat)
     case 'planet':
-      return projectPlanet(x, y, z, projection.zoom, lng)
+      return projectPlanet(x, y, z, projection.zoom, lng, lat)
     case 'pannini':
-      return projectPannini(x, y, z, projection.zoom, lng)
+      return projectPannini(x, y, z, projection.zoom, lng, lat)
   }
 }
 
