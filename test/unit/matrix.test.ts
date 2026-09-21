@@ -104,6 +104,91 @@ describe('buildCameraTransform', () => {
   })
 })
 
+/*
+ * Gate B, part 1: does the inverse-matrix surface reconstruction reproduce the
+ * legacy quad's coordinate range exactly?
+ *
+ * The legacy non-linear cameras rasterised a quad at x = 1 spanning y and z,
+ * sized 1x1 for cylindrical and 4x4 for planet and pannini, and fed the
+ * interpolated position straight into the projection formula. The new renderer
+ * gets the same point from `invClip`. If the matrix encodes the wrong extent,
+ * the picture scales -- which looks almost right, and is the failure mode this
+ * gate exists to catch.
+ *
+ * This is CPU work, so it belongs in the unit project: it needs no adapter, and
+ * a property that can be checked without a GPU should not be gated behind one.
+ */
+describe('gate B: surface reconstruction', () => {
+  // Annotated so `camera` stays a literal union: unannotated, the array widens
+  // it to `string` and `{ kind: camera, ... }` no longer picks a Projection
+  // variant. The annotation also contextually types `extent` as a tuple.
+  const CASES: ReadonlyArray<{
+    camera: 'cylindrical' | 'planet' | 'pannini'
+    extent: readonly [number, number]
+  }> = [
+    { camera: 'cylindrical', extent: [1, 1] },
+    { camera: 'planet', extent: [4, 4] },
+    { camera: 'pannini', extent: [4, 4] }
+  ]
+
+  /*
+   * Walks the NDC corners of the viewport through the same reconstruction the
+   * fragment shader performs: `invClip * vec4(ndc, 1, 1)` then divide by w.
+   * Written out longhand rather than reused from `reference.ts`, because a
+   * check that shares its implementation with the thing it checks cannot fail.
+   *
+   * The third column is load-bearing and easy to drop: the input's z slot is
+   * the constant 1 -- the far plane, in both depth conventions -- and the
+   * far-plane term in that column is what pins the recovered x at exactly 1.
+   * Omitting it lands x on the near plane instead, which is a different point
+   * than any the legacy quad ever produced.
+   */
+  function surfaceAt (invClip: mat4, ndcX: number, ndcY: number) {
+    const x = invClip[0]! * ndcX + invClip[4]! * ndcY + invClip[8]! + invClip[12]!
+    const y = invClip[1]! * ndcX + invClip[5]! * ndcY + invClip[9]! + invClip[13]!
+    const z = invClip[2]! * ndcX + invClip[6]! * ndcY + invClip[10]! + invClip[14]!
+    const w = invClip[3]! * ndcX + invClip[7]! * ndcY + invClip[11]! + invClip[15]!
+    return { x: x / w, y: y / w, z: z / w }
+  }
+
+  for (const { camera, extent } of CASES) {
+    it(`${camera} recovers a surface spanning ${extent[0]} x ${extent[1]} at x = 1`, () => {
+      const clip = buildCameraTransform(
+        { povLatitude: 0, povLongitude: 0 },
+        { kind: camera, zoom: 1, extent },
+        'zero-to-one',
+        mat4.create()
+      )
+      // The shader inverts; so does this test. Inverting separately is what
+      // makes the assertion about the matrix rather than about gl-matrix.
+      const invClip = mat4.invert(mat4.create(), clip)
+      // A throw rather than an `expect`: `noUncheckedIndexedAccess` and strict
+      // null checks mean the narrowing has to be real, and a non-invertible
+      // camera transform is a bug worth naming rather than a failed assertion.
+      if (!invClip) throw new Error('the camera transform must be invertible')
+
+      const corners = [
+        surfaceAt(invClip, -1, -1), surfaceAt(invClip, 1, -1),
+        surfaceAt(invClip, -1, 1), surfaceAt(invClip, 1, 1)
+      ]
+
+      // x is pinned, and this is also the far-plane assertion: on the legacy
+      // quad x was the constant 1, and `QUAD_FAR = 1` is what makes sampling at
+      // ndc z = +1 -- where both depth conventions put the far plane -- land
+      // exactly on that plane. The legacy's far = 1000 would recover x = 1000
+      // here and silently rescale pannini, which divides by x.
+      for (const c of corners) expect(c.x).toBeCloseTo(1, 3)
+      // The recovered surface spans the extent box, centred on the origin.
+      const ys = corners.map(c => c.y)
+      const zs = corners.map(c => c.z)
+      expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(extent[1], 3)
+      expect(Math.max(...zs) - Math.min(...zs)).toBeCloseTo(extent[0], 3)
+      expect(Math.max(...ys) + Math.min(...ys)).toBeCloseTo(0, 3)
+      expect(Math.max(...zs) + Math.min(...zs)).toBeCloseTo(0, 3)
+    })
+  }
+})
+
 describe('fragment-stage reconstruction', () => {
   it('recovers the quad surface point from ndc through the inverse transform', () => {
     // The CPU-side statement of what the fragment stage does: transform

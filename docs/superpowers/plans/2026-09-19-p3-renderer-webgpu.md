@@ -73,7 +73,7 @@ let p = h.xyz / h.w;          // 线性：远平面上的点，方向即视线
 - Create: `src/renderer/capabilities.ts`
 - Test: `test/unit/capabilities.test.ts`
 
-- [ ] **Step 1: 写接口**
+- [x] **Step 1: 写接口**
 
 `src/renderer/backend.ts`：
 
@@ -214,7 +214,7 @@ export interface DeviceLost {
 > `Capabilities` 与 spec §2.3 的 `static probe(): Promise<Capabilities>` 是同一个类型，
 > 定义在这里、由 `capabilities.ts` 产出。
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 `test/unit/capabilities.test.ts`：
 
@@ -273,12 +273,12 @@ describe('describeCapabilities', () => {
 })
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `npm run test:unit -- capabilities`
 Expected: FAIL —— 无法解析 `../../src/renderer/capabilities`
 
-- [ ] **Step 4: 实现**
+- [x] **Step 4: 实现**
 
 `src/renderer/capabilities.ts`：
 
@@ -353,12 +353,12 @@ export function describeCapabilities (input: ProbeInput): SelectedCapabilities {
 }
 ```
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `npm run test:unit -- capabilities`
 Expected: 6 个测试 PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/renderer/backend.ts src/renderer/capabilities.ts test/unit/capabilities.test.ts
@@ -375,7 +375,7 @@ git commit -m "feat(renderer): backend interface and a testable capability decis
 
 **背景**：WebGPU **没有 uniform 反射**（没有 `getUniformLocation` 的等价物）。JS 侧写错一个偏移，**不会报错，会静默读到垃圾**。所以布局必须由一份可测的描述驱动。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/unit/uniforms.test.ts`：
 
@@ -490,12 +490,12 @@ describe('packCameraUniforms', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- uniforms`
 Expected: FAIL —— 无法解析 `../../src/renderer/uniforms`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/renderer/uniforms.ts`：
 
@@ -607,12 +607,12 @@ export function packCameraUniforms (target: ArrayBuffer, values: CameraUniformVa
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- uniforms`
 Expected: 9 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/uniforms.ts test/unit/uniforms.test.ts
@@ -633,7 +633,7 @@ unit tests and round-tripped through the GPU in P3's integration tests."
 - Create: `src/renderer/webgpu/shaders/sampler.ts`
 - Test: `test/unit/shaders.test.ts`
 
-- [ ] **Step 1: 写 WGSL**
+- [x] **Step 1: 写 WGSL**
 
 `src/renderer/webgpu/shaders/panorama.wgsl`：
 
@@ -928,7 +928,7 @@ fn fs_main_external(in: VertexOut) -> @location(0) vec4f {
 >
 > **`ext` 的声明在下面 Step 2 的绑定里**，和 `tex` 同属 `group(1)` 但编号不同 —— 两条管线各自只认其中一个，所以另一条的 bind group 不需要为它提供资源。这是「一个模块、两条管线」成立的关键：**管线布局是按入口点校验的，模块里没被该入口点用到的绑定不参与校验。**
 
-- [ ] **Step 2: 写拼接模块**
+- [x] **Step 2: 写拼接模块**
 
 `src/renderer/webgpu/shaders/index.ts`：
 
@@ -954,7 +954,7 @@ import panoramaSource from './panorama.wgsl?raw'
 export const PANORAMA_WGSL = `${WGSL_CONSTANTS}\n${panoramaSource}`
 ```
 
-- [ ] **Step 3: 写采样器描述符**
+- [x] **Step 3: 写采样器描述符**
 
 着色器不自己 wrap，wrap 由采样器做（见上面 `to_uv` 的注释），所以采样器不是随手一写的东西 —— 它必须和旧版的纹理对象一致：
 
@@ -993,8 +993,10 @@ export function createPanoramaSampler (device: GPUDevice): GPUSampler {
 > **（2026-09-20 勘误，P1 终末复审补遗 S1）** 本注原写「tsup 不认 `?raw`，需在 `tsup.config.ts` 加 esbuild 的 raw loader，并把 import 改成 `./panorama.wgsl`（无后缀）」。P1 已把库打包器裁决换为 **vite lib mode**（`build` = `vite build`，仓库无 tsup / tsup.config.ts），该办法作废：`?raw` 是 Vite 的原生约定，vitest、demo 与 `vite build`（lib mode）**全部直接支持，构建侧零配置**，上方代码的 `import panoramaSource from './panorama.wgsl?raw'` 原样成立、不要去掉后缀。
 >
 > **两条路径都要验证**：`npm run test:unit`（vitest）与 `npm run build`（vite lib mode，随后 grep 产物，见 Step 5）。**如果哪一边不认，说出来，不要改成把着色器内联进 TS** —— 那会牺牲着色器文件的语法高亮，而这是长期维护里最值钱的东西。
+>
+> **（2026-09-21 勘误，Task 7 门禁 A 变异验证）** 上方代码块把两个 addressMode 钉成 `clamp-to-edge`，注释理由「shader 自己折 u、v 永不出 [0,1]，所以永远采不到纹理外」两头都错：旧实现从不设置 `TEXTURE_WRAP_S/T`（`legacy/utils/gl.js` 只设 LINEAR 过滤），吃的是 WebGL 默认 **REPEAT，双轴**；宽 fov 极点视角下 v 也确实越界（`to_uv` 的 `fract` 只折 u）。门禁 A 实测：clamp 时 U 轴接缝差最高 124、V 轴极点差 73（V 轴差异全 fixture 只有 perspective/south 一个状态可观测）；改 repeat 双轴后全部 ≤1。引言那句「wrap 由采样器做」本来就对，错的只是代码块。落地代码（c6e5066）双轴 repeat；`to_uv` 的 `fract` 保留——external 路径的 `textureSampleBaseClampToEdge` 无视 sampler 寻址、强制 clamp，折 u 只能靠 shader，对 repeat 采样则冗余无害。以落地代码为准，勿按本块回改。
 
-- [ ] **Step 4: 加一条着色器可编译性测试**
+- [x] **Step 4: 加一条着色器可编译性测试**
 
 着色器编译只能在浏览器里验，但**源码级的不变量**可以在单元测试里查：
 
@@ -1109,12 +1111,12 @@ describe('panorama WGSL', () => {
 })
 ```
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 Run: `npm run test:unit -- shaders && npm run build && grep -c "fn to_uv" dist/index.js`
 Expected: 单元测试 PASS；构建成功且 grep 输出 ≥ 1（`.wgsl` 源码经 `?raw` 真的进了产物，而不是被解析成外部资源引用）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/renderer/webgpu/shaders/ test/unit/shaders.test.ts
@@ -1134,7 +1136,7 @@ needed a cube for the linear camera and a quad for the other three."
 - Create: `src/renderer/webgpu/device.ts`
 - Test: `test/unit/device-scopes.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/unit/device-scopes.test.ts`：
 
@@ -1194,12 +1196,12 @@ describe('withValidationScope', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- device-scopes`
 Expected: FAIL —— 无法解析 `../../src/renderer/webgpu/device`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/renderer/webgpu/device.ts`：
 
@@ -1292,12 +1294,12 @@ export async function acquireDevice (): Promise<AcquiredDevice | null> {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- device-scopes`
 Expected: 5 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/webgpu/device.ts test/unit/device-scopes.test.ts
@@ -1317,7 +1319,7 @@ fine, draws nothing' failure with a different API."
 - Create: `test/integration/support/gpu.ts`
 - Test: `test/integration/backend-smoke.test.ts`
 
-- [ ] **Step 1: 写集成测试工具**
+- [x] **Step 1: 写集成测试工具**
 
 `test/integration/support/gpu.ts`。这段代码**就跑在页面里**（浏览器模式），所以没有跨进程边界、没有 wire 类型、没有 base64：
 
@@ -1473,7 +1475,7 @@ export { maxChannelDiff } from './canvas'
 >
 > **这里没有 `RenderRequest` 的 wire 类型，也不需要第二份声明。** 之前那份存在的理由是「页面侧拥有线格式、测试侧不能手抄」；现在两边是同一个模块系统里的同一个类型，抄不抄的问题不存在了。
 
-- [ ] **Step 2: 写后端实现**
+- [x] **Step 2: 写后端实现**
 
 `src/renderer/webgpu/backend.ts` —— 骨架与关键决策，完整实现由执行者补齐：
 
@@ -2043,8 +2045,10 @@ export class WebGPUBackend implements Backend {
 > - **`render(target?)` 的 `target` 与 `get device()` 是一对，缺一不可。** 渲染目标必须和管线属于同一个 device，所以测试自己建不了目标纹理 —— 它得先拿到后端的 device。这两个成员**只在具体类上，不在 `Backend` 接口上**：`GPUTextureView` 是 WebGPU 类型，WebGL2 后端没有对应物，挂到共享接口上会逼着 P6 实现一个它用不上的东西。
 >
 > 不要为了让骨架跑起来而跳过 error scope。**先跑通 Task 6 的布局往返测试，再写四个投影的接线。**
+>
+> **（2026-09-21 勘误，Task 7 门禁 A 首跑实证）** 上方代码块里源纹理 usage 写的是 `TEXTURE_BINDING | COPY_DST`，缺 `RENDER_ATTACHMENT`：`copyExternalImageToTexture` 的目标纹理按 spec 必须带 `COPY_DST | RENDER_ATTACHMENT`（该拷贝实现为一次 blit）。缺它时 validation 拒绝被 `render()` 的 error scope 吞掉、**整条 command buffer 连 clear 一起被丢弃**，回读全零、diff 255，且 headless 下 debug 通道默认关闭、无任何报错——症状是「画了全黑」而非「上传被拒」。缺陷随本块原样落入 Task 5；门禁 A 第一次真正走 still 上传路径时暴露，c6e5066 补标志并加 why 注释。以落地代码为准，勿按本块回改。
 
-- [ ] **Step 3: 写冒烟测试**
+- [x] **Step 3: 写冒烟测试**
 
 `test/integration/backend-smoke.test.ts` —— **直接 import，没有 `page.evaluate`，没有 `window.__panoTest`**：
 
@@ -2096,12 +2100,12 @@ describe('WebGPU backend lifecycle', () => {
 >
 > `acquireDevice` 在这里是**直接 import 的 `src/` 内部模块**。这正是浏览器模式带来的变化：以前要走 `window.__panoTest` 再导出一次，现在门禁测试 import 内部模块、用户故事测试 import `src/index.ts` —— 这条纪律从「由桥接层的形状隐式保证」变成「靠约定 + review 保证」。
 
-- [ ] **Step 4: 跑集成测试**
+- [x] **Step 4: 跑集成测试**
 
 Run: `npm run test:integration -- backend-smoke`
 Expected: 2 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/webgpu/backend.ts test/integration/support/gpu.ts \
@@ -2119,7 +2123,7 @@ git commit -m "feat(renderer): WebGPU backend skeleton with device loss reportin
 
 **这是本计划里最容易被跳过、也最不能跳过的一步。** 单元测试只能证明 TS 侧的偏移自洽；**只有往 GPU 里写一遍再读回来，才能证明这些偏移与 WGSL 对 struct 的理解一致**。
 
-- [ ] **Step 1: 写探针**
+- [x] **Step 1: 写探针**
 
 `test/integration/support/echo.ts`。它直接 import `src/` 的内部模块 —— **浏览器模式下没有「页面侧」和「测试侧」之分**，测试文件本身就在页面里，`acquireDevice()` 随手可得。上一版把它放在 `demo/test-entry-hooks/` 是因为它需要 `navigator.gpu` 而测试跑在 Node 里；那个前提现在不成立了。
 
@@ -2317,7 +2321,9 @@ export async function createEchoRenderer (): Promise<
 
 > `packCameraUniforms` 的入参类型是 `CameraUniformValues`，`invClip` 要 `mat4`。探针传的是 `Float32Array.from(...)`，**不是真的可用矩阵也不影响** —— 它只负责把 16 个数写进去再读回来，不参与任何变换。这一点在测试里表现为第二个用例可以拿 `[1..16]` 这种显然不是变换矩阵的数组当输入。
 
-- [ ] **Step 2: 写测试**
+> **（2026-09-21 勘误，Task 6 审查闭环补记）** 本代码块有两处笔误，落地代码（fc95d06）已修正，勿按本块回改：① import 深度 `'../../src/renderer/uniforms'` 与 `'../../src/renderer/webgpu/device'` 应为 `'../../../src/...'`——本文件在 `test/integration/support/` 下，与 `gpu.ts` 同层；② 矩阵分支 `out[n] = camera.invClip[col][row]` 把 f32 裸赋给 `array<u32>` 是 WGSL 编译错（无隐式转换）→ 管线静默无效 → 两条测试全零读回，必须包一层 `bitcast<u32>(...)`。不得用 `u32(...)` 值转换替代——探针的职责是位往返，值转换会破坏它（如 234.75 → 234）。
+
+- [x] **Step 2: 写测试**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -2372,7 +2378,7 @@ describe('uniform layout round trip', () => {
 })
 ```
 
-- [ ] **Step 3: 跑测试**
+- [x] **Step 3: 跑测试**
 
 Run: `npm run test:integration -- uniform-layout`
 Expected: 2 个测试 PASS
@@ -2382,7 +2388,7 @@ Expected: 2 个测试 PASS
 2. 若每个字段都被推到了独立的 16 字节槽上（`projKind` 在 `out[16]`（byte 64）而 `povLatitude` 跑到 `out[20]`（byte 80）而不是 `out[18]`（byte 72））→ 该实现不接受紧凑标量布局，**上报卡点**，因为这会影响所有 backend 的布局设计
 3. 若只有矩阵转置 → 检查 `f32.set` 的偏移与 `buildEchoShader` 里 `invClip[col][row]` 的展开
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/support/echo.ts test/integration/uniform-layout.test.ts
@@ -2413,7 +2419,7 @@ a second copy of the thing under test."
 >
 > 判据现成：`cylindrical` 的 `origin`（lat 0, lng 0, zoom 0）与 `tilt`（lat 30, lng 45, zoom 0）之间，**这个投影能看见的唯一输入差异是经度** —— 它的 `phi` 不读纬度，两个状态 zoom 都是 0，而纬度本来就被忽略。两张 PNG 相同 ⇒ `lng` 被编译成 0 ⇒ 经度对画面无影响，`lat === 0` 的状态全都可比；不同 ⇒ 经度确实在起作用，只有 `lng === 0` 的状态可比。
 
-- [ ] **Step 1: 写浏览器侧的 fixture loader**
+- [x] **Step 1: 写浏览器侧的 fixture loader**
 
 `test/integration/support/baseline-browser.ts` —— P0 那批 fixture 在浏览器里的读法。Node 侧那份（`baseline-node.ts`，P2 产出）在这里一行都用不了：`node:fs`、`path`、`__dirname` 在浏览器里都不存在。
 
@@ -2553,7 +2559,7 @@ export function loadSource (): Promise<DecodedImage> {
 >
 > **本仓库里不存在这个函数，也不要再把它造回来。** 下面所有比对都是 RGBA 对 RGBA。
 
-- [ ] **Step 2: 写测试**
+- [x] **Step 2: 写测试**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -2686,7 +2692,7 @@ describe('gate A: fullscreen triangle vs the v0.2.2 baseline', () => {
 >
 > **`new ImageData(rgba, w, h)` 用来把解码结果变成 `ImageBitmap`**：`renderOffscreen` 收的是 `TexImageSource`，而 `ImageData` 不是 —— 它得先变成一个真正的 `ImageBitmap`。`.slice()` 是因为 `ImageData` 要求一个长度精确的 `Uint8ClampedArray`，而共享同一块 buffer 会让 `bitmap.close()` 之后的行为变得微妙。
 
-- [ ] **Step 3: 跑门禁 A**
+- [x] **Step 3: 跑门禁 A**
 
 Run: `npm run test:integration -- gate-a`
 Expected: 2 条 PASS（一条覆盖全部可比状态，一条是集合断言）。两个 case 的**断言条数**上，覆盖那条会在第一个失败处停下 —— 所以看日志里的 `${camera} / ${stateId}` 标签定位是哪个相机哪个状态。
@@ -2709,7 +2715,7 @@ Expected: 2 条 PASS（一条覆盖全部可比状态，一条是集合断言）
 **如果 `perspective` 也失败** —— 那是 P2 的问题（矩阵对拍应该先红），别在这里纠缠。
 **如果非线性全失败** —— 那是门禁 B 的问题，先跑 Task 8。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/gate-a-pixels.test.ts test/integration/support/gpu.ts \
@@ -2741,7 +2747,7 @@ swap applied to both sides of the comparison would keep passing while wrong."
 
 第一部分要验的是「逆矩阵还原出来的表面点，跟旧实现光栅化出来的四边形落在同一个坐标范围里」。这本来需要从页面里探针取点 —— 但浏览器模式下不需要探针了：**`invClip` 的逆运算是 CPU 上一个纯函数**，`renderOffscreen` 走的就是它。真正需要 GPU 的只有第二部分（像素随纬度变化）。
 
-- [ ] **Step 1: 写已定义行为的测试**
+- [x] **Step 1: 写已定义行为的测试**
 
 **这部分是纯 CPU 的，所以它该在 `test/unit/` 里而不是集成测试里** —— 一个不需要 GPU 的性质，放进需要 GPU 的 project 只会让它跑得更慢、更容易被跳过。追加到 `test/unit/matrix.test.ts`（**P2 Task 4 建的文件**，`mat4` 与 `buildCameraTransform` 已经在它的 import 里）：
 
@@ -2824,14 +2830,16 @@ describe('gate B: surface reconstruction', () => {
 >
 > 注意这里用的是 `'zero-to-one'`：断言 `c.z ≈ 1` 在两个约定下都成立（两者的远平面都在 ndc z = +1），但显式选一个能让失败信息更好读。
 
-- [ ] **Step 2: 跑**
+> **（2026-09-21 勘误，Task 8 审查闭环）** 上方代码块的 `surfaceAt` 展开漏了第 2 列（z 槽）的项：齐次向量是 `vec4(ndc, 1.0, 1.0)`，z 槽乘数是 1 而非 0，而 `invClip[8]`（m[2][0]）三台相机都非零（0.8999999761581421）。三列展开在四个角点上还原出 x = 0.100000 —— 恰是 QUAD_NEAR（`matrix.ts` 的近裁面 0.1），过不了本块自己的 `x ≈ 1` 断言；块尾「每个角点落在远平面 ⇒ `c.z ≈ 1`」也与自己的 z 跨度断言自相矛盾（还原出的 z 是表面轴之一、跨度 ±m；深度坐标是 x，不是 z）。落地代码（83fc9d8）按本步序言「片元着色器做的同一次重建」完整展开四列，实测 x = 1.000000、y/z 跨度恰为 extent、居中 0e+0；质量审变异 M7 把落地测试改回三列形式立即红（`expected 0.09999999403953552 to be close to 1`）——修正承重。以落地代码为准，勿按本块回改。
+
+- [x] **Step 2: 跑**
 
 Run: `npm run test:unit -- matrix`
 Expected: 之前的所有条 + 新增 3 条 PASS
 
 **失败时**：`extent` 到矩阵的映射在 `src/core/matrix.ts` 里。检查非线性分支构造的那个矩阵 —— 它把 `(1, y, z)` 映射到 NDC，其中 `ndcX = z / (W/2)`、`ndcY = y / (H/2)`、`ndcZ = 1`、`w = 1`。逆矩阵必须还原它。
 
-- [ ] **Step 3: 处理纬度（缺陷 F5）**
+- [x] **Step 3: 处理纬度（缺陷 F5）**
 
 **这一步是一次刻意的行为变更**，不是修 bug 那么简单 —— 先读清楚背景：
 
@@ -2851,7 +2859,7 @@ fn project_cylindrical(p: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
 
 **`src/core/reference.ts` 必须同步改** —— 它是着色器的可执行规格，两侧不同步就等于没有参考实现。
 
-- [ ] **Step 4: 写行为变更的测试**
+- [x] **Step 4: 写行为变更的测试**
 
 这一段必须用 GPU（要真的渲染两帧比像素），所以在集成测试里：
 
@@ -2921,12 +2929,14 @@ describe('latitude now affects the non-linear cameras', () => {
 
 > **第二条测试的取向跟上一版相反，而且这次是对的。** 上一版断言「两个状态的 `u_CamPOVLatitude` 相等」，那是把「uniform 没变」当成了「着色器没读」的证据 —— 但 P0 的 fixture 里这两个值本来就不同（`tilt` 的 lat 是 30）。真正的证据是：**uniform 确实变了，画面却没变**，而那正是门禁 A 里 `longitudeIsInert` 之外的另一半。这里断言「uniform 变了」，把「画面没变」留给门禁 A 的可比集合去表达。
 
-- [ ] **Step 5: 跑全部**
+> **（2026-09-21 勘误，Task 8 审查闭环）** 上方第二条测试断言的 `captured.u_CamPOVLatitude` 无法运行：P0 的捕获流里**没有任何** `u_CamPOVLatitude` 写入（全部 fixture 的完整 uniform 集合就六项：u_CamProjType / u_CamTransMatrix / u_CamPOVLongitude / u_CamZoom / u_TexProjType / u_Sampler），而 `CapturedUniforms` 只按**最后一帧**取键，读到的注定是 `undefined`。这反而把 F5 的证据加强了一档：不只是「声明了从未读」（legacy 链接器剔除了未读取的 uniform、Renderer.js 对 null location 的写入整体跳过），而是「**从未上传**」。落地代码（83fc9d8）改为断言 `state.lat`（origin 0 / tilt 30 —— 捕获确实驱动过纬度）＋ 遍历两份捕获文档的**全部帧**断言不存在任何 `u_CamPOVLatitude` 写入，立证取向不变（仍是「fixture 记录的行为」）。以落地代码为准，勿按本块回改。
+
+- [x] **Step 5: 跑全部**
 
 Run: `npm run test:unit && npm run test:integration`
 Expected: 全部 PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/renderer/webgpu/shaders/panorama.wgsl src/core/reference.ts \
@@ -2947,13 +2957,13 @@ skipped along with the adapter."
 ---
 ## 完成标准
 
-- [ ] `npm run test:integration -- gate-a` 全绿，且**集合断言那条也在**（可比状态为空时它会红）
-- [ ] `npm run test:integration -- gate-b` 全绿
-- [ ] `npm run test:integration -- uniform-layout` 全绿
-- [ ] `npm run test:unit` 全绿（含门禁 B 的 extent 那 3 条），覆盖率门槛通过
-- [ ] 后端创建失败**抛异常**，不返回半死的对象（用一条集成测试证明）
-- [ ] `device.lost` 能被观测到
-- [ ] `swapchain` 的早退发生在 `getCurrentTexture()` 之前
+- [x] `npm run test:integration -- gate-a` 全绿，且**集合断言那条也在**（可比状态为空时它会红）
+- [x] `npm run test:integration -- gate-b` 全绿
+- [x] `npm run test:integration -- uniform-layout` 全绿
+- [x] `npm run test:unit` 全绿（含门禁 B 的 extent 那 3 条），覆盖率门槛通过
+- [x] 后端创建失败**抛异常**，不返回半死的对象（用一条集成测试证明）
+- [x] `device.lost` 能被观测到
+- [x] `swapchain` 的早退发生在 `getCurrentTexture()` 之前
 
 > 门禁的容差**必须在真 GPU 和 SwiftShader 上都成立**。本地是真 GPU，CI 走
 > `--enable-unsafe-webgpu --use-webgpu-adapter=swiftshader`（P1 Task 9）。SwiftShader 是
@@ -2983,3 +2993,5 @@ skipped along with the adapter."
 > 测试 import `src/index.ts` 是**约定要求**的。以前这条由 `window.__panoTest` 的形状隐式保证
 > （出口只有一份，写死了就给什么），现在没有东西在机械地拦着了 —— 只能靠 review。
 > 这个项目里唯一还在机械保证这件事的东西是 `src/index.ts` 的文件内容本身。
+
+> **（2026-09-21 补记，Task 8 质量审变异验证 → 给 P6 门禁 C 的硬要求）** 变异 M4（WGSL 纬度换算写成 `PI / 90.0`，两倍因子）与 M5（纬度符号翻转）在 P3 **全套测试绿灯下存活**：门禁 B 只断言「差 > 2」（有响应、不问响应多少），门禁 A 的非线性可比集全在 lat = 0（因子空转），参考实现一侧的正确因子被钉死但**没有任何测试把 WGSL 输出在非零纬度上对到它**。这正是 reference.ts 存在要防的「两头同错」盲区——而门禁 C 若只做 WGSL-vs-GLSL 像素互检、参考仅作分歧仲裁，GLSL 转写抄了同一个错因子时两后端完美一致、仲裁器永不点火。**门禁 C 必须含一条非零纬度下对 CPU 参考的绝对对拍**（便宜做法：cylindrical 128px、lat 0→45，逐屏幕行的 v 位移恰为 −latRad/π，用 `project()` 逐像素可算（注意 −latRad/π 是 reference 侧的 v；WGSL 侧 v 已翻转为 `1.0 - phi / PI`，渲染图上的位移符号相反，对拍必须带上这次翻转））。两条同源补杀一并带上：门禁 B 阈值双向化（补渲染 0 vs 0.01 要求差 ≤ 2，堵变异 M9 的空洞化——P3 已按已接受残留记录，不回炉）；GLSL 转写保持 `(deg * PI) / 180` 的左结合形状（与 `latOffset` 及 panorama.wgsl 三处调用点一致）。另附一条 INFORMATIONAL：P3 的 fixture 记录测试只采样了 cylindrical（审查员已核实 planet/pannini/perspective 的 fixture 同样全程零 `u_CamPOVLatitude` 写入，证据可推广）；改成遍历 CAMERAS 可便宜延展。
