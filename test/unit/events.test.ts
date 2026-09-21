@@ -39,7 +39,9 @@ describe('EventEmitter', () => {
   })
 
   it('a listener that unsubscribes during dispatch does not break the others', () => {
-    // Iterating the live array would skip the next listener after a removal.
+    // Self-removal during dispatch: the common teardown shape. A live Set
+    // happens to tolerate this exact case; the not-yet-visited removal in
+    // the next test is what the copy is for.
     const e = new Emitter()
     const order: string[] = []
     const offA = e.on('ping', () => { order.push('a'); offA() })
@@ -47,6 +49,34 @@ describe('EventEmitter', () => {
     e.firePing(1)
     e.firePing(2)
     expect(order).toEqual(['a', 'b', 'b'])
+  })
+
+  it('a listener that unsubscribes a later listener does not skip it', () => {
+    // The case the copy actually exists for, and the case a live Set gets
+    // wrong: removing a NOT-yet-visited listener during dispatch. (Deleting
+    // the element being visited is safe on a live Set, which is why the
+    // self-removal test above cannot tell the two apart.)
+    const e = new Emitter()
+    const order: string[] = []
+    let offB: () => void = () => {}
+    e.on('ping', () => { order.push('a'); offB() })
+    offB = e.on('ping', () => order.push('b'))
+    e.firePing(1)
+    e.firePing(2)
+    expect(order).toEqual(['a', 'b', 'a'])
+  })
+
+  it('a wildcard listener that unsubscribes another wildcard does not skip it', () => {
+    // The wildcard set gets the same snapshot guarantee, and this is also the
+    // only path that exercises the wildcard branch's own unsubscribe closure.
+    const e = new Emitter()
+    const order: string[] = []
+    let offB: () => void = () => {}
+    e.on('*', () => { order.push('a'); offB() })
+    offB = e.on('*', () => order.push('b'))
+    e.firePing(1)
+    e.firePing(2)
+    expect(order).toEqual(['a', 'b', 'a'])
   })
 
   it('off() removes only the given listener', () => {
