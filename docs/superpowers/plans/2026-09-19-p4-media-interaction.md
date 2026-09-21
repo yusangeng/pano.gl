@@ -390,7 +390,7 @@ resistance."
 - Create: `public/fixtures/clip.mp4`
 - Test: `test/unit/downscale.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/unit/downscale.test.ts`：
 
@@ -448,12 +448,12 @@ describe('planDownscale', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- downscale`
 Expected: FAIL —— 无法解析 `../../src/media/downscale`
 
-- [ ] **Step 3: 实现 downscale**
+- [x] **Step 3: 实现 downscale**
 
 `src/media/downscale.ts`：
 
@@ -510,7 +510,7 @@ export function planDownscale (width: number, height: number, max: number): Down
 }
 ```
 
-- [ ] **Step 4: 实现接口**
+- [x] **Step 4: 实现接口**
 
 `src/media/source.ts`：
 
@@ -625,12 +625,12 @@ export const MEDIA_EVENT_MAP: ReadonlyArray<readonly [string, keyof MediaEvents 
 ] as const
 ```
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `npm run test:unit -- downscale`
 Expected: 7 个测试 PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/media/source.ts src/media/downscale.ts test/unit/downscale.test.ts
@@ -641,7 +641,7 @@ a gl.RGB/LINEAR/no-CLAMP_TO_EDGE upload. WebGPU has no such requirement, so
 this only scales when the device limit is actually exceeded."
 ```
 
-- [ ] **Step 7: 生成两个 fixture 素材**
+- [x] **Step 7: 生成两个 fixture 素材**
 
 前置说明第 3 条说的两个文件，在这里落地 —— 这是第一个需要它们的任务。
 
@@ -649,7 +649,7 @@ this only scales when the device limit is actually exceeded."
 
 **为什么素材要有这些性质。** 「上下两半可区分」不是审美要求：旧版最难看出来的一个 bug 就是画面上下颠倒，而一张上下同色的图倒过来和正着长得一模一样，谁都发现不了。同理，「左右也要可区分」是给 PTZ 断言用的 —— 只有一条竖直分界的图，水平平移前后像素完全相同，那条测试会对着一个冻住的画布通过。所以是**四个象限**，不是两半。
 
-- [ ] **Step 7a: 写生成器**
+- [x] **Step 7a: 写生成器**
 
 `scripts/gen-fixtures.mjs`：
 
@@ -766,7 +766,7 @@ for (const file of [png, mp4]) {
 }
 ```
 
-- [ ] **Step 7b: 生成**
+- [x] **Step 7b: 生成**
 
 Run: `node scripts/gen-fixtures.mjs`
 Expected: 两行输出，各几 KB（实测 `panorama.png` 1839 字节、`clip.mp4` 约 4.9KB —— 纯色图压缩率极高，**大小不是断言，别写进测试**）
@@ -779,7 +779,7 @@ Expected: **只有两个文件**。四张静帧里只有第一张落在 `public/
 
 > **视频那条断言若红在「解不出来」上，先怀疑路径而不是编码器。** 立项时已用 Playwright 会装的那个 Chromium（`chromium-1243`，`channel: 'chromium'` 指的就是它）实测过 `canPlayType('video/mp4; codecs="avc1.42E01E"')` 返回 `probably`，且加载本脚本产出的同参数文件后 `videoWidth=256`、`readyState=4`（`HAVE_ENOUGH_DATA`）。**注意版本**：更老的缓存副本 `chromium-1169` 对同一文件回 `h264=NO` —— 若本机命中了那个副本，先 `npx playwright install chromium` 再查代码。
 
-- [ ] **Step 7c: Commit**
+- [x] **Step 7c: Commit**
 
 ```bash
 git add scripts/gen-fixtures.mjs public/fixtures/
@@ -793,6 +793,20 @@ is what makes an upside-down source and a frozen pan both detectable."
 > **为什么素材在 P4 而不在 P1。** P1 建的是测试设施（vitest 的两个 project、WebGPU 守卫），而这两个文件的**规格来自它们的消费者** —— 四个象限是为了满足 P4 的朝向与上传路径断言、P5 的 PTZ 断言、P6 的后端对比。把文件放在第一个需要它们的阶段，规格和产物就在同一份文档里，不会各自漂移。P1 只需要保证页面起得来就能把它服务出来 —— 那是 Vite 的 `publicDir` 默认值 `<root>/public`。
 
 > **不能拿仓库里已有的 demo 素材充数。** 那些是旧版为 2 的幂尺寸挑的，上下关系没有任何保证 —— 而这里要断言的恰恰是上下关系。
+
+> **（2026-09-21 登记，Task 2 勘误，落地于 fdeff73 / 17f54c4）**三处 plan 代码被仓库自己的检查器否决，逐字照抄不可能，按最小修复落地：
+> 1. `source.ts` 删掉了 plan 的 `import type { SourceState }`：`MediaFrame` 成为 `RenderableSource` 的别名后，`SourceState` 只出现在 TSDoc 散文里，typescript-eslint 的 no-unused-vars 拒绝（往 /tmp 副本里加回该行即复现报错；tsc 两种写法都过）。`Disposable` / `EventMap` / `RenderableSource` 三行 import 保持 plan 原样。
+> 2. `gen-fixtures.mjs` 按 `tsconfig.scripts.json` 的 checkJs 严格检查（noImplicitAny / noUncheckedIndexedAccess；plan 的裸 JS 报 9 处错）改为 JSDoc 注解风格：`@param` / `@returns`、QUADRANTS 注为四元组、`rotated()` 重写为四条显式分支、segments 改为 `[...stills, ...stills]`。行为零差异 —— 重跑生成器后 `cmp` 证明产物逐字节相同（1839 / 4886 字节）。
+> 3. 两笔提交在未推送时用 reset 重写了一次，使每一步的提交内容与修正后的内容对齐；最终 SHA 为 fdeff73 / 17f54c4。
+>
+> **（2026-09-21 登记，Task 2 质量审查补测，落地于 f52856e）**变异测试证明 plan 自带的 7 条测试有四类行为未被钉住（代码本身正确，问题是测试因错误理由通过）：
+> - **高度约束轴**（IMPORTANT）：超标用例全是横版图，删掉 `Math.min` 的 height 侧或 fits 检查的 height 条件后 7/7 照过 —— 竖版源会拿到超标尺寸。补 `5000x10000 → 4096x8192`，两侧同时钉住。
+> - **1px 钳位从未实际生效**（IMPORTANT）：原测试的 `(16384,1)` 乘积恰为 0.5，`Math.round` 半数进一到 1，断言被 round 而不是钳位救活。补 `(20000,1)` / `(1,20000)`（无钳位时 `round(0.4096) = 0`）。
+> - **守卫的 `||` 与 RangeError 类未钉**（MINOR）：只测了 `(0,0)`；原位加固为零测例（单侧零 + `toThrow(RangeError)`）。
+> - **round 对 floor / ceil**（MINOR）：没有测例乘积小数部分落在 (0.5, 1)；补 `10000x5001 → 4097`（杀 floor）并把 T6 改为 `toBe(91)`（杀 ceil）。两条 round 测试各杀一个方向，分工正好。
+> - 三处注释修正：downscale.ts 头部的「与画布区域等大」子句经 v0.2.2 tag 逐行核对为**假**（帧路径是 drawImage 缩放，整个 tag 无 texSubImage2D），删除；`@throws` 改为 "not positive"（守卫是 `<= 0`）；source.ts 的 microtask→task（task 级的外部纹理生存期）。
+> - 等价变异体不测：fits 边界 `<=`→`<` 对整数输入逐位等价（x/x===1）；绑定轴 floor 仅在 1-ulp 浮点事故点可区分（如 w=8474）。钉它们会是坏测试。
+> - 遗留 INFORMATIONAL（未修，记录在案）：'rounds rather than floors' 测试注释里的 "w * (max / w) === max" 不是普遍浮点恒等式（11808 探针中 1400 例失败）；它引导的结论（只钉非绑定轴）正确。
 
 ---
 
