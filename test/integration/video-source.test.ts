@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { VideoSource } from '../../src/media/video-source'
+import type { MediaEvents } from '../../src/media/source'
 
 /*
  * Direct, like the image tests: this file is in the page, so a video source is
@@ -8,7 +9,7 @@ import { VideoSource } from '../../src/media/video-source'
  */
 
 /** Waits for one named event, or gives up. Every test below needs this. */
-function once (src: VideoSource, name: 'media-load' | 'media-pause' | 'media-play' | 'media-seeked' | 'media-ended'): Promise<void> {
+function once (src: VideoSource, name: 'media-load' | 'media-pause' | 'media-play' | 'media-seeked' | 'media-ended' | 'media-error' | 'media-progress'): Promise<void> {
   return new Promise(resolve => {
     const off = src.on(name, () => { off(); resolve() })
   })
@@ -26,6 +27,19 @@ describe('VideoSource', () => {
     const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 8192 })
     expect(src.naturalSize).toEqual({ width: 0, height: 0 })
     expect(() => src.frame).toThrow(/metadata/i)
+    src.dispose()
+  })
+
+  it('advances the version on media-load', async () => {
+    const src = await loaded()
+    expect(src.frame.version).toBe(1)
+    src.dispose()
+  })
+
+  it('scales the upload size to maxTextureDimension', async () => {
+    const src = new VideoSource('/fixtures/clip.mp4', { maxTextureDimension: 256 })
+    await once(src, 'media-load')
+    expect(src.frame.state).toEqual({ projection: 'equirectangular', width: 256, height: 128 })
     src.dispose()
   })
 
@@ -141,11 +155,16 @@ describe('VideoSource', () => {
     const seeked = once(src, 'media-seeked')
     src.element.currentTime = Math.max(0, src.element.duration - 0.3)
     await seeked
+
+    // `before` is read only after the play event settles, because media-play
+    // bumps too and an earlier read would let the play bump satisfy the
+    // assertion with media-ended dropped.
+    const played = once(src, 'media-play')
+    await src.play()
+    await played
     const before = src.frame.version
 
-    const ended = once(src, 'media-ended')
-    await src.play()
-    await ended
+    await once(src, 'media-ended')
     const after = src.frame.version
 
     src.dispose()
@@ -182,8 +201,31 @@ describe('VideoSource', () => {
   it('stops the element and removes every listener on dispose', async () => {
     const src = await loaded()
     await src.play()
+    expect(src.listenerCount).toBe(10)
     src.dispose()
     expect(src.element.paused).toBe(true)
+    expect(src.element.getAttribute('src')).toBe(null)
     expect(src.listenerCount).toBe(0)
+  })
+
+  it('leaves no zombie listeners that reach new subscribers', async () => {
+    const src = await loaded()
+    src.dispose()
+    let calls = 0
+    src.on('media-progress', () => { calls++ })
+    src.element.dispatchEvent(new Event('timeupdate'))
+    await new Promise(resolve => { setTimeout(resolve, 200) })
+    expect(calls).toBe(0)
+  })
+
+  it('re-emits the element error as media-error', async () => {
+    const src = new VideoSource('/fixtures/does-not-exist.mp4', { maxTextureDimension: 8192 })
+    const evt = await new Promise<MediaEvents['media-error']>(resolve => {
+      const off = src.on('media-error', e => { off(); resolve(e) })
+    })
+    expect(evt.error).toBeInstanceOf(Error)
+    expect((evt.error as Error).message).toMatch(/failed to load .*does-not-exist\.mp4$/)
+    expect(evt.target).toBe(src)
+    src.dispose()
   })
 })
