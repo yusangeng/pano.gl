@@ -105,4 +105,21 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：项目的规则
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve，合并。**（2026-09-21，superloop-verify 第 5 关）
+
+**手段**：协调者直审——卡面红线静态核查（页面侧桥接零残留）＋ 三源投影公式逐句亲读（legacy GLSL ↔ reference.ts ↔ panorama.wgsl）＋ verify 全链在分支树上亲跑 ＋ 集成测试双环境亲跑 ＋ F5 定向变异亲测。
+
+**亲验记录**：
+
+- **卡面最重要红线全过**：无 `index.html` / `demo/test-entry*` / `PanoTestApi` / `window.__panoTest` / hook 文件——页面侧桥接零残留，集成测试走 vitest 浏览器模式直 import src/。
+- **三源逐句对读**：`panorama.wgsl` 四投影公式与 `reference.ts`、legacy `fshader.glsl` 逐句一致——linear 的象限修正、planet 的 z 取负＋m/p/q/r、pannini 的 `2*atan((z*0.5)/s.x)` 先加倍后修正、atan 不化简为 atan2；保留 bug `lng = povLongitude/4.0`（度减弧度）与无 `+0.5` 均在；F5 `- lat` 项 WGSL 与 reference 两侧同步落地、`(deg*PI)/180` 形状正确；v 翻转 `1.0 - phi/PI` 与 spec §4.4 及 legacy `UNPACK_FLIP_Y` 语义一致，u 侧用 `fract` 而非 `%`（截断取模会缝负角）理由成立。着色器内零投影 kind 数值字面量，常量全走 generated。
+- **verify 全链 EXIT=0**（分支树亲跑）：`gen:shaders -- --check` → typecheck 三条腿 → lint → coverage 分支 **98.38%（122/124，与自报逐字一致）** → build。两个良性未覆盖分支（uniforms.ts:74 throw / backend.ts:414 版本短路）核实分类成立。
+- **集成双环境亲跑**：真 GPU 6 文件/14 测试 exit 0；`CI=1` SwiftShader 6 文件/14 测试 exit 0——容差两边都成立，卡面「只在一边绿=容差定错了」的要求满足。
+- **F5 定向变异亲测**：删 cylindrical 的 `- lat` 项 → gate-b「cylindrical responds to povLatitude」红（exit 1）；还原后 4/4 复绿、树净。纬度钉子有牙，卡面 M1 变异主张亲自复现。
+- **门禁证据**：26 改动文件 = 24 白名单内 ＋ plan ＋ 卡（两者均卡面预告的常规伴随物）；28/28 commit 前缀合规；分支侧 plan 48/48 全勾、diff 仅勾选与勘误块；执行期 master 侧仅开工认领与卡同步两笔（4818c2e / 6d9f29d），无越权。
+
+**留档（非阻断）**：
+
+1. **Task 3 Step 5 的 grep 证据结构性落空**（协调者验收时发现）：`grep -c "fn to_uv" dist/index.js` 在本卡树上必为 0——`src/index.ts` 仍是 P1 stub，`vite build` 只变换可达模块（实测输出「1 modules transformed」，dist/index.js 0.09 kB）。该步被勾选但无勘误块。vitest 侧（`shaders.test.ts` 的 `?raw` 断言）真实跑过、build 真实跑过，故不阻断本卡；但 **`?raw` 经 `vite build` 的通路从未被证明**，P1 S1 勘误「vite lib mode 全部直接支持」仍是 build 未证状态。**移交 P5 硬要求**：P5 接线 viewer → renderer 后，必须实际跑一次 dist 产物含着色器源的断言（grep 或等价物），并在卡面回填证据。
+2. npm audit 2 条 dev-only（brace-expansion HIGH / esbuild LOW）维持 P2 移交口径，处置待用户裁决。
+3. 下游移交风险 9 条（P4 version 契约、P6 门禁 C 硬要求、P6 复用纪律、N3/N4 残留等）均在卡面登记，属正常移交。
