@@ -15,12 +15,16 @@ describe('WebGPU backend lifecycle', () => {
     canvas.height = 8
     document.body.appendChild(canvas)
 
-    const backend = await WebGPUBackend.create(canvas)
-    expect(backend).not.toBeNull()
-    backend!.dispose()
-    // Disposal is reachable from a viewer's teardown path, which can run twice
-    // when a source swap and a destroy race. It has to be idempotent.
-    backend!.dispose()
+    try {
+      const backend = await WebGPUBackend.create(canvas)
+      expect(backend).not.toBeNull()
+      backend!.dispose()
+      // Disposal is reachable from a viewer's teardown path, which can run twice
+      // when a source swap and a destroy race. It has to be idempotent.
+      backend!.dispose()
+    } finally {
+      canvas.remove()
+    }
   })
 
   it('reports device loss', async () => {
@@ -49,8 +53,12 @@ describe('WebGPU backend lifecycle', () => {
     canvas.width = 8
     canvas.height = 8
     document.body.appendChild(canvas)
-    expect(canvas.getContext('2d')).not.toBeNull()
+    try {
+      expect(canvas.getContext('2d')).not.toBeNull()
 
-    await expect(WebGPUBackend.create(canvas)).rejects.toThrow('returned null')
+      await expect(WebGPUBackend.create(canvas)).rejects.toThrow('returned null')
+    } finally {
+      canvas.remove()
+    }
   })
 })
