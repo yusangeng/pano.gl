@@ -7,7 +7,14 @@
  * it had been added.
  */
 
-/** Maps event names to their payload types. */
+/**
+ * Maps event names to their payload types.
+ *
+ * Event maps must carry a string index signature to satisfy the emitters'
+ * `M extends EventMap` constraint: write `interface MyEvents extends EventMap`
+ * (or `extends Record<string, unknown>`). A plain interface without an index
+ * signature does not satisfy it and fails at the `EventEmitter<...>` site.
+ */
 export type EventMap = Record<string, unknown>
 
 /** A wildcard listener is told the type as well as the payload. */
@@ -84,8 +91,9 @@ export class EventEmitter<M extends EventMap> {
    * so nothing outside the owner can call this.
    */
   emit<K extends keyof M & string> (type: K, event: M[K]): void {
-    // Copy before iterating. A listener that unsubscribes would otherwise
-    // mutate the Set mid-iteration and skip its neighbour.
+    // Copy before iterating. A listener that unsubscribes a not-yet-visited
+    // listener would otherwise skip it: a live Set tolerates removal of the
+    // element being visited, but not of one still to come.
     const set = this.#listeners.get(type)
     if (set) {
       for (const fn of [...set]) (fn as (event: M[K]) => void)(event)
