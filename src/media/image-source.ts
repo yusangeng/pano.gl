@@ -1,7 +1,7 @@
 /**
  * An image source.
  *
- * Uploads exactly once. `version` starts at 0 and becomes 1 when the image
+ * Uploaded exactly once. `version` starts at 0 and becomes 1 when the image
  * loads, so the renderer's "does this need uploading" question is answered by a
  * number that changes once, rather than by a latched flag that has to be
  * cleared by the consumer.
@@ -20,9 +20,9 @@ export class ImageSource extends Disposable implements MediaSource {
   #version = 0
 
   // TextureProjection from core/constants, not a re-typed 'equirectangular'
-  // literal: the string is uploaded as `u_TexProjType` through
-  // `textureProjectionCode`, so a second spelling of it here is a second thing
-  // to keep in sync.
+  // literal: the string becomes the numeric `texProjKind` field of the camera
+  // uniform through `textureProjectionCode`, so a second spelling of it here
+  // is a second thing to keep in sync.
   readonly #projection: TextureProjection
 
   /**
@@ -66,11 +66,12 @@ export class ImageSource extends Disposable implements MediaSource {
   /**
    * How many DOM listeners this source currently holds.
    *
-   * Public and read-only on purpose: "did dispose actually remove everything" is
-   * otherwise unobservable, and the legacy codebase leaked listeners in four
-   * files for exactly that reason. Every listener here goes through one
-   * `AbortSignal`, so `dispose` aborts the controller and the count goes to zero
-   * in one place -- see `dispose`.
+   * Public and read-only on purpose: without a number to read, "did dispose
+   * run" is unobservable, and the legacy codebase leaked listeners in four
+   * files for exactly that reason. The count is zeroed by hand alongside the
+   * abort, so it certifies that dispose ran; whether the aborted listeners
+   * actually stopped delivering events is a separate fact, pinned by the
+   * integration suite's zombie-listener test rather than by this counter.
    */
   get listenerCount (): number {
     return this.#listenerCount
