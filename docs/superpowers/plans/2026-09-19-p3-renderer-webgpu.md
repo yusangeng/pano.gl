@@ -993,6 +993,8 @@ export function createPanoramaSampler (device: GPUDevice): GPUSampler {
 > **（2026-09-20 勘误，P1 终末复审补遗 S1）** 本注原写「tsup 不认 `?raw`，需在 `tsup.config.ts` 加 esbuild 的 raw loader，并把 import 改成 `./panorama.wgsl`（无后缀）」。P1 已把库打包器裁决换为 **vite lib mode**（`build` = `vite build`，仓库无 tsup / tsup.config.ts），该办法作废：`?raw` 是 Vite 的原生约定，vitest、demo 与 `vite build`（lib mode）**全部直接支持，构建侧零配置**，上方代码的 `import panoramaSource from './panorama.wgsl?raw'` 原样成立、不要去掉后缀。
 >
 > **两条路径都要验证**：`npm run test:unit`（vitest）与 `npm run build`（vite lib mode，随后 grep 产物，见 Step 5）。**如果哪一边不认，说出来，不要改成把着色器内联进 TS** —— 那会牺牲着色器文件的语法高亮，而这是长期维护里最值钱的东西。
+>
+> **（2026-09-21 勘误，Task 7 门禁 A 变异验证）** 上方代码块把两个 addressMode 钉成 `clamp-to-edge`，注释理由「shader 自己折 u、v 永不出 [0,1]，所以永远采不到纹理外」两头都错：旧实现从不设置 `TEXTURE_WRAP_S/T`（`legacy/utils/gl.js` 只设 LINEAR 过滤），吃的是 WebGL 默认 **REPEAT，双轴**；宽 fov 极点视角下 v 也确实越界（`to_uv` 的 `fract` 只折 u）。门禁 A 实测：clamp 时 U 轴接缝差最高 124、V 轴极点差 73（V 轴差异全 fixture 只有 perspective/south 一个状态可观测）；改 repeat 双轴后全部 ≤1。引言那句「wrap 由采样器做」本来就对，错的只是代码块。落地代码（c6e5066）双轴 repeat；`to_uv` 的 `fract` 保留——external 路径的 `textureSampleBaseClampToEdge` 无视 sampler 寻址、强制 clamp，折 u 只能靠 shader，对 repeat 采样则冗余无害。以落地代码为准，勿按本块回改。
 
 - [x] **Step 4: 加一条着色器可编译性测试**
 
@@ -2043,6 +2045,8 @@ export class WebGPUBackend implements Backend {
 > - **`render(target?)` 的 `target` 与 `get device()` 是一对，缺一不可。** 渲染目标必须和管线属于同一个 device，所以测试自己建不了目标纹理 —— 它得先拿到后端的 device。这两个成员**只在具体类上，不在 `Backend` 接口上**：`GPUTextureView` 是 WebGPU 类型，WebGL2 后端没有对应物，挂到共享接口上会逼着 P6 实现一个它用不上的东西。
 >
 > 不要为了让骨架跑起来而跳过 error scope。**先跑通 Task 6 的布局往返测试，再写四个投影的接线。**
+>
+> **（2026-09-21 勘误，Task 7 门禁 A 首跑实证）** 上方代码块里源纹理 usage 写的是 `TEXTURE_BINDING | COPY_DST`，缺 `RENDER_ATTACHMENT`：`copyExternalImageToTexture` 的目标纹理按 spec 必须带 `COPY_DST | RENDER_ATTACHMENT`（该拷贝实现为一次 blit）。缺它时 validation 拒绝被 `render()` 的 error scope 吞掉、**整条 command buffer 连 clear 一起被丢弃**，回读全零、diff 255，且 headless 下 debug 通道默认关闭、无任何报错——症状是「画了全黑」而非「上传被拒」。缺陷随本块原样落入 Task 5；门禁 A 第一次真正走 still 上传路径时暴露，c6e5066 补标志并加 why 注释。以落地代码为准，勿按本块回改。
 
 - [x] **Step 3: 写冒烟测试**
 
@@ -2415,7 +2419,7 @@ a second copy of the thing under test."
 >
 > 判据现成：`cylindrical` 的 `origin`（lat 0, lng 0, zoom 0）与 `tilt`（lat 30, lng 45, zoom 0）之间，**这个投影能看见的唯一输入差异是经度** —— 它的 `phi` 不读纬度，两个状态 zoom 都是 0，而纬度本来就被忽略。两张 PNG 相同 ⇒ `lng` 被编译成 0 ⇒ 经度对画面无影响，`lat === 0` 的状态全都可比；不同 ⇒ 经度确实在起作用，只有 `lng === 0` 的状态可比。
 
-- [ ] **Step 1: 写浏览器侧的 fixture loader**
+- [x] **Step 1: 写浏览器侧的 fixture loader**
 
 `test/integration/support/baseline-browser.ts` —— P0 那批 fixture 在浏览器里的读法。Node 侧那份（`baseline-node.ts`，P2 产出）在这里一行都用不了：`node:fs`、`path`、`__dirname` 在浏览器里都不存在。
 
@@ -2555,7 +2559,7 @@ export function loadSource (): Promise<DecodedImage> {
 >
 > **本仓库里不存在这个函数，也不要再把它造回来。** 下面所有比对都是 RGBA 对 RGBA。
 
-- [ ] **Step 2: 写测试**
+- [x] **Step 2: 写测试**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -2688,7 +2692,7 @@ describe('gate A: fullscreen triangle vs the v0.2.2 baseline', () => {
 >
 > **`new ImageData(rgba, w, h)` 用来把解码结果变成 `ImageBitmap`**：`renderOffscreen` 收的是 `TexImageSource`，而 `ImageData` 不是 —— 它得先变成一个真正的 `ImageBitmap`。`.slice()` 是因为 `ImageData` 要求一个长度精确的 `Uint8ClampedArray`，而共享同一块 buffer 会让 `bitmap.close()` 之后的行为变得微妙。
 
-- [ ] **Step 3: 跑门禁 A**
+- [x] **Step 3: 跑门禁 A**
 
 Run: `npm run test:integration -- gate-a`
 Expected: 2 条 PASS（一条覆盖全部可比状态，一条是集合断言）。两个 case 的**断言条数**上，覆盖那条会在第一个失败处停下 —— 所以看日志里的 `${camera} / ${stateId}` 标签定位是哪个相机哪个状态。
@@ -2711,7 +2715,7 @@ Expected: 2 条 PASS（一条覆盖全部可比状态，一条是集合断言）
 **如果 `perspective` 也失败** —— 那是 P2 的问题（矩阵对拍应该先红），别在这里纠缠。
 **如果非线性全失败** —— 那是门禁 B 的问题，先跑 Task 8。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/gate-a-pixels.test.ts test/integration/support/gpu.ts \
