@@ -4,7 +4,7 @@ scope: [src/renderer/**, src/core/reference.ts, test/unit/**, test/integration/*
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: foundation
 deps: [p2-core]
-state: rejected
+state: reported
 createdAt: 2026-09-19T08:51:52.509Z
 ---
 # 任务：P3 — renderer + WebGPU
@@ -159,3 +159,5 @@ Caused by: TypeError: Cannot read properties of undefined (reading 'config')
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
 ```
+
+5. **协调者勘误·回退分流（2026-09-21，卡翻回 reported）**：上述 ⑥ 红**裁定为环境/工具问题，非分支缺陷**，不退执行者整改。依据：① 失败 4 套件全部死在 **import 阶段**，零断言红，vite 自报 `new dependencies optimized: gl-matrix, debug` → `Vite unexpectedly reloaded a test` 是直接原因——主检出的浏览器模式集成测试首次引入 gl-matrix/debug 运行时依赖，vite 依赖优化缓存冷、优化在测试加载中途完成并触发 reload（P1 合并期预热同款问题）；② 同一批套件在分支 worktree 四次运行全绿（验收亲跑真 GPU 14/14、`CI=1` SwiftShader 14/14、变异还原 gate-b 4/4、清缓存冷跑 integration 工程 13/13），无一次复现；③ 失败那次 run 已把 `gl-matrix.js` 等优化产物落进主检出 `node_modules/.vite/vitest/<hash>/deps/`（亲验目录存在）——缓存现已热，重合并将命中同 config-hash 的热缓存。**处置**：主卡翻回 `reported`，分支零改动，直接重跑 task-merge；若再红按新现场重新分流。
