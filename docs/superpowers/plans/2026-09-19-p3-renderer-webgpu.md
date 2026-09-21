@@ -2119,7 +2119,7 @@ git commit -m "feat(renderer): WebGPU backend skeleton with device loss reportin
 
 **这是本计划里最容易被跳过、也最不能跳过的一步。** 单元测试只能证明 TS 侧的偏移自洽；**只有往 GPU 里写一遍再读回来，才能证明这些偏移与 WGSL 对 struct 的理解一致**。
 
-- [ ] **Step 1: 写探针**
+- [x] **Step 1: 写探针**
 
 `test/integration/support/echo.ts`。它直接 import `src/` 的内部模块 —— **浏览器模式下没有「页面侧」和「测试侧」之分**，测试文件本身就在页面里，`acquireDevice()` 随手可得。上一版把它放在 `demo/test-entry-hooks/` 是因为它需要 `navigator.gpu` 而测试跑在 Node 里；那个前提现在不成立了。
 
@@ -2317,7 +2317,9 @@ export async function createEchoRenderer (): Promise<
 
 > `packCameraUniforms` 的入参类型是 `CameraUniformValues`，`invClip` 要 `mat4`。探针传的是 `Float32Array.from(...)`，**不是真的可用矩阵也不影响** —— 它只负责把 16 个数写进去再读回来，不参与任何变换。这一点在测试里表现为第二个用例可以拿 `[1..16]` 这种显然不是变换矩阵的数组当输入。
 
-- [ ] **Step 2: 写测试**
+> **（2026-09-21 勘误，Task 6 审查闭环补记）** 本代码块有两处笔误，落地代码（fc95d06）已修正，勿按本块回改：① import 深度 `'../../src/renderer/uniforms'` 与 `'../../src/renderer/webgpu/device'` 应为 `'../../../src/...'`——本文件在 `test/integration/support/` 下，与 `gpu.ts` 同层；② 矩阵分支 `out[n] = camera.invClip[col][row]` 把 f32 裸赋给 `array<u32>` 是 WGSL 编译错（无隐式转换）→ 管线静默无效 → 两条测试全零读回，必须包一层 `bitcast<u32>(...)`。不得用 `u32(...)` 值转换替代——探针的职责是位往返，值转换会破坏它（如 234.75 → 234）。
+
+- [x] **Step 2: 写测试**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -2372,7 +2374,7 @@ describe('uniform layout round trip', () => {
 })
 ```
 
-- [ ] **Step 3: 跑测试**
+- [x] **Step 3: 跑测试**
 
 Run: `npm run test:integration -- uniform-layout`
 Expected: 2 个测试 PASS
@@ -2382,7 +2384,7 @@ Expected: 2 个测试 PASS
 2. 若每个字段都被推到了独立的 16 字节槽上（`projKind` 在 `out[16]`（byte 64）而 `povLatitude` 跑到 `out[20]`（byte 80）而不是 `out[18]`（byte 72））→ 该实现不接受紧凑标量布局，**上报卡点**，因为这会影响所有 backend 的布局设计
 3. 若只有矩阵转置 → 检查 `f32.set` 的偏移与 `buildEchoShader` 里 `invClip[col][row]` 的展开
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/support/echo.ts test/integration/uniform-layout.test.ts
