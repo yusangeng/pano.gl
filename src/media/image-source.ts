@@ -66,12 +66,14 @@ export class ImageSource extends Disposable implements MediaSource {
   /**
    * How many DOM listeners this source currently holds.
    *
-   * Public and read-only on purpose: without a number to read, "did dispose
-   * run" is unobservable, and the legacy codebase leaked listeners in four
-   * files for exactly that reason. The count is zeroed by hand alongside the
-   * abort, so it certifies that dispose ran; whether the aborted listeners
-   * actually stopped delivering events is a separate fact, pinned by the
-   * integration suite's zombie-listener test rather than by this counter.
+   * Public and read-only on purpose: what no other public member shows is
+   * the listener bookkeeping (`isDisposed` answers 'did dispose run' but
+   * says nothing about the listeners), and the legacy codebase leaked
+   * listeners in four files for exactly that reason. The count is zeroed by
+   * hand alongside the abort, so it certifies that dispose ran; whether the
+   * aborted listeners actually stopped delivering events is a separate
+   * fact, pinned by the integration suite's zombie-listener test rather
+   * than by this counter.
    */
   get listenerCount (): number {
     return this.#listenerCount
