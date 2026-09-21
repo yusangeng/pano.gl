@@ -38,4 +38,19 @@ describe('WebGPU backend lifecycle', () => {
     ])
     expect(outcome).toBe('lost')
   })
+
+  it('throws when the canvas already holds a 2d context, rather than returning a half-alive backend', async () => {
+    // A canvas can carry only one context type, so a 2d canvas makes the
+    // webgpu context request return null -- the one creation failure that can
+    // be forced deterministically in a real browser. The whole setup path runs
+    // for real first (device, pipelines), so this also proves the failure
+    // throws AFTER the real work, not before it.
+    const canvas = document.createElement('canvas')
+    canvas.width = 8
+    canvas.height = 8
+    document.body.appendChild(canvas)
+    expect(canvas.getContext('2d')).not.toBeNull()
+
+    await expect(WebGPUBackend.create(canvas)).rejects.toThrow('returned null')
+  })
 })
