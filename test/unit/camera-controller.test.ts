@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { CameraController } from '../../src/viewer/camera-controller'
+import { CameraController, DEFAULT_PROJECTION } from '../../src/viewer/camera-controller'
 import type { Projection } from '../../src/core/types'
 
 // Fully-specified projections: `as const` on a partial literal would look like a
@@ -21,6 +21,23 @@ describe('CameraController', () => {
   it('defaults to the origin when no pose is given', () => {
     const c = new CameraController(undefined, linear)
     expect(c.state).toEqual({ povLatitude: 0, povLongitude: 0 })
+  })
+
+  it('normalises the pose it is constructed with', () => {
+    // Every other fixture in this file is already normalised, so the clamp and
+    // the wrap are no-ops on all of them and nothing observes that they run at
+    // all. The constructor does no validating of its own -- it relies entirely on
+    // clampLatitude and wrapLongitude -- so dropping either call drops the
+    // documented throw with it, and a NaN then reaches the matrix and draws a
+    // black frame with nothing reported. The pose is a public option, so this is
+    // the boundary, not an internal path.
+    expect(new CameraController({ povLatitude: 100, povLongitude: 0 }, linear).state.povLatitude).toBe(90)
+    expect(new CameraController({ povLatitude: -100, povLongitude: 0 }, linear).state.povLatitude).toBe(-90)
+    expect(new CameraController({ povLatitude: 0, povLongitude: -10 }, linear).state.povLongitude).toBe(350)
+    expect(new CameraController({ povLatitude: 0, povLongitude: 370 }, linear).state.povLongitude).toBe(10)
+
+    expect(() => new CameraController({ povLatitude: NaN, povLongitude: 0 }, linear)).toThrow(/finite/i)
+    expect(() => new CameraController({ povLatitude: 0, povLongitude: NaN }, linear)).toThrow(/finite/i)
   })
 
   it('clamps latitude instead of wrapping it', () => {
@@ -76,6 +93,27 @@ describe('CameraController', () => {
     expect(c.consumeDirty()).toBe(false)
   })
 
+  it('rotate moves only the axis that was given a delta', () => {
+    // A purely horizontal drag reaches this method as `rotate(-0, -3.5)`: the
+    // interaction layer divides a zero pixel delta by the surface size, so the
+    // untouched axis arrives as zero rather than absent. The zero guard must
+    // therefore be an `&&` -- under an `||` it returns early whenever *either*
+    // delta is zero, so every axis-aligned drag is swallowed before it reaches
+    // `#apply` and only diagonal drags move the camera at all. The `rotate(0, 0)`
+    // case above cannot see the difference: it is the one input on which the two
+    // operators agree.
+    const c = new CameraController(undefined, linear)
+    c.consumeDirty()
+
+    c.rotate(0, 5)
+    expect(c.state).toEqual({ povLatitude: 0, povLongitude: 5 })
+    expect(c.consumeDirty()).toBe(true)
+
+    c.rotate(5, 0)
+    expect(c.state).toEqual({ povLatitude: 5, povLongitude: 5 })
+    expect(c.consumeDirty()).toBe(true)
+  })
+
   it('setPose to a pose that normalises to the current one is a no-op', () => {
     // A redundant setPose must not cost a full-screen redraw, for the same
     // reason rotate-by-zero must not: the interaction layer re-derives an
@@ -110,6 +148,12 @@ describe('CameraController', () => {
     // and not a numeric comparison: a wrong guard would fall through to reading
     // `zoom` off the linear variant, where it does not exist, and the camera
     // would end up with a NaN fov rather than a clamped zoom.
+    //
+    // The bounds are asserted exactly rather than by inequality. `<= 1` and
+    // `> 0` are satisfied by any range inside (0, 1], so both constants could be
+    // moved -- the ceiling to 0.5, the floor to 0.5 -- and the whole usable range
+    // could collapse to a single point with this test still green. The range is
+    // ported legacy behaviour, which is the one thing the port exists to keep.
     const c = new CameraController(undefined, cylindrical)
     const zoomOf = (): number => {
       const p = c.projection
@@ -117,9 +161,44 @@ describe('CameraController', () => {
     }
 
     c.zoom(100)
-    expect(zoomOf()).toBeLessThanOrEqual(1)
+    expect(zoomOf()).toBe(1)
     c.zoom(-100)
-    expect(zoomOf()).toBeGreaterThan(0)
+    expect(zoomOf()).toBe(0.01)
+  })
+
+  it('zoom moves by the delta, in the direction the delta asks for', () => {
+    // Every other zoom test starts at or saturates against the ceiling, where a
+    // zoom-in is clamped away -- so a `zoom` with no effect at all would satisfy
+    // all of them. Starting below the ceiling is what makes the sign and the
+    // magnitude observable.
+    const half: Projection = { kind: 'cylindrical', zoom: 0.5, extent: [1, 1] }
+    const c = new CameraController(undefined, half)
+    c.consumeDirty()
+    c.zoom(0.5)
+
+    const p = c.projection
+    expect(p.kind === 'cylindrical' ? p.zoom : NaN).toBe(0.75)
+    expect(c.consumeDirty()).toBe(true)
+  })
+
+  it('a zoom that clamps back to the value already held is a no-op', () => {
+    // A wheel held at the ceiling is an unbounded stream of positive deltas, and
+    // a delta below the float64 epsilon rounds to the value already held. Both
+    // land on the same no-redraw case `#apply` and `setAspect` guard; without it
+    // each event costs a full-screen redraw and a subscriber wake for a picture
+    // that cannot change.
+    const c = new CameraController(undefined, cylindrical)
+    const fn = vi.fn()
+    c.onChange(fn)
+    c.consumeDirty()
+
+    c.zoom(0.5)
+    expect(c.consumeDirty()).toBe(false)
+
+    c.zoom(5e-17)
+    expect(c.consumeDirty()).toBe(false)
+
+    expect(fn).not.toHaveBeenCalled()
   })
 
   it('zoom by zero does not dirty the controller', () => {
@@ -197,6 +276,56 @@ describe('CameraController', () => {
     expect(fn).toHaveBeenCalledTimes(1)
   })
 
+  it('notifies every subscriber, and an unsubscribe detaches only its own', () => {
+    // Every other test here registers exactly one listener, which makes "remove
+    // my listener" and "remove every listener" indistinguishable -- and the
+    // second is what a `clear()` returns. The unsubscribe is what a viewer's
+    // dispose will call, so detaching everyone would silently kill the
+    // application's own subscription the moment one viewer went away.
+    const c = new CameraController(undefined, linear)
+    const first = vi.fn()
+    const second = vi.fn()
+    const off = c.onChange(first)
+    c.onChange(second)
+
+    c.rotate(1, 1)
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+
+    off()
+    c.rotate(1, 1)
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(2)
+  })
+
+  it('zoom and setProjection notify their subscribers', () => {
+    // Both change what the renderer draws, so a subscriber that only ever heard
+    // about pans would miss them.
+    const half: Projection = { kind: 'cylindrical', zoom: 0.5, extent: [1, 1] }
+    const c = new CameraController(undefined, half)
+    const fn = vi.fn()
+    c.onChange(fn)
+
+    c.zoom(0.5)
+    expect(fn).toHaveBeenCalledTimes(1)
+    c.setProjection(linear)
+    expect(fn).toHaveBeenCalledTimes(2)
+  })
+
+  it('notifies from a snapshot, so a listener that detaches another still reaches it', () => {
+    // With a live Set the detaching listener would remove a listener still to be
+    // visited, and that listener would silently miss a change it was subscribed
+    // to when the notification began.
+    const c = new CameraController(undefined, linear)
+    const victim = vi.fn()
+    let detachVictim: () => void = () => {}
+    c.onChange(() => { detachVictim() })
+    detachVictim = c.onChange(victim)
+
+    c.rotate(1, 1)
+    expect(victim).toHaveBeenCalledTimes(1)
+  })
+
   it('setAspect rewrites the linear projection and marks dirty', () => {
     // The surface's aspect is knowledge only the viewer's resize handler has, and
     // for the linear camera it IS the projection's aspect. Without this the first
@@ -252,5 +381,15 @@ describe('CameraController', () => {
     const c = new CameraController(undefined, linear)
     expect(() => c.setPose({ povLatitude: NaN, povLongitude: 0 })).toThrow(/finite/i)
     expect(() => c.rotate(0, Infinity)).toThrow(/finite/i)
+  })
+})
+
+describe('DEFAULT_PROJECTION', () => {
+  it('is the legacy 70-degree linear camera', () => {
+    // Nothing else pins this number. The plan's viewer fixtures spell the same
+    // value out independently and gate A derives its fov from the captured
+    // baseline, so a wrong one would reach every caller who does not name a
+    // projection and show up only as a visibly wrong field of view.
+    expect(DEFAULT_PROJECTION).toEqual({ kind: 'linear', fov: (70 * Math.PI) / 180, aspect: 1 })
   })
 })
