@@ -3,7 +3,8 @@ import { createBackend } from '../../src/viewer/backend-factory'
 import { Viewer } from '../../src/viewer/viewer'
 import type { CameraOptions } from '../../src/viewer/types'
 import type { Projection } from '../../src/core/types'
-import { makeContainer } from './support/dom'
+import { nextFrames } from './support/canvas'
+import { canvasOf, makeContainer } from './support/dom'
 
 /*
  * The public camera boundary: `viewer.cameraOptions`.
@@ -151,5 +152,76 @@ describe('cameraOptions', () => {
     writable.extent[0] = 99
 
     expect(viewer.cameraOptions.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [4, 4] })
+  })
+
+})
+
+describe('a surface with no width', () => {
+  /** The aspect of a linear projection, which is the one field `#resize` writes. */
+  const aspectOf = (viewer: Viewer): number => {
+    const projection = viewer.cameraOptions.projection
+    return projection.kind === 'linear' ? projection.aspect : NaN
+  }
+
+  it('constructs without throwing and without writing an aspect', async () => {
+    /*
+     * A collapsed side panel or a vertical splitter dragged shut is zero wide
+     * with its height intact -- the one layout where width / height is 0 while
+     * height alone looks healthy. `setAspect` rejects 0 (a zero aspect makes
+     * the projection matrix singular) and `#resize` reaches it from the
+     * constructor, so guarding height alone rejects the whole construction
+     * with an error naming `aspect`, an option this caller never wrote.
+     *
+     * Linear on purpose, with a non-default aspect: `setAspect` is the only
+     * writer of that field, so "still the 2 I passed" is the observable of
+     * "setAspect never ran". A default fixture could not tell a skipped call
+     * from one that wrote the same value back.
+     */
+    const viewer = await mount(
+      { projection: { kind: 'linear', fov: Math.PI / 2, aspect: 2 } },
+      makeContainer(0, 300)
+    )
+    expect(aspectOf(viewer)).toBe(2)
+  })
+
+  it('does not throw from the resize path when a live viewer collapses to zero width', async () => {
+    /*
+     * The same layout arriving later: the container is healthy at
+     * construction, then the splitter closes. What `#resize` does then runs
+     * inside the ResizeObserver callback, where a throw is uncaught -- it
+     * escapes to the page's error reporting once per layout pass, which is
+     * the failure shape the guard exists to prevent. Observed at the boundary
+     * an application would actually see it: window's error events, collected
+     * while the collapse settles.
+     */
+    const container = makeContainer(400, 300)
+    const viewer = await mount(
+      { projection: { kind: 'linear', fov: Math.PI / 2, aspect: 1 } },
+      container
+    )
+    // The pre-collapse aspect, which the viewer wrote itself in `#resize`:
+    // asserting it first is what keeps "unchanged" below from being satisfied
+    // by a value that was never there (the E8 vacuous-assertion trap).
+    expect(aspectOf(viewer)).toBe(400 / 300)
+
+    const uncaught: ErrorEvent[] = []
+    const onUncaught = (event: ErrorEvent): void => { uncaught.push(event) }
+    window.addEventListener('error', onUncaught)
+    try {
+      container.style.width = '0px'
+      await nextFrames(3)
+    } finally {
+      window.removeEventListener('error', onUncaught)
+    }
+    expect(uncaught).toEqual([])
+
+    // Proof the collapse actually reached `#resize`, rather than the observer
+    // never firing: the backend clamps a zero CSS width to a 1px drawing
+    // buffer (`Math.max(1, ...)` in its resize), so the canvas is the record
+    // that the resize path ran -- at 400 CSS px and deviceScaleFactor 2 it
+    // starts at 800 device px, which nothing but a resize rewrites.
+    expect(canvasOf(container).width).toBe(1)
+    // And the aspect survived the collapse untouched.
+    expect(aspectOf(viewer)).toBe(400 / 300)
   })
 })
