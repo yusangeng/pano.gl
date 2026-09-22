@@ -2291,18 +2291,20 @@ AbortController, and the element's touch-action is restored on dispose."
 
 ## 完成标准
 
-- [ ] 图片和视频都不存在「未加载就被上传」的路径（两条集成测试证明会抛）
-- [ ] `dispose()` 后每个源的 DOM 监听数归零，且这个数字是**公开可读的**
-- [ ] `src/media/` 下不存在 `frameSize` 及其任何同义词
-- [ ] 本层不重新定义 `SourceState`，只组合 core 的那一个
-- [ ] 源不缓存帧（同一任务内两次读 `frame` 得到两个对象）
-- [ ] external / copy 两条上传路径的朝向一致
-- [ ] **暂停的视频不再推进版本号** —— 播放中会前进，暂停后不动，`play()` / seek 之后又能继续动（否则渲染循环要么永远重画，要么永远醒不过来）
-- [ ] `PTZ = false` 不产生事件，且重新打开后恢复
-- [ ] `touch-action` 在 dispose 时还原
-- [ ] 不存在任何 2 的幂量化逻辑
-- [ ] 本阶段的集成测试**直接 import `src/media/` 与 `src/interaction/` 的类**，仓库里没有重新长出 `demo/test-entry.ts`、`test-entry-hooks/` 或 `window.__panoTest`
-- [ ] `public/fixtures/panorama.png` 与 `public/fixtures/clip.mp4` 已由 `scripts/gen-fixtures.mjs` 生成并提交，且 `ffprobe` 复核为 `512x256`、`64` 帧（P5 的全部 User Story、P6 的后端对比都读它们）
+- [x] 图片和视频都不存在「未加载就被上传」的路径（两条集成测试证明会抛）
+- [x] `dispose()` 后每个源的 DOM 监听数归零，且这个数字是**公开可读的**
+- [x] `src/media/` 下不存在 `frameSize` 及其任何同义词
+- [x] 本层不重新定义 `SourceState`，只组合 core 的那一个
+- [x] 源不缓存帧（同一任务内两次读 `frame` 得到两个对象）
+- [x] external / copy 两条上传路径的朝向一致
+- [x] **暂停的视频不再推进版本号** —— 播放中会前进，暂停后不动，`play()` / seek 之后又能继续动（否则渲染循环要么永远重画，要么永远醒不过来）
+- [x] `PTZ = false` 不产生事件，且重新打开后恢复
+- [x] `touch-action` 在 dispose 时还原
+- [x] 不存在任何 2 的幂量化逻辑
+- [x] 本阶段的集成测试**直接 import `src/media/` 与 `src/interaction/` 的类**，仓库里没有重新长出 `demo/test-entry.ts`、`test-entry-hooks/` 或 `window.__panoTest`
+- [x] `public/fixtures/panorama.png` 与 `public/fixtures/clip.mp4` 已由 `scripts/gen-fixtures.mjs` 生成并提交，且 `ffprobe` 复核为 `512x256`、`64` 帧（P5 的全部 User Story、P6 的后端对比都读它们）
+
+> **（2026-09-22 登记，终末全分支审查）**opus 全分支审查于 `7c51586`（`master...HEAD`，13 commits）结论 **APPROVED**：零 CRITICAL、零 IMPORTANT；两条 MINOR 均为交卷流程自有的文档状态项（本清单勾选、任务卡填写），随交卷提交处理。完成标准 12 条经终审逐条验证后勾选（两处 `frame` getter 未加载即抛、`listenerCount` 公开且 dispose 归零、`frameSize` 仅存于 downscale.ts:4 的 legacy 说明注释、`state` 字面量经 `RenderableSource` 别名链满足 core `SourceState`、每读必新对象、orientation 探针含上下对比自检、暂停守卫 + 四事件 bump、PTZ 门、touch-action 还原、非 POT 尺寸钉住、四文件直 import 无桥再生、ffprobe `512x256/64`）。跨阶段留档三条：`src/renderer/backend.ts:48-53`（P3 产物）TSDoc 对上传门槛的描述窄于实际实现（实际另比较 element 同一性，backend.ts:414 —— P4 的按源版本号因此在换源时安全），修正不在本卡 scope；`emit` 载荷在全部 8 个事件上携带 `error: undefined`（仅 media-error 声明，联合成员匹配可编译，运行时无害）；`test/integration/image-source.test.ts:8` 说明性注释提及 `__panoTest`，P7 的悬空引用 grep（docs/ 之外须为空）会命中（已记入任务卡风险栏）。
 
 ## 交给下游的东西
 
