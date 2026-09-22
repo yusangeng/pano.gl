@@ -5,6 +5,8 @@ import { ImageSource } from '../../src/media/image-source'
 import type { MediaSource } from '../../src/media/source'
 import type { DeviceLost } from '../../src/renderer/backend'
 import { makeContainer } from './support/dom'
+import { nextFrames } from './support/canvas'
+import { countDraws } from './support/spies'
 
 /*
  * `Viewer.on`, both arms: a named event and `'*'`.
@@ -171,5 +173,48 @@ describe("Viewer.on('*')", () => {
     // would mean the re-emit ran twice, which is the shape a duplicated
     // subscription takes.
     expect(wildcard[0]).toBe(named[0])
+  })
+})
+
+describe('swapping the source', () => {
+  it('redraws, even when the new source reports the version the old one ended on', async () => {
+    /*
+     * The version latch, and the user-visible defect when it is wrong.
+     *
+     * `version` is the backend's only pixel identity, and every `ImageSource`
+     * starts its counter at 0 and bumps it to 1 on load -- so the outgoing
+     * source and the incoming one END ON THE SAME NUMBER. `Viewer.setSource`
+     * resets `#lastSourceVersion` to -1 precisely so that the new source's
+     * first version cannot compare equal to the old one's last; without that,
+     * `#sourceChanged` reads the swap as "unchanged", draws nothing, and the
+     * canvas keeps showing the previous picture. No error, no event -- the new
+     * image simply never appears.
+     *
+     * Both sources point at the same URL on purpose. The collision needs the
+     * two counters to agree, and using one fixture twice is the cheapest way to
+     * guarantee it without reaching into either source.
+     */
+    const draws = countDraws()
+    const viewer = await mount()
+    install(viewer, '/fixtures/panorama.png')
+    await vi.waitFor(() => expect(draws(), 'nothing was drawn, so a swap cannot be seen').toBeGreaterThan(0))
+
+    // Let the first frames and the resize observer settle, so the delta below
+    // can only be the swap: a resize arriving later would dirty the camera and
+    // draw on its own, and this test would pass without the latch.
+    await nextFrames(3)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const before = draws()
+
+    const loaded = new Promise<void>((resolve) => {
+      const off = viewer.on('media-load', () => { off(); resolve() })
+    })
+    install(viewer, '/fixtures/panorama.png')
+    await loaded
+
+    await vi.waitFor(() => {
+      expect(draws(), 'the new image was never drawn, so the old one is still on the canvas').toBeGreaterThan(before)
+    })
+    viewer.dispose()
   })
 })

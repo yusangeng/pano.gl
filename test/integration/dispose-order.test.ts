@@ -3,6 +3,8 @@ import { createBackend } from '../../src/viewer/backend-factory'
 import { Viewer } from '../../src/viewer/viewer'
 import { ImageSource } from '../../src/media/image-source'
 import type { MediaSource } from '../../src/media/source'
+import { WebGPUBackend } from '../../src/renderer/webgpu/backend'
+import { RenderLoop } from '../../src/viewer/render-loop'
 import { canvasOf, makeContainer } from './support/dom'
 import { countDraws, captureBackends } from './support/spies'
 import { nextFrames } from './support/canvas'
@@ -81,10 +83,86 @@ describe('dispose', () => {
     expect(canvas.isConnected).toBe(false)
   })
 
+  it('stops the loop, rather than leaving it running with nothing to do', async () => {
+    /*
+     * The test above cannot see this, and the reason is worth stating rather
+     * than leaving as a gap. After `dispose` the viewer holds no source and a
+     * clean camera, so `shouldDraw` returns false whatever the loop is doing --
+     * a loop that is dead and a loop that is alive but idle produce exactly the
+     * same frame count. The observable has to be the scheduling itself.
+     */
+    const { viewer } = await mountImage('/fixtures/panorama.png')
+    await nextFrames(2)
+
+    const loopDisposed = vi.spyOn(RenderLoop.prototype, 'dispose')
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame')
+
+    viewer.dispose()
+
+    expect(loopDisposed, 'the viewer never disposed its render loop').toHaveBeenCalledTimes(1)
+    /*
+     * Two facts, not one. The loop was reached, AND the frame it already had
+     * queued was withdrawn: a teardown that set a flag without cancelling
+     * would leave one more callback to run against a backend that is being
+     * dismantled on the next line -- which is the in-flight frame the ordering
+     * of `dispose` exists to prevent.
+     */
+    expect(cancel, 'the loop was disposed but its pending frame was not cancelled').toHaveBeenCalled()
+  })
+
   it('is idempotent', async () => {
     const { viewer } = await mountImage('/fixtures/panorama.png')
+    const disposed = vi.spyOn(WebGPUBackend.prototype, 'dispose')
+
     viewer.dispose()
+    expect(disposed, 'the first dispose() never reached the backend').toHaveBeenCalledTimes(1)
+
+    viewer.dispose()
+    /*
+     * The observable that makes this more than "did not throw". `expect(() =>
+     * viewer.dispose()).not.toThrow()` is satisfied by replacing the whole
+     * method with an empty function -- so it certifies that nothing exploded,
+     * not that the second call was a no-op. A second teardown reaches the
+     * backend a second time, and that is what this counts.
+     */
+    expect(disposed, 'the second dispose() tore down a second time').toHaveBeenCalledTimes(1)
+    expect(viewer.isDisposed).toBe(true)
+  })
+
+  it('does not re-enter its own teardown', async () => {
+    /*
+     * What the `#disposing` guard is actually for.
+     *
+     * NOT the device-lost listener, which is the shape the comment further down
+     * used to claim. By the time that listener runs, the first teardown has
+     * already ended in `super.dispose()`, which installs an OWN no-op `dispose`
+     * property on the instance -- and property lookup consults own properties
+     * before the prototype chain, so the listener's call never reaches the
+     * override at all. The guard is unreachable from there; the assertion that
+     * the listener's `dispose()` is harmless is a real assertion, but it is not
+     * evidence about this guard.
+     *
+     * A call made from INSIDE the teardown is a different matter. This spy sits
+     * on step 5 (`#backend.dispose()`) and step 6 is `super.dispose()`, so at
+     * that moment no shadow exists yet and the call genuinely arrives at the
+     * override -- which is the case the guard has to hold.
+     */
+    const { viewer } = await mountImage('/fixtures/panorama.png')
+    await nextFrames(2)
+
+    const original = WebGPUBackend.prototype.dispose
+    const teardowns: number[] = []
+    vi.spyOn(WebGPUBackend.prototype, 'dispose').mockImplementation(function (this: WebGPUBackend) {
+      teardowns.push(teardowns.length + 1)
+      // Re-enter once and only once. An unguarded second teardown would
+      // otherwise recurse through this spy for ever, and the failure would
+      // arrive as a hung test rather than as a red assertion.
+      if (teardowns.length === 1) viewer.dispose()
+      original.call(this)
+    })
+
     expect(() => viewer.dispose()).not.toThrow()
+    expect(teardowns, 'the teardown ran twice').toHaveLength(1)
     expect(viewer.isDisposed).toBe(true)
   })
 
@@ -130,10 +208,19 @@ describe('dispose', () => {
 
     const seen: Array<{ reason: string, disposedWhenNotified: boolean }> = []
     viewer.on('device-lost', (lost) => {
-      // Read the viewer from inside the handler: reporting before tearing down is
-      // what makes that possible at all, and the dispose here is the re-entrancy
-      // case -- a listener that cleans up on its own must not run the teardown a
-      // second time, nor re-enter it halfway through.
+      // Read the viewer from inside the handler. That is the assertion this
+      // test carries: reporting BEFORE tearing down is what makes a listener
+      // able to read the viewer at all, and `disposedWhenNotified` is false
+      // exactly when the order held.
+      //
+      // The `dispose()` below is a second, weaker claim, and it is worth being
+      // precise about what it does NOT cover. It shows that a listener which
+      // cleans up on its own is harmless. It is NOT evidence about
+      // `#disposing`: by the time this runs, the first teardown has already
+      // reached `super.dispose()`, which installs an own no-op `dispose` on the
+      // instance, so this call resolves to that shadow and never reaches the
+      // override. The guard is exercised by "does not re-enter its own
+      // teardown" above, which re-enters from inside the teardown instead.
       seen.push({ reason: lost.reason, disposedWhenNotified: viewer.isDisposed })
       viewer.dispose()
     })
