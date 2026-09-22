@@ -66,6 +66,15 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：**分支覆盖 
 3. **plan 缺陷，已上报未自行补**：`test/integration/dispose-order.test.ts:27-28` 与 `test/integration/support/spies.ts:7` 的注释把 `src/index.ts` 写成「只导出 `VERSION`」，Task 4 之后这句已陈旧。四个集成测试文件按 brief §3.3 **未改**（也未把 import 重指向 `src/index.ts`）。
 4. `src/media/**` 的 optional 属性不接受显式 `undefined`（同偏离 1），干净修法在那里；本卡内以 helper 规避，未留行为债。
 
+**质量审查整改（第二关，2026-09-23）**：四条 —— 2 IMPORTANT 已修、1 MINOR 按计划顺延、1 QUESTION 裁定不改。
+
+1. **IMPORTANT（已修，`b3851eb`）**：`viewer.ts` 的 `#resize` 只守高度。「宽为零、高仍在」的布局（折叠侧栏 / 竖向分割条拖死）使 `width / height` 为 0，`setAspect` 抛 `greater than 0` —— `create()` 侧拒绝一个调用者从没写过的 `aspect` 选项，构造之后则在每个布局过程里从 ResizeObserver 回调内未捕获地重抛。改为双轴 `width > 0 && height > 0`。
+2. **IMPORTANT（已修，`534c7ba`，代码本对、只补红测）**：`cameraOptions` 的 partial-pose 合并无具名红测 —— 删掉合并行的变异体全套件存活（套件内唯一的 pose 赋值作用在未移动的 viewer 上，`{0,0}` 合并与否无差别）。
+3. **MINOR（顺延 Task 5，非本卡缺口）**：公开类上的输入接线（input wiring）—— US1/US2 覆盖。
+4. **QUESTION（裁定不改，记为决定而非缺陷）**：`render-loop.ts` 在 draw 之前消费相机脏标记，设备存活而 draw 抛出时，支撑本次绘制的变更已随消费丢失。可接受：现实的抛出者就是设备丢失，而那条路径本来就会 dispose 掉 viewer。
+
+**测试落点与审查建议不同，登记**：审查建议落 `test/unit/camera-options.test.ts`，该文件不存在；且 `vitest.config.ts` 已有实测在案的裁定 —— `viewer.ts` 在 node 项目一行都跑不了，node 桩 DOM 的单元装置「回放的是本文件自己的假设而不是测试」，Viewer 行为归 integration 项目。故三条新测试落 `test/integration/camera-options.test.ts`（`cameraOptions` 本就在此被行使，`mount()` 现成）：① 零宽容器构造不抛、不写 aspect；② 生存期塌缩到零宽无页面 error 事件、确实到达 `#resize`（canvas 被后端钳到 1px）、aspect 原值存活；③ partial-pose 合并两角精确断言（纬度变 5、未点名的经度 20 存活）。变异复测在 HEAD 干净副本（`git archive` + 软链 node_modules，工作树不动）：仅还原守卫 → ①②具名转红；仅删合并行 → ③具名转红；两轮其余用例全绿，还原后与 `git show HEAD:` 逐字节相同。验证：typecheck / lint 0 错，coverage 99.57 / 98.61 / 100 / 100 四门槛全过，integration 15 文件 75 用例全绿。
+
 ## 自审记录
 
 ### CR 结论
