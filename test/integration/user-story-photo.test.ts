@@ -134,9 +134,8 @@ describe('US1: view a 360 photo and look around', () => {
      * rewritten, which is the one projection field `#resize` owns. The SECOND
      * keeps the aspect at 1:1 -- and that is the one whose repaint can only
      * come from `invalidate()`: `setAspect` early-outs on an unchanged aspect,
-     * so nothing else marks the camera dirty, while assigning the canvas size
-     * has cleared the drawing buffer. A `#resize` that forgot to invalidate
-     * would leave this last canvas black until the camera happened to move.
+     * so nothing else marks the camera dirty. The repaint is asserted as a
+     * draw, not as pixels, for the measured reason inside the test.
      */
     const { viewer, container } = await imageViewer()
     const canvas = canvasOf(container)
@@ -158,10 +157,26 @@ describe('US1: view a 360 photo and look around', () => {
     }
     expect(projection.aspect).toBe(1) // 300 CSS px over 300 CSS px
 
+    /*
+     * The repaint, counted rather than seen. Measured on this platform: a
+     * WebGPU canvas KEEPS its last presented frame across a dimension change
+     * that no draw follows -- `toDataURL` still reads the old frame, lit -- so
+     * no pixel assertion can tell a repainted resize from an undrawn one. What
+     * does tell them apart is whether a draw ran, and this is the one resize
+     * where `invalidate()` is the only thing that can make one happen (the
+     * aspect is unchanged, so `setAspect` early-outs; the source is loaded and
+     * idle). Counted at the `setSource` each draw makes, per this suite's rule
+     * that "did it draw" questions go through `captureRenderInputs`, never
+     * `countDraws` -- and snapped AFTER the first resize's draw has settled, so
+     * the delta is this resize's repaint alone.
+     */
+    const inputs = captureRenderInputs()
+    const before = inputs.sourceCalls()
     container.style.width = '200px'
     container.style.height = '200px'
-    await nextFrames(2)
+    await nextFrames(3)
     expect(canvas.width).toBe(200 * devicePixelRatio)
+    const draws = inputs.sourceCalls() - before
 
     // Read BEFORE dispose: dispose destroys the device, and a canvas whose
     // context is gone reads back as blank -- which would make this assertion
@@ -169,6 +184,7 @@ describe('US1: view a 360 photo and look around', () => {
     const image = await readCanvas(canvas)
     viewer.dispose()
 
+    expect(draws, 'the resize did not repaint').toBeGreaterThan(0)
     expect(litFraction(image), 'the resized canvas kept no frame').toBeGreaterThan(0.2)
   })
 
