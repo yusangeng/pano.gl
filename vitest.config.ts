@@ -59,7 +59,33 @@ export default defineConfig({
         // coverage: `dispose-order`, `camera-options`, `viewer-events` and
         // `viewer-capabilities` each drive a real `Viewer`.
         'src/viewer/viewer.ts',
-        'src/viewer/backend-factory.ts'
+        'src/viewer/backend-factory.ts',
+        // Task 4's two public classes, for the same reason as `viewer.ts` and
+        // by measurement rather than by analogy. `create` calls
+        // `document.createElement('canvas')` and then awaits a GPU adapter;
+        // `src` builds a source; `play`/`pause`/`element` reach a real
+        // `<video>`. The node project has no `document` at all, so not one of
+        // those paths can run, and the obstacle is the DOM rather than the GPU.
+        //
+        // Measured at Task 4 (2026-09-22) with these two lines absent, via
+        // `npx vitest run --project unit --coverage --coverage.reportOnFailure=true`
+        // (the JSON report is where the per-file counts come from): statements
+        // 468/524 (89.31%), branches 214/229 (93.44%), functions 95/108
+        // (87.96%), lines 89.21%. Three of the four gates fail. The two files
+        // are 56 statements between them -- `image-viewer.ts` 24 (1 covered),
+        // `video-viewer.ts` 32 (1 covered) -- so the gate falls by construction
+        // rather than because anything is untested.
+        //
+        // NOT `options.ts`, which Task 4 also adds: measured at the same run it
+        // is 25/25 statements, 23/23 branches, 6/6 functions, and it is covered
+        // by `test/unit/constructor-validation.test.ts`. Excluding it would
+        // strike that file's own tests off the books.
+        //
+        // Both ARE exercised, by the integration project, which reports no
+        // coverage: Task 5's five user stories drive these two classes, and the
+        // `no-webgpu` project drives their failure paths.
+        'src/viewer/image-viewer.ts',
+        'src/viewer/video-viewer.ts'
       ],
       thresholds: {
         branches: 90,
