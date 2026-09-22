@@ -40,13 +40,15 @@ describe('US2: play a 360 video and zoom', () => {
 
     const a = await readCanvas(canvasOf(container))
     /*
-     * The media clock AND the pixels, both inside one bounded wait: under a
-     * loaded parallel run the timeline can be a third of a second ahead of the
-     * frame actually reaching the canvas, so a single read taken when the clock
-     * moved still sees the previous decoded frame -- and a fixed wall-clock
-     * window has the same failure the other way (the clock stalls under decode
-     * starvation while `currentTime` keeps running). Waiting for the picture
-     * itself to change keeps the claim where it belongs -- on what reached the
+     * The media clock AND the pixels, both inside one bounded wait. They are
+     * two different things under load, and that is the whole reason this is
+     * not a single read: the flake this replaced was a run where the clock
+     * had already moved and the canvas still showed the previous decoded
+     * frame -- presentation lagged the clock -- so gating on `currentTime`
+     * alone asserted a change the screen had not made. A fixed wall-clock
+     * window is fragile from both directions for the same reason (the pixels
+     * may not have caught up when it expires). Waiting for the picture itself
+     * to change keeps the claim where it belongs -- on what reached the
      * screen -- while tolerating load-induced presentation lag. Bounded, so a
      * loop that never redraws a playing video still fails here.
      */
