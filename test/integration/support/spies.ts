@@ -47,6 +47,17 @@ export function countDraws (): () => number {
  * (no adapter) is passed through unchanged: the caller decides what to do about
  * it, and one of the callers is the no-WebGPU project, where it is the point.
  */
+export function captureBackends (): WebGPUBackend[] {
+  const created: WebGPUBackend[] = []
+  const original = WebGPUBackend.create
+  vi.spyOn(WebGPUBackend, 'create').mockImplementation(async (canvas) => {
+    const backend = await original(canvas)
+    if (backend !== null) created.push(backend)
+    return backend
+  })
+  return created
+}
+
 /**
  * Records what the viewer hands the backend on each frame.
  *
@@ -81,15 +92,4 @@ export function captureRenderInputs (): {
     },
     sourceCalls: () => source.mock.calls.length
   }
-}
-
-export function captureBackends (): WebGPUBackend[] {
-  const created: WebGPUBackend[] = []
-  const original = WebGPUBackend.create
-  vi.spyOn(WebGPUBackend, 'create').mockImplementation(async (canvas) => {
-    const backend = await original(canvas)
-    if (backend !== null) created.push(backend)
-    return backend
-  })
-  return created
 }
