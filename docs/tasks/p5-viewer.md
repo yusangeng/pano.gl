@@ -4,7 +4,7 @@ scope: [src/viewer/**, src/index.ts, test/**, vitest.config.ts, demo/**]
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: app
 deps: [p4-media-interaction]
-state: rejected
+state: reported
 createdAt: 2026-09-19T08:51:52.772Z
 ---
 # 任务：P5 — viewer
@@ -315,3 +315,5 @@ Caused by: Error: Vitest failed to find the runner. One of the following is poss
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
 ```
+
+**勘误（协调者，2026-09-23）**：上条第 4 项经分流裁定为**环境/工具问题，非分支缺陷**——失败尾部的 vite 消息即直接诱因（运行中 `new dependencies optimized: debug, gl-matrix` → reload → runner 丢失）；同一棵树在分支 worktree 连续三轮 106 用例全绿、opus 终审独立复跑全套绿，主检出是合并后**首次**加载 viewer 引入的 `gl-matrix`，冷 optimizeDeps 缓存触发竞态。主检出侧已热（实测 `node_modules/.vite/.../deps/_metadata.json` 已列 `debug, gl-matrix`，由失败那轮完成优化）。**无需执行者整改**（上条「重跑 task-finish」的指示作废），主卡翻回 `reported`，即行重跑 task-merge。若同签名再红则停手报用户。
