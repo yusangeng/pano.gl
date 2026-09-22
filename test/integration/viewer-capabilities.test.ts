@@ -64,4 +64,28 @@ describe('Viewer.capabilities', () => {
     expect(viewer.capabilities.adapter?.injected).toBeUndefined()
     expect(backend.capabilities.adapter?.injected).toBeUndefined()
   })
+
+  it('forwards backend and externalTextures unchanged', async () => {
+    /*
+     * The other two fields, and the forwarding path rather than the table.
+     * `maxTextureDimension` and `adapter` were the only ones asserted;
+     * `test/unit/capabilities.test.ts` covers `describeCapabilities`' own
+     * output, which is a different fact -- a getter that replaced either of
+     * these on the way through would leave that table perfectly correct.
+     *
+     * `externalTextures` is asserted to be TRUE first. On a backend that
+     * reports false, forcing false is identity, and the comparison below would
+     * hold whether or not anything was forwarded -- loud rather than silently
+     * vacuous if a future adapter changes that.
+     */
+    const { viewer, backend } = await mount()
+
+    expect(
+      backend.capabilities.externalTextures,
+      'the backend reports no external textures, so a forced false would be invisible here'
+    ).toBe(true)
+
+    expect(viewer.capabilities.backend).toBe(backend.capabilities.backend)
+    expect(viewer.capabilities.externalTextures).toBe(backend.capabilities.externalTextures)
+  })
 })
