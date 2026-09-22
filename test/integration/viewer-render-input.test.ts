@@ -24,6 +24,12 @@ import { nextFrames } from './support/canvas'
  * first. These tests assert the arguments at the boundary where the viewer's
  * state becomes the backend's input, which is the last place a wrong picture
  * is still cheap to catch.
+ *
+ * The `waitFor` predicates below are deliberately weak (`toBeTruthy`,
+ * `toContain`) and lean on the strong assertion that follows them in the same
+ * test. They are a pair -- a weak predicate copied without its follow-up is
+ * satisfied by anything, which is the vacuous-assertion shape this file exists
+ * to close.
  */
 
 /** `setSource` is protected: a subclass is the only thing allowed to swap a source. */
