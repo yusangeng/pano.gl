@@ -143,9 +143,18 @@ describe('CameraController', () => {
     // draws black with nothing reported anywhere. Cylindrical on purpose -- it is
     // the variant where the assignment actually happens, so this is the fixture
     // in which the check is load-bearing rather than incidentally satisfied.
+    //
+    // The linear case is here for the guard's position, and it is the only input
+    // the two possible positions disagree on: checked before the kind guard a NaN
+    // throws, checked after it the linear camera returns first and the NaN is
+    // swallowed. A NaN must not throw on one camera model and pass silently on
+    // another -- a public contract that varies by projection kind is the kind of
+    // difference nobody finds until it bites.
     const c = new CameraController(undefined, cylindrical)
     expect(() => c.zoom(NaN)).toThrow(/finite/i)
     expect(() => c.zoom(Infinity)).toThrow(/finite/i)
+    // Linear has no zoom to change, and still refuses the input.
+    expect(() => new CameraController(undefined, linear).zoom(NaN)).toThrow(/finite/i)
   })
 
   it('replacing the projection marks dirty and does not reset the pose', () => {
@@ -166,6 +175,25 @@ describe('CameraController', () => {
     c.rotate(1, 1)
     expect(fn).toHaveBeenCalledTimes(1)
     c.rotate(0, 0)
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('onChange returns an unsubscribe that detaches the listener', () => {
+    // A later Viewer.dispose() detaches its camera listener through exactly this
+    // function, so a no-op here leaves a disposed viewer still reacting to camera
+    // changes -- a leak that stays invisible until something is disposed and
+    // something else is still moving.
+    const c = new CameraController(undefined, linear)
+    const fn = vi.fn()
+    const off = c.onChange(fn)
+
+    c.rotate(1, 1)
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    off()
+    c.rotate(1, 1)
+    // Counted rather than `not.toHaveBeenCalled()`, which would also pass if the
+    // listener had been firing twice per change from the start.
     expect(fn).toHaveBeenCalledTimes(1)
   })
 
