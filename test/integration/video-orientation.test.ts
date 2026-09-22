@@ -25,8 +25,23 @@ function maxChannelDiff (a: ArrayLike<number>, b: ArrayLike<number>): number {
  * only appears on some devices and looks like a shader problem.
  */
 describe('video upload paths', () => {
-  it('produce the same orientation', async () => {
-    const { external, copy } = await renderVideoBothPaths('/fixtures/clip.mp4')
+  it('produce the same orientation', async (ctx) => {
+    const result = await renderVideoBothPaths('/fixtures/clip.mp4')
+    if (result.kind === 'unavailable') {
+      // A skip, not a pass, and it says why. Nothing else reaches this branch:
+      // the probe reports `unavailable` only after the fixture has decoded with
+      // contrast of its own and the same device has rendered a constant colour,
+      // so a machine that simply renders nothing still fails instead.
+      //
+      // Printed as well as handed to `skip`, because a reporter may show either
+      // one and not the other -- the verbose reporter prints the note, the
+      // default one passes the skip through quietly.
+      console.warn(`video-orientation: ${result.detail}`)
+      // `return`ed because `skip` is typed `never`: that is what narrows the
+      // union for the assertion below without a cast.
+      return ctx.skip(result.detail)
+    }
+    const { external, copy } = result
     // Not zero: the two paths do different colour-space conversions, so a couple
     // of levels of difference is expected. What must not happen is a whole frame
     // being mirrored, which moves every pixel that matters.
