@@ -11,7 +11,7 @@
  * Here each collaborator is a field and `dispose` names them in order.
  */
 
-import { Disposable, EventEmitter, type EventMap } from '../core/events'
+import { Disposable, EventEmitter, type EventMap, type WildcardListener } from '../core/events'
 import { channels } from '../diagnostics'
 import type { Projection } from '../core/types'
 import type { Backend, Capabilities, DeviceLost } from '../renderer/backend'
@@ -176,8 +176,21 @@ export class Viewer extends Disposable {
    * `'*'` receives every event as `(type, event)` -- the typed form of the legacy
    * `trigger('*')`.
    */
-  on<K extends keyof ViewerEvents & string> (type: K, fn: (event: ViewerEvents[K]) => void): () => void {
-    return this.events.on(type, fn)
+  on<K extends keyof ViewerEvents & string> (type: K, fn: (event: ViewerEvents[K]) => void): () => void
+  on (type: '*', fn: WildcardListener<ViewerEvents>): () => void
+  on (type: string, fn: (...args: never[]) => void): () => void {
+    // Bound as well as cast, and the bind is load-bearing. A cast alone detaches
+    // the method from its receiver, and `EventEmitter.on` reads `this`:
+    // measured, the unbound form threw "Cannot read properties of undefined
+    // (reading '#listeners')" from inside the emitter. `bind` keeps the method
+    // attached; the cast only widens the signature to the emitter's
+    // implementation one, which is the signature it really has -- TypeScript
+    // simply does not offer an implementation signature to callers. Neither
+    // public overload can be called from here: the first demands a one-argument
+    // callback and the second demands the literal `'*'`.
+    const dispatch = this.events.on.bind(this.events) as
+    (type: string, fn: (...args: never[]) => void) => () => void
+    return dispatch(type, fn)
   }
 
   /** The device's real limits, as reported by the backend in use. */
