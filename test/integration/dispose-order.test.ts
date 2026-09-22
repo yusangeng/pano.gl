@@ -22,19 +22,17 @@ class SourcedViewer extends Viewer {
 }
 
 /*
- * This file drives `Viewer` rather than a public viewer class, and that is a
- * deviation from the plan it implements. The plan's Step 3 imports
- * `FramelessImageViewer` from `src/index.ts`, which Task 4 creates -- at Task 3's
- * completion `src/index.ts` exports `VERSION` and nothing else, so the plan's own
- * test file could not compile, let alone pass. The plan's import discipline puts
- * this file in the same row as `gate-*.test.ts` and `render-loop.test.ts`
- * ("internal modules are fair game"), which is why reaching for `Viewer` directly
- * is in bounds.
- *
- * What the deviation costs is stated in the Task 3 report rather than hidden
- * here: `Viewer` is one layer below the public entry point, so these tests prove
- * the teardown *mechanism*, while whether a `FramelessImageViewer` reachably runs
- * it is Task 5's user-story layer.
+ * This file drives `Viewer` rather than a public viewer class. That began as a
+ * deviation forced by timing -- when this file was written, `src/index.ts`
+ * exported `VERSION` and nothing else -- but Task 4 has since landed the frozen
+ * public surface (`FramelessImageViewer`, `FramelessVideoViewer` and their
+ * option types), so the original reason has expired and the file keeps its
+ * internal hold deliberately: it tests the teardown *mechanism*, one layer
+ * below the public entry point, and the plan's import discipline puts it in
+ * the same row as `gate-*.test.ts` and `render-loop.test.ts` ("internal
+ * modules are fair game"). Whether a public class reachably runs this same
+ * teardown is netted from the public surface by Task 5's user-story layer
+ * (`user-story-photo.test.ts` ends its journey with the dispose assertions).
  */
 async function mountImage (src: string): Promise<{
   viewer: SourcedViewer
