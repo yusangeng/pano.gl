@@ -28,9 +28,9 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：**分支覆盖 
 - T4：`src/media/video-source.ts` —— 10 个监听器同收口、每读 `frame` 必新对象、`load/play/seeked/ended` 四事件推进版本号、`markFramePresented` 带 paused/ended 守卫；12 条集成测试；`test/integration/support/upload-paths.ts` 探针直驱两个浏览器 API，钉住 external / copy 两条上传路径朝向一致（硬件 adapter 上 maxChannelDiff = 1 ≤ 容差 2）。探针在**软件 adapter**（CI 的 SwiftShader）上取不到视频帧，此时返回 `kind: 'unavailable'` 由调用方响亮跳过 —— 该分支只在同一次运行里当场量到「素材解码有对比度」与「同 device 常量色可读回」两个控制之后才可能返回，坏素材与瞎子设备仍是硬失败（见「整改记录」与 plan 末尾整改轮勘误）。
 - T5：`src/interaction/gestures.ts`（wheel/pinch/drag 纯函数识别，Node 可测）+ `src/interaction/input-controller.ts`（Pointer Events、单 AbortController、touch-action 借用并还原、PTZ 开关不重绑）；19 条单元 + 11 条集成测试。
 
-**自测结果**：分支 24 commits（21 files，+2580/−49；全部 `task-p4-media-interaction:` 前缀）。verify 六连全绿：`gen:shaders --check` up to date；`typecheck` 三程序；`lint` 0 错；`test:coverage` 206/206、99.17 / 98.10 / 100 / 99.70（90 门槛未动）；`test:integration` 45 条 —— 本机硬件 adapter 45/45（真实 WebGPU adapter 守卫），CI（`CI=1`，软件 adapter）44 passed | 1 skipped，跳过项为 video-orientation 且理由随注（见「整改记录」）；`build` 产出 dist/。终审于 `7c51586` 当面复跑六连全绿，同结果。
+**自测结果**：分支 25 commits（21 files，+2580/−49；全部 `task-p4-media-interaction:` 前缀）。verify 六连全绿：`gen:shaders --check` up to date；`typecheck` 三程序；`lint` 0 错；`test:coverage` 206/206、99.17 / 98.10 / 100 / 99.70（90 门槛未动）；`test:integration` 45 条 —— 本机硬件 adapter 45/45（真实 WebGPU adapter 守卫），CI（`CI=1`，软件 adapter）44 passed | 1 skipped，跳过项为 video-orientation 且理由随注（见「整改记录」）；`build` 产出 dist/。终审于 `7c51586` 当面复跑六连全绿，同结果。
 
-**口径更正（协调者意见 2）**：本节原写「分支 13 commits（+2360/−33）」，其中 **13 是陈旧计数**（13 = 到 `ed7203b` 为止的累计数，T4 feat 刚落地），**+2360/−33 与 20 files 才是终审 HEAD `7c51586` 的真值**。上一轮交卷时（`c02d064`）的真值是 22 commits / 21 files / +2399−49（协调者量得，与本卡 +2360−33 的差额 +39/−16 正是终审之后那几笔），本次整改后为 **24 commits / 21 files / +2580−49**。终审的覆盖范围见「自审记录·CR 结论」的如实表述。
+**口径更正（协调者意见 2）**：本节原写「分支 13 commits（+2360/−33）」，其中 **13 是陈旧计数**（13 = 到 `ed7203b` 为止的累计数，T4 feat 刚落地），**+2360/−33 与 20 files 才是终审 HEAD `7c51586` 的真值**。上一轮交卷时（`c02d064`）的真值是 22 commits / 21 files / +2399−49（协调者量得，与本卡 +2360−33 的差额 +39/−16 正是终审之后那几笔），本次整改后为 **25 commits / 21 files / +2580−49**。终审的覆盖范围见「自审记录·CR 结论」的如实表述。
 
 **偏离 plan 的点**：全部登记在 plan 各 Task 勘误块（逐条可查），要点：T1 plan 的 `Disposable.dispose` 函数体过不了自身测试（改影子方法实现）、`on()` 闭包断言被 tsc 拒绝；T2 三处被仓库检查器否决（删未用 import、gen-fixtures JSDoc 化 —— 产物逐字节不变、未推送 reset 对齐）+ 四类补测；T3 coverage exclude（理由随注，thresholds 未动）+ 六类补测；T4 探针两处被实测否决（`copyExternalImageToTexture` 不缩放、Chromium 暂停视频无 GPU 后备帧需先 seek）+ 六类补测；T5 结构性缺陷修复（`setPointerCapture` 对合成指针抛 NotFoundError：跟踪先行 + try/catch 降级）+ 11 条补测 + 两处注释勘误 + 质量审查报告自身提议的 helper 形态被 tsc 否决（TS2322，控制器独立复现后采纳块体改法）。
 
@@ -44,7 +44,7 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：**分支覆盖 
 7. **一处未解释的实测（留档不建屋）**：`copyExternalImageToTexture` 从 2D canvas 上传曾成功过一次（读回与填充色精确相符），此后全尺寸、双 adapter、各种 settle 变体一律 max 0，而同文件常量色控制始终读回 191。因不可稳定复现，canvas 控制被整个放弃，改用两条可稳定重测的控制；**在软件 adapter 上「canvas → 纹理」同样不可依赖**。
 8. `if (result.kind === 'unavailable')` 这条分支之下，`ctx.skip` 使该用例在 CI 记为 skipped 而非 passed —— 这是有意的：ci.yml 的 per-project 计数断言（`grep -cF "|$project ("`）要求 integration 与 no-webgpu 各非零，已模拟复核为 `integration` 44 / `no-webgpu` 1，均在。
 
-## 整改记录（2026-09-22，协调者打回后）
+### 整改记录（2026-09-22，协调者打回后）
 
 **意见 1【阻塞】· CI 上 video-orientation 确定性红 —— 已整改，落地 `7df8d96`。**
 
