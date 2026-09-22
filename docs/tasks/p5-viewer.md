@@ -112,7 +112,7 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：**分支覆盖 
 
 **遗留风险**
 
-1. **源缺陷（未修，按 brief §6 登记）**：`src/renderer/webgpu/backend.ts:343` 的 `setCamera` 以 `mat4.equals(clip, this.#clip)` 早退，而 zoom 按设计不进 clip 矩阵（`src/core/matrix.ts:128` 明说），只活在 `#writeCameraUniforms()` 写的 uniform 块里——早退把它一并跳过。非线性投影上只动 zoom 时 `#projection` 更新但永不上传，帧逐字节不变，直到某个动矩阵的事件顺带冲刷。复现：cylindrical zoom 1→0.7，`setCamera` 观测到带 0.7 的 draw 照跑，30+ 帧后 canvas 不变。US2 滚轮用例的像素断言（偏离 5）修好那天应放回。
+1. **源缺陷（未修，按 brief §6 登记；严重度经纯净沙箱复审 + 本人 /tmp 干净副本复测修正）**：非线性投影上**没有任何相机变更到达过画布——平移与缩放全死，不只 zoom**。机制：`src/core/matrix.ts:172–186` 对非线性类型以常量 `LEGACY_QUAD_VIEW` 作 view、`buildProjection` 只读 extent（zoom 按设计不进矩阵，`:128`），故 clip 矩阵与姿态、zoom **均**无关；于是 `src/renderer/webgpu/backend.ts:353` 的 `mat4.equals(clip, this.#clip)` 早退对**每一次**相机变更都成立，`:363` 的 `#writeCameraUniforms()`——唯一携带 `povLatitude` / `povLongitude` / `zoom` 的写入点（`:382–384`）——从不执行；着色器从 uniform 读姿态（`panorama.wgsl:245,252`）。能重新写 uniform 的只有：投影类型或 extent 变化（clip 真变了）、源纹理投影变化（`setSource`，`backend.ts:423`）。**本卡初版所写的「直到某个动矩阵的事件顺带冲刷」是假的——平移同样不冲刷。** 实测：cylindrical 上 `rotate(10,0)`、`rotate(0,90)`、大幅横拖，像素 diff 全 0（复审沙箱与本人在 /tmp 干净副本的探针 `[0,0,0]` 两轮一致）；zoom 路 cylindrical 1→0.7，`setCamera` 观测到带 0.7 的 draw 照跑，30+ 帧后 canvas 不变。US2 滚轮用例的像素断言（偏离 5）修好那天应放回。
 2. **游离 `<video>` 上的 autoplay 惰性**：构造期 `autoplay` 不起播（上述实测）。本轮以显式 `play()` 绕开；若 P6 认为该选项应生效，需要源侧或 viewer 侧显式起播，届时 US2 头部注释与「muted 默认」用例的说明同步改。
 3. **平台行为登记**：本机 WebGPU canvas 跨无重绘的尺寸变化保留上一帧（m22 探针实测）。若将来平台改为清缓冲，resize 用例的像素半边会重新变得可达——目前它只是「画布仍有帧」的弱断言，击杀靠 draw 差分。
 4. **m16 的击杀者是 Task 4 整改轮的 `camera-options.test.ts` 两条**，非本轮新增（裁决预告过「可能已杀」，如实记归属；本轮重测确认）。

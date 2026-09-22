@@ -165,16 +165,20 @@ describe('US2: play a 360 video and zoom', () => {
     expect(projection.zoom).toBeLessThan(1)
     /*
      * The plan also asserted a pixel change here, and that assertion is red on
-     * the UNMODIFIED tree, which is why it is absent: `WebGPUBackend.setCamera`
-     * returns early when the clip matrix is unchanged, and zoom deliberately
-     * never enters the matrix (core/matrix.ts says so outright) -- it travels
-     * only in the uniform block that the early-out now skips. So a zoom-only
-     * change updates `#projection` on the backend but never uploads it, and the
-     * frame is byte-identical until a matrix-changing event happens to flush
-     * it. Measured: cylindrical zoom 1 -> 0.7, a draw ran with the new
-     * projection, canvas unchanged thirty frames later. The defect is recorded
-     * in the Task 5 completion report; the pixel assertion belongs back here
-     * the day it is fixed.
+     * the UNMODIFIED tree, which is why it is absent. On a non-linear
+     * projection the clip matrix does not depend on the camera AT ALL:
+     * core/matrix.ts builds those views from the constant LEGACY_QUAD_VIEW and
+     * their projection from extent only -- zoom included -- so WebGPUBackend's
+     * `mat4.equals` early-out skips the uniform write for EVERY camera change,
+     * pan as much as zoom, and nothing the camera does reaches the canvas. The
+     * only things that write the uniforms again are a projection-kind or
+     * extent change (the clip matrix genuinely moves) and a source whose
+     * texture projection differs (setSource's own write). Measured here:
+     * cylindrical zoom 1 -> 0.7, a draw ran with the new projection, canvas
+     * unchanged thirty frames later; rotate(10, 0), rotate(0, 90) and a full
+     * drag read back diff 0 the same way. The defect is recorded in the Task 5
+     * completion report; the pixel assertion belongs back here the day it is
+     * fixed.
      */
   })
 
