@@ -4,7 +4,7 @@ scope: [src/core/events.ts, src/media/**, src/interaction/**, scripts/gen-fixtur
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: domain
 deps: [p3-renderer-webgpu]
-state: reported
+state: merged
 createdAt: 2026-09-19T08:51:52.642Z
 ---
 # 任务：P4 — media + interaction
