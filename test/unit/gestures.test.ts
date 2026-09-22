@@ -37,6 +37,13 @@ describe('classifyWheel', () => {
     const huge = classifyWheel({ deltaY: -100000, deltaMode: WheelDeltaMode.PIXEL })
     expect(Math.abs(huge)).toBeLessThanOrEqual(WheelZoom.MAX_STEP)
   })
+
+  it('clamps an absurd delta in both directions', () => {
+    // Both sides: a mutant keeping only one half of the clamp survives a
+    // one-sided assertion, and the hardcoded 1 is what pins MAX_STEP itself.
+    expect(classifyWheel({ deltaY: -100000, deltaMode: WheelDeltaMode.PIXEL })).toBeCloseTo(1, 5)
+    expect(classifyWheel({ deltaY: 100000, deltaMode: WheelDeltaMode.PIXEL })).toBeCloseTo(-1, 5)
+  })
 })
 
 describe('classifyPinch', () => {
@@ -53,15 +60,33 @@ describe('classifyPinch', () => {
   })
 
   it('is antisymmetric in log space', () => {
-    // Ratio, not difference: a pinch from 100 to 200 px should feel the same as
-    // 200 to 400, which a subtractive measure gets wrong.
+    // Antisymmetry pins the sign only -- a subtractive measure is antisymmetric
+    // too, which is why scale invariance gets its own test below.
     expect(classifyPinch(100, 200)).toBeCloseTo(-classifyPinch(200, 100), 6)
+  })
+
+  it('is a log ratio, not a difference', () => {
+    // 100->200 must equal 200->400: a subtractive measure gives 100 vs 200.
+    expect(classifyPinch(100, 200)).toBeCloseTo(Math.log(2), 5)
+    expect(classifyPinch(100, 200)).toBeCloseTo(classifyPinch(200, 400), 5)
   })
 
   it('ignores the first move of a gesture', () => {
     // previous = 0 means the second finger has just landed. Producing a jump
     // here is the classic "pinch snaps the zoom" bug.
     expect(classifyPinch(0, 150)).toBe(0)
+  })
+
+  it('reports no zoom when the fingers coincide', () => {
+    // Two fingers on the same spot are a real gesture, not log(0) = -Infinity
+    // snapping to a full zoom-out.
+    expect(classifyPinch(100, 0)).toBe(0)
+  })
+
+  it('clamps an extreme pinch to the max step', () => {
+    // log(1000) is about 6.9. The hardcoded 1 is deliberate: asserting against
+    // WheelZoom.MAX_STEP would let a mutated constant satisfy its own mutant.
+    expect(classifyPinch(1, 1000)).toBe(1)
   })
 })
 

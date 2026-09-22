@@ -69,10 +69,17 @@ export class InputController extends Disposable {
 
   #onPointerDown = (evt: PointerEvent): void => {
     if (!this.#ptzEnabled) return
-    // Capture so the gesture survives the pointer leaving the element, which is
-    // the normal case for a drag that reaches the edge of the viewer.
-    this.#element.setPointerCapture(evt.pointerId)
+    // Track before capturing. setPointerCapture throws NotFoundError for a
+    // pointer this browser does not consider active -- which is every pointer a
+    // synthetic event can name, and the pointer is still tracked in that case:
+    // losing the capture only means the gesture no longer survives the pointer
+    // leaving the element, which must not abort the gesture itself.
     this.#pointers.set(evt.pointerId, { x: evt.clientX, y: evt.clientY })
+    try {
+      this.#element.setPointerCapture(evt.pointerId)
+    } catch {
+      // Scoped to this one call and deliberately swallowed: see above.
+    }
     this.#previousPinchDistance = 0
   }
 
@@ -112,8 +119,10 @@ export class InputController extends Disposable {
     const delta = classifyWheel(evt)
     if (delta === 0) return
     // preventDefault is called here and only here: without it the page scrolls
-    // while the panorama zooms. Note the listener is registered with
-    // `passive: false`, which is required for preventDefault to have any effect.
+    // while the panorama zooms. The listener is registered with `passive: false`
+    // because Chromium treats wheel listeners on window, document and body as
+    // passive by default, and the host element is caller-owned: the flag is what
+    // guarantees preventDefault works whatever the viewer is mounted on.
     evt.preventDefault()
     this.#events.emit('zoom', { delta })
   }
