@@ -3,6 +3,7 @@ import { createBackend } from '../../src/viewer/backend-factory'
 import { Viewer } from '../../src/viewer/viewer'
 import { ImageSource } from '../../src/media/image-source'
 import type { MediaSource } from '../../src/media/source'
+import type { DeviceLost } from '../../src/renderer/backend'
 import { makeContainer } from './support/dom'
 
 /*
@@ -49,6 +50,69 @@ function install (viewer: SourcedViewer, src: string): void {
 }
 
 afterEach(() => { vi.restoreAllMocks() })
+
+/*
+ * Compile-time pins on `Viewer.on`. They are never called -- they exist to be
+ * typechecked, by `tsc --noEmit -p test/integration` inside `npm run typecheck`.
+ *
+ * They are here because this task added a second overload to `on`, and an
+ * overload set is exactly the kind of change that can silently widen the arm
+ * that was already right. Task 4 freezes the public surface, so a named event
+ * whose payload had decayed to `unknown` would stop being a bug and become a
+ * contract.
+ *
+ * Both directions are pinned because they fail differently and neither catches
+ * what the other does:
+ *
+ * - the positive pin breaks if a payload widens to `unknown`;
+ * - the negative pin breaks if it widens to `any`, where `event.reason` would
+ *   satisfy `string` and the positive pin would go quiet. Only the
+ *   `@ts-expect-error` sees that: a directive that is no longer needed is
+ *   itself a compile error.
+ *
+ * The negative pin was checked before being relied on rather than assumed. It
+ * holds for a reason worth recording: for a literal event name, the named
+ * property wins over `ViewerEvents`' string index signature, so
+ * `ViewerEvents['rotate']` is the real payload and not `unknown`. Under a
+ * widened key it would become `unknown`, and `unknown` is not assignable to a
+ * specific object type either -- so the pin survives that route as well.
+ */
+function typePins (viewer: Viewer): void {
+  // A named event still carries its exact payload. The parameter is annotated
+  // with the real type, which is the strongest form of this pin: the declared
+  // payload has to be assignable to it, so a payload that widened to `unknown`
+  // stops compiling here.
+  viewer.on('rotate', (event: { lat: number, lng: number }) => consume(event))
+  viewer.on('device-lost', (event: DeviceLost) => consume(event))
+
+  // The wildcard arm takes two parameters, and `type` is a plain `string`
+  // rather than the literal `'*'`, so a listener can branch on it. If that ever
+  // narrowed, `consume<string>(type)` would fail to compile.
+  viewer.on('*', (type, event) => {
+    consume<string>(type)
+    consume(event)
+  })
+
+  // A payload that does not match is still rejected.
+  // @ts-expect-error -- 'rotate' carries { lat, lng }, not { nope }
+  viewer.on('rotate', (event: { nope: number }) => consume(event))
+}
+
+/**
+ * Consumes values so a pin can use its parameters without a `void` expression,
+ * which this project's lint config rejects. Returns rather than assigns so the
+ * callback stays assignable to a `void`-returning listener.
+ */
+function consume<T> (...values: T[]): number { return values.length }
+
+describe('Viewer.on type pins', () => {
+  it('are typechecked, not executed', () => {
+    // `typePins` is never called -- it exists to be compiled by
+    // `tsc --noEmit -p test/integration`, which `npm run typecheck` runs. This
+    // reference keeps it from reading as an unused symbol.
+    expect(typeof typePins).toBe('function')
+  })
+})
 
 describe("Viewer.on('*')", () => {
   it('receives the event type and the payload for a real event', async () => {
