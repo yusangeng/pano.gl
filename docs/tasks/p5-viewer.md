@@ -35,7 +35,7 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：**分支覆盖 
 - `src/viewer/options.ts`（plan 的 `Files:` 块漏列，按 E22 归本 Task）：`ImageProjection = TextureProjection` 别名（不复制成员，注释写明这是 fisheye 落地时唯一要放宽的一行）、`ImageViewerOptions` / `VideoViewerOptions`、`RemovedOptions`、`assertContainer` / `assertSrc` / `assertProjection` / `assertNoRemoved`、`validateImageOptions` / `validateVideoOptions`（填 `muted ?? true`）。`assertProjection` 认三种情况：`'equiprectangular'` 拼写纠正、`'fisheye'` 构造即抛、其余走 `unknown projection:` 尾。
 - `src/viewer/image-viewer.ts` / `video-viewer.ts`：`create` 校验 → 探设备 → 建源，失败时按 **源 → 后端 → canvas** 回收后重抛（与 `Viewer.dispose` 同序）；两侧 `probe()` 均委托 `backend-factory.probe`；`src` setter 复用 `assertSrc`，走基类的换源路径；视频侧另有 `play` / `pause` / `element`。**未改 `src/viewer/viewer.ts`。**
 - `src/index.ts` 冻结公开面：两个类、两个 options 类型、从各归属模块再导出的 `CameraOptions` / `Capabilities` / `SelectedCapabilities` / `CameraState` / `Projection` / `ProjectionKind` / `TextureProjection` / `ImageProjection`，加 `enableChannels` 与 `VERSION`。**无 `CameraProjection`**（有意，理由见 plan）。
-- 单元测试：`test/unit/constructor-validation.test.ts`（15 条）、`test/unit/probe.test.ts`（4 条）。
+- 单元测试：`test/unit/constructor-validation.test.ts`（15 条，plan 写 12 条，见偏离 2）、`test/unit/probe.test.ts`（4 条，**plan 外新增，见偏离 7**）。
 
 **自测结果**
 
@@ -54,6 +54,10 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：**分支覆盖 
 4. **`test/unit/constants.test.ts` 按裁决 O33 改（A 案）**：范围不动（全 `src/**/*.ts` + JSON），判据改成具名豁免 `FISHEYE_REJECTION_SITES = ['src/viewer/options.ts']`，补偿断言 `Object.keys(kinds.texture)` 与字面量 `toEqual(['equirectangular'])` 按裁决补上。两处**我在裁决字面之外加的**，请你复核：① 裁决说「豁免靠行为证据挣（plan 测试 7）」，我把这条证据做成了**本文件内的可执行断言**（`grants the fisheye exemption only where the rejection is real`，动态 import 该文件要求它真的抛出 `/not implemented/`）—— 只靠注释指向测试 7 的话，删掉拒绝分支、留下豁免，扫描仍然是绿的，那正是 O33 自己说的「文字层的真相没有可执行的看门人」；② 除字面量外保留了**过桥**断言（`textureProjectionCode(key) === kinds.texture[key]`），它管的是字面量看不见的那件事：两侧数值不再相等。两处的理由都写在断言旁边。**plan 测试 7 一字未动。** 另：新注释里「texture 的键被删掉由 `are up to date with the JSON source` 兜住」是一句**关于另一条测试行为的主张**，按 O24 已**实测**（控制 N4）：从 `projection-kinds.json` 删掉该键，**四条用例具名转红** —— `leaves no texture key stranded on the JSON side of the bridge`、`are up to date with the JSON source`、`uploads the numeric values the legacy shader hard-coded`、`declares the same numbers as the TypeScript constants` —— 主张成立，注释里已把实测到的用例名写进去；随后逐字节还原并核对 `git show HEAD:<path>` 的 blob sha256。
 5. **P2 的 plan 与落地的守卫不一致（`034069a`）**。P2 plan `plans/2026-09-19-p2-core.md:84–91` 是**扫一个文件 + `/'fisheye'|Fisheye|FISHEYE/`**；落地是**全 `src/**/*.ts` + JSON + `/fisheye/i`**。那次放宽是**有理由、有意识**的质量改进（提交信息自称 "widen single-source guard tests"，理由是「注释声称覆盖 src/、实际只扫一个文件」——**这个判断是对的**），代价是 P2 的 plan 没回改，于是**同一条放宽与它自己的 plan 不一致，且没有任何检查能发现这件事**。它在四个 phase 后由本 Task 第一次走进射程而显出代价。所以本条**不是**「前人犯错」，是「一条正确的放宽，在四个 phase 后第一次遇到射程内的目标」。登记归协调者（E29），本清单只作偏离记录。
 6. **§8 的「第四处差异」问题：没有发现第四处行为差异**。plan `:2033` 说的三处是 `validateVideoOptions` / `VideoSource`（含 `#source` 的具体类型）、四个 source options、`play` / `pause` / `element`；逐行比下来的其余差异是**编译缺陷**（上面第 1 条）与由此引入的 helper，不是行为差异。
+7. **`test/unit/probe.test.ts` 是 plan 外新增**。plan 的 Task 4 `Files:` 块只有四项（`:1644–1648`：`src/viewer/image-viewer.ts` / `src/viewer/video-viewer.ts` / `src/index.ts` / `test/unit/constructor-validation.test.ts`），而 **`probe.test.ts` 这个文件名在 plan 全文 grep 0 命中**。它由 E24(a) 点名要求（`probe()` 在 Task 3 的树上无调用者、无测试），**与偏离 2、3 同型：`Files:` 块不是清单**（同 E22）。
+   - 覆盖到的是**两条真实环境分支**：node 下无 `document` → 两个类各自返回 `{ backend: 'none' }`（不抛）；`vi.stubGlobal` 造出能答 `getContext('webgl2')` 的 canvas → 两个类各自返回 `{ backend: 'webgl2', externalTextures: false, maxTextureDimension: 2048 }`。**两个类分开断**，因为一个 `probe` 被接空、或接了兄弟类的一份拷贝，都过得去其中一条。
+   - **E24(a) 点名的第二半（`backend-factory.ts:65-67` 的 `createBackend` throw 分支）本 Task 未覆盖**，按 E27 / T5-5 归 Task 5——见遗留风险 2，此处只作交叉引用，不重复主张。
+   - **本条的编号追加在末尾，没有按类插到 2、3 旁边**：卡内 `见偏离 4`（自测结果节）、`同偏离 1`（遗留风险 4）是硬引用，插队会打断它们。
 
 **遗留风险**
 
