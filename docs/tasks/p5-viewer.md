@@ -245,4 +245,37 @@ probe / 常量桥锁（unit）、dispose 顺序与重入。**未网路径及理�
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**approve**（2026-09-23，协调者第 5 关验收）。
+
+四步全审通过：结构化 review（分支健康、43/43 提交前缀、文件面与 scope 相符、plan 差异
+仅为 checkbox 勾选、分支卡与主卡两节同步）；plan 红线逐条核对（无桥回潮——全树仅两条
+P4 前置注释提及 `PanoTestApi`，零代码引用；无 `src/core/index.ts` barrel；P4 fixtures
+在位；`thresholds` 未动且新增 exclude 均有实测理由并就地注明；五个 User Story 集成测试
+文件齐全；fisheye 守卫三件套——具名豁免 + 行为断言 `/not implemented/` + 过桥断言——
+均在）；门禁证据复核；最重发现亲验（下述第 3 条）。公开面冻结与 demo 整文件替换两处
+「byte 级一致」主张均以 SHA-256 独立核对相符（1244B / 1497B 两块均同哈希）。
+
+逐条发现（均不阻塞合并）：
+
+1. **随卷修正（陈旧自报数字）**：卡面「分支 23 文件 +4886/−21」与实测不符——分支尖端
+   实为 33 文件 +5021/−67（全量）/ 31 文件 +4768/−20（除 docs）；「+4886/−21」恰为
+   `72442ba`（终审后再补三笔 docs 提交前的尖端）的全量 diffstat，「23 文件」不匹配任何
+   分支快照。与 p4 卡第 2 条发现同类，按先例随卷修正，不计缺陷。
+2. **登记（P7 类目 +1）**：`test/integration/support/echo.ts:186-192` 注释提及
+   `PanoTestApi`，是 P4 只登记了 `image-source.test.ts:8` 之外的**第二处**前置遗留
+   悬空引用（p5 零行 diff，`git diff` 核实）。P7 清理类目应含此两处。
+3. **R1c 上升为协调者行动项（最重要的一条）**：相机冻结缺陷的因果链已由协调者对照
+   真实代码逐环亲验属实——`matrix.ts:177-182` 非线性类型以常量 `LEGACY_QUAD_VIEW`
+   作 view 且 zoom 按设计不进矩阵（`:128`），故 clip 与姿态、zoom 均无关；
+   `backend.ts:353` 的 `mat4.equals` 早退对非线性投影的**每一次**相机变更成立；
+   `:363` `#writeCameraUniforms()` 是 `povLatitude`/`povLongitude`/`zoom` 的唯一写入
+   点（`:382-384` 打包、`writeBuffer` 上传），从不执行；仅投影类型/extent 变化
+   （clip 真变）或 `setSource` 纹理投影变化（`:421-423`）会冲刷；shader 从 uniform
+   读姿态（`panorama.wgsl:245,252`）。三个文件本卡零 diff，归属 P2+P3 属实。
+   **修复卡必须排在 p6-webgl2-backend 开工之前创建并置为有序前置**——p5 合并即解锁
+   p6，而 p6 的 WebGL2 后端会复制同一份 setCamera 早退逻辑，先修冻结可让 p6 只抄对的。
+   本轮验收后协调者立即向用户当面提出此项，不等下一轮。
+
+结论：六个 Task 证据链完整（变异测试具名击杀判据 + 阴性对照 + 沙箱还原核对），偏离全部
+双关核实，质量门整改闭环，终审 merge-ready-with-registrations 的三项登记均已按上面对应
+处置。**approve，即行合并。**
