@@ -6,7 +6,7 @@ import type { MediaSource } from '../../src/media/source'
 import type { DeviceLost } from '../../src/renderer/backend'
 import { makeContainer } from './support/dom'
 import { nextFrames } from './support/canvas'
-import { countDraws } from './support/spies'
+import { captureRenderInputs, countDraws } from './support/spies'
 
 /*
  * `Viewer.on`, both arms: a named event and `'*'`.
@@ -195,6 +195,7 @@ describe('swapping the source', () => {
      * guarantee it without reaching into either source.
      */
     const draws = countDraws()
+    const inputs = captureRenderInputs()
     const viewer = await mount()
     install(viewer, '/fixtures/panorama.png')
     await vi.waitFor(() => expect(draws(), 'nothing was drawn, so a swap cannot be seen').toBeGreaterThan(0))
@@ -204,6 +205,20 @@ describe('swapping the source', () => {
     // draw on its own, and this test would pass without the latch.
     await nextFrames(3)
     await new Promise((resolve) => setTimeout(resolve, 100))
+
+    // Move the camera off the origin BEFORE the swap. The default pose IS the
+    // origin, so "the swap must not move the camera" asserted against a viewer
+    // that never moved agrees with the mutant by coincidence -- it would be
+    // testing the default, not the swap. Same trap `rotate(20, 30)` closes in
+    // `viewer-render-input.test.ts`.
+    const settled = draws()
+    viewer.rotate(20, 30)
+    await vi.waitFor(() => {
+      expect(draws(), 'the rotate never reached a frame').toBeGreaterThan(settled)
+    })
+    // Sampled only once that frame has landed. Taken any earlier, the rotate's
+    // own draw would fall inside the delta and the assertion below would pass
+    // without the latch.
     const before = draws()
 
     const loaded = new Promise<void>((resolve) => {
@@ -214,6 +229,18 @@ describe('swapping the source', () => {
 
     await vi.waitFor(() => {
       expect(draws(), 'the new image was never drawn, so the old one is still on the canvas').toBeGreaterThan(before)
+    })
+    /*
+     * The swap must leave the camera where it was. A `setSource` that reset the
+     * pose would put the viewer back at the origin and the new image would still
+     * appear -- the wait above is satisfied by any frame at all, and a reset
+     * pose dirties the camera and draws one on its own -- so nothing above can
+     * see it.
+     */
+    expect(viewer.cameraOptions.pose, 'the source swap moved the camera').toEqual({ povLatitude: 20, povLongitude: 30 })
+    await vi.waitFor(() => {
+      expect(inputs.lastCamera()?.state, 'the backend was left on the pre-swap pose')
+        .toEqual({ povLatitude: 20, povLongitude: 30 })
     })
     viewer.dispose()
   })

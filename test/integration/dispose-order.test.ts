@@ -106,8 +106,16 @@ describe('dispose', () => {
      * would leave one more callback to run against a backend that is being
      * dismantled on the next line -- which is the in-flight frame the ordering
      * of `dispose` exists to prevent.
+     *
+     * The COUNT, not just the call. At this point the loop holds exactly one
+     * handle -- `stop()` clears it after cancelling, and `#scheduleNext` sets it
+     * again only once a frame has run -- so the withdrawal is one call, and a
+     * teardown that cancelled the same handle repeatedly would be a second
+     * defect that `toHaveBeenCalled()` cannot see. Measured, not assumed: with
+     * this assertion in place the double-cancel mutant reddens this test and the
+     * weak form does not.
      */
-    expect(cancel, 'the loop was disposed but its pending frame was not cancelled').toHaveBeenCalled()
+    expect(cancel, 'the loop was disposed but its pending frame was not cancelled').toHaveBeenCalledTimes(1)
   })
 
   it('is idempotent', async () => {
