@@ -193,9 +193,31 @@ export class Viewer extends Disposable {
     return dispatch(type, fn)
   }
 
-  /** The device's real limits, as reported by the backend in use. */
+  /**
+   * The device's real limits, as reported by the backend in use.
+   *
+   * Copied, against the same boundary as `cameraOptions` and for the same
+   * reason: this getter is public, the backend is not, and a caller of the
+   * constructor holds the backend object. Returning its record directly hands
+   * every caller write access to state other callers read -- and the field that
+   * suffers is `maxTextureDimension`, the number that decides whether a source
+   * must be downscaled, so the corruption is shared rather than local to one
+   * application.
+   *
+   * `adapter` is copied too. `Readonly<Record<string, string>>` is a
+   * compile-time modifier exactly as `Projection`'s `readonly` fields are, so a
+   * shallow copy would still share the record. Its values are strings, so one
+   * more level closes it completely and there is no third level to chase.
+   *
+   * The backend keeps handing out its live reference, as it should: that is the
+   * internal path, and copying there would allocate on every read for nobody's
+   * benefit.
+   */
   get capabilities (): Capabilities {
-    return this.#backend.capabilities
+    const capabilities = this.#backend.capabilities
+    return capabilities.adapter
+      ? { ...capabilities, adapter: { ...capabilities.adapter } }
+      : { ...capabilities }
   }
 
   get PTZ (): boolean { return this.#input.PTZ }
