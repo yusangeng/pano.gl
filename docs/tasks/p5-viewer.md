@@ -75,6 +75,68 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：**分支覆盖 
 
 **测试落点与审查建议不同，登记**：审查建议落 `test/unit/camera-options.test.ts`，该文件不存在；且 `vitest.config.ts` 已有实测在案的裁定 —— `viewer.ts` 在 node 项目一行都跑不了，node 桩 DOM 的单元装置「回放的是本文件自己的假设而不是测试」，Viewer 行为归 integration 项目。故三条新测试落 `test/integration/camera-options.test.ts`（`cameraOptions` 本就在此被行使，`mount()` 现成）：① 零宽容器构造不抛、不写 aspect；② 生存期塌缩到零宽无页面 error 事件、确实到达 `#resize`（canvas 被后端钳到 1px）、aspect 原值存活；③ partial-pose 合并两角精确断言（纬度变 5、未点名的经度 20 存活）。变异复测在 HEAD 干净副本（`git archive` + 软链 node_modules，工作树不动）：仅还原守卫 → ①②具名转红；仅删合并行 → ③具名转红；两轮其余用例全绿，还原后与 `git show HEAD:` 逐字节相同。验证：typecheck / lint 0 错，coverage 99.57 / 98.61 / 100 / 100 四门槛全过，integration 15 文件 75 用例全绿。
 
+### Task 5 · 五个用户故事的集成测试层（US1–US5）
+
+**只写测试，未改 `src/**` 一行。** 三个提交：`850c382`（测试层）、`10db411`（E32 注释修正 + 一处既有测试的去 flake）、`89b665d`（resize 重绘断言加强）。
+
+**做了什么**
+
+- 五个用户故事文件，31 条用例（integration 侧由 15 文件 / 75 用例升至 **20 文件 / 106 用例**）：
+  - `test/integration/user-story-photo.test.ts`（8）：渲染与 media-load、拖拽转动（事件 + 位姿 + 像素）、零位移静默、PTZ=false 静止、容器变尺寸、高分屏锐度、probe 好象限、完整旅程（mount→rotate→换源→位姿与 source 双存活→dispose 带 teardown 计数）。
+  - `test/integration/user-story-video.test.ts`（8）：播放且帧前进（时钟与像素同窗等待）、暂停停绘、换源拆旧元素且位姿存活、autoplay 的 muted 默认、滚轮缩到非线性投影、公开 `zoom()` 到达后端（T5-1）、linear 下 zoom 无操作、dispose 后 `play()` 拒绝。
+  - `test/integration/user-story-camera-switch.test.ts`（6）、`test/integration/user-story-media-failure.test.ts`（7）：照 plan 的故事面，失败侧直接以 404 src 构造（见偏离 6）。
+  - `test/integration/fallback/user-story-no-webgpu.test.ts`（2，E33）：`probe()` 在 `--disable-gpu` 下如实报 `webgl2`；`create()` 以 `/no usable rendering backend/i` 拒绝。
+- 支撑层：`support/viewer.ts`（`imageViewer` / `videoViewer` 工厂 + `PROJECTIONS`）、`support/gestures.ts`（元素相对 drag / wheel）、`support/spies.ts` 新增 `captureTeardown()`（`disconnects` / `emitterTeardowns` 两个读数）。
+- E32：`dispose-order.test.ts` 与 `spies.ts` 头部两处陈旧注释改正，**只改注释，未重定向任何 import**。
+- `image-source.test.ts` 首条用例改用 `?uncached=${Math.random()}` 唯一 URL（见偏离 9）。
+
+**自测结果**
+
+- `npm run typecheck`（三程序）0 错；`npm run lint` 0 错；`npm run test:coverage` **99.57 / 98.61 / 100 / 100**，四门槛全过（`thresholds` 未动）；`npm run test:integration` **20 文件 106 用例全绿**（连续三轮）。
+- **变异测试：本卡应测 12 条，12 击杀，0 存活**（明细见下方覆盖陈述）。装置沿用血换来的规矩：`git archive HEAD` 解到 `/tmp` 干净副本 + 软链 `node_modules`，锚点必须恰好命中一次否则拒绝落刀，落刀后证明写进去了，三 project 完整跑，判据一律是 JSON 报告里具名 `status === 'failed'`，退出码不作数。干净对照 382 passed / 0 failed / 40 文件。
+  - **装置自身坏过一次，如实记**：x1（插入型变异，`new` 以 `old` 为前缀）触到 landed 自检里两条断言互相矛盾（一条允许 `new.startswith(old)`、另一条不允许），`set -e` 在跑测试前就退了。修正自检语义后重跑 x1，三用例具名转红。与 Task 4 的 N4 同型：控制脚本先于结论受审。
+  - **m22 的第一次测量是「存活」，结论改判经过是实测的**：像素侧量到「无重绘的 resize 之后 canvas 仍然点亮」（探针在 m22 下：跨保纵横比 resize 0 次 draw、`lit > 0.2` 为 true）——本平台的 WebGPU canvas 在尺寸变化后会**保留最后一次呈现的帧**，所以缺 `invalidate()` 在像素上不可见。但 0 次 draw 恰好是可断言的：基线下 `invalidate()` 脏标记必触发一次重绘。resize 用例据此加强为 `captureRenderInputs().sourceCalls()` 差分（快照取在第一次 resize 的 draw 结算之后，差分即第二次 resize 的重绘），加强后 m22 具名转红（`89b665d`）。
+
+**偏离 plan 的点**
+
+1. **「画没画」一律走 `captureRenderInputs()`，不用 `countDraws()`**（brief §4.1）：resize 重绘、暂停停绘两处都断 `sourceCalls()` 差分。
+2. **E33 / US5 首断言为 `backend === 'webgl2'`**：`--disable-gpu` 下 probe 的实测真值。P5 时点 probe 报机器能力、create 报库能供给什么，两者在本卡不一致（WebGL2 后端 P6 才有），文件头注释写明这个接缝与 P6 合流时删首断言即删记录的约定。
+3. **工厂带默认 src（`?? FIXTURE`）而非 plan 的条件展开**：`src` 是必填项，plan 的 `...(src === undefined ? {} : { src })` 编不过（TS2379 同族）。连带后果：构造即加载可能赶在用例挂监听之前，所以计数一律 `>=` 基线而非精确值——`ImageSource` 用从未入 DOM 的 `new Image()`，没有可轮询的加载完成信号，这个竞态在工厂侧无解。
+4. **US2 围绕 `viewer.element` 重写，plan 的 `videoOf(container)` 找不到东西**：v1 从不把 `<video>` 插进容器。且构造期 `autoplay` 在游离元素上不起作用（实测：media-load 到、media-play 3 秒内不到；显式 `play()` 可用），播放一律显式起。
+5. **滚轮缩放的像素断言删除**：它在**未变异的树上就是红的**——`WebGPUBackend.setCamera` 的 `mat4.equals` 早退跳过了只装 zoom 的 uniform 写入（见遗留风险 1）。缺陷按 brief §6 只登记不修，断言旁边注释写明「修好那天放回来」。
+6. **US4 的黑画布前提被默认 src 打破**：工厂默认图先渲染成功，换 404 后 canvas 留的是上一帧好图。改为直接以 404 src 构造，canvas 从未有过帧。
+7. **resize 数字按 DPR 断言、结构改为两次 resize**：project 跑在 `deviceScaleFactor 2`，裸 300 会错一倍；且单次变纵横比的 resize 会让 `setAspect` 自己弄脏，隔离不出 `invalidate()`——第二次保持 1:1 才隔离得出。
+8. **plan 清单之外新增四条**：零位移静默、probe 好象限、公开 `zoom()`（T5-1 要求）、带 teardown 计数的完整旅程；及 `captureTeardown()` 支撑。
+9. **`image-source.test.ts` 首条用例加唯一查询串**：规范允许已完整解码的图在 `src =` 赋值内同步完成，并行跑里暖缓存把 `naturalSize` 同步读成 512x256，是一条绿套件 flake（实测过一次）。
+10. **E32 仅注释**：两处头部陈旧注释改正；import 一律未动。
+
+**遗留风险**
+
+1. **源缺陷（未修，按 brief §6 登记）**：`src/renderer/webgpu/backend.ts:343` 的 `setCamera` 以 `mat4.equals(clip, this.#clip)` 早退，而 zoom 按设计不进 clip 矩阵（`src/core/matrix.ts:128` 明说），只活在 `#writeCameraUniforms()` 写的 uniform 块里——早退把它一并跳过。非线性投影上只动 zoom 时 `#projection` 更新但永不上传，帧逐字节不变，直到某个动矩阵的事件顺带冲刷。复现：cylindrical zoom 1→0.7，`setCamera` 观测到带 0.7 的 draw 照跑，30+ 帧后 canvas 不变。US2 滚轮用例的像素断言（偏离 5）修好那天应放回。
+2. **游离 `<video>` 上的 autoplay 惰性**：构造期 `autoplay` 不起播（上述实测）。本轮以显式 `play()` 绕开；若 P6 认为该选项应生效，需要源侧或 viewer 侧显式起播，届时 US2 头部注释与「muted 默认」用例的说明同步改。
+3. **平台行为登记**：本机 WebGPU canvas 跨无重绘的尺寸变化保留上一帧（m22 探针实测）。若将来平台改为清缓冲，resize 用例的像素半边会重新变得可达——目前它只是「画布仍有帧」的弱断言，击杀靠 draw 差分。
+4. **m16 的击杀者是 Task 4 整改轮的 `camera-options.test.ts` 两条**，非本轮新增（裁决预告过「可能已杀」，如实记归属；本轮重测确认）。
+5. Task 4 遗留风险 2 的后半（`createBackend` throw 分支无网）本轮闭合：bf2 被 US5 第二条具名击杀；bf1a/bf1b 由 US5 第一条与 US1 probe 用例参与击杀（与既有 capabilities/probe 单测分摊）。
+
+**覆盖陈述**（验收 = 变异体具名转红；装置与判据见自测结果）
+
+| 验收条 | 变异体 | 判定 | 击杀用例（具名） |
+|---|---|---|---|
+| T5-1 | m25 | 击杀 | `user-story-video` · the public zoom() method reaches the projection the backend receives |
+| T5-2 | m16（重测） | 击杀 | `camera-options`（Task 4）· a surface with no width constructs without throwing / does not throw from the resize path |
+| T5-2 | m22 | 击杀 | `user-story-photo` · the image fills a container that changes size（`89b665d` 加强后） |
+| T5-3 | m28 | 击杀 | `user-story-photo` · dragging rotates the camera and changes the image |
+| T5-3 | m29 | 击杀 | `user-story-photo` · a press and release without movement reports nothing |
+| T5-3 | m30 | 击杀 | `user-story-video` · a wheel zoom-out reaches the camera state of a non-linear projection / zoom is a no-op for the linear camera |
+| T5-4 | m11 | 击杀 | `user-story-photo` · survives a whole session（disconnects === 1） |
+| T5-4 | m12 | 击杀 | `user-story-photo` · survives a whole session（emitterTeardowns === 3） |
+| T5-5 | bf1a | 击杀 | US5 probe 用例 + 既有 capabilities/probe 单测 |
+| T5-5 | bf1b | 击杀 | `user-story-photo` · an application can ask about the backend before it creates anything + 既有 capabilities 单测 |
+| T5-5 | bf2 | 击杀 | `user-story-no-webgpu` · create() fails with a message naming the backend situation |
+| T5-7 / X1 | x1 | 击杀 | `user-story-photo` · survives a whole session + `user-story-video` · a source swap tears down the old element + 既有 `viewer-events` swapping 用例 |
+| T5-6 | m9b | **未做（裁决许可）** | 只在「第二次 `backend.dispose()` 会抛」的构造下才可观测，m9 的加强版而 m9 已杀；优先级最低，按裁决记入本陈述 |
+| — | M21 | **纯契约转发，本轮未列入范围** | PTZ setter 去 `assertAlive`；裁决原文照录 |
+
 ## 自审记录
 
 ### CR 结论
