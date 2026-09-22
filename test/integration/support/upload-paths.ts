@@ -12,6 +12,14 @@
  * An ordinary module, and it runs in the page like everything else here: no
  * driver, no serialization boundary. The one thing this still needs is its own
  * device, because it must build pipelines the backend would never build.
+ *
+ * It answers with `unavailable` rather than a throw when the adapter cannot
+ * produce a video-backed texture, because that is a property of the machine and
+ * not a defect to report. What it never does is answer with a comparison it did
+ * not measure, or excuse itself on the strength of a claim about the machine
+ * that it did not just check: a flat frame is only ever `unavailable` after the
+ * fixture has decoded with contrast of its own and the same device has rendered
+ * a constant colour, and both of those are measured on the run that reports it.
  */
 
 /** One upload path's output: RGBA8, top-down, row-major. */
@@ -20,6 +28,29 @@ export interface PathRender {
   readonly height: number
   readonly rgba: Uint8Array
 }
+
+/**
+ * What one probe run produced.
+ *
+ * `unavailable` is an outcome rather than an exception because it is a fact
+ * about the machine, not a failure of anything: some adapters cannot turn a
+ * video element into a texture at all, and there the question this probe asks
+ * has no subject. A caller that cannot tell the two apart has to either fail on
+ * a healthy CI runner or pass without measuring, and both are worse than
+ * saying so.
+ */
+export type VideoPathComparison =
+  | { readonly kind: 'rendered', readonly external: PathRender, readonly copy: PathRender }
+  | { readonly kind: 'unavailable', readonly detail: string }
+
+/*
+ * How much the two halves of the frame must differ, in mean 8-bit levels, for
+ * "is this upside down" to be a question at all. The fixture measures ~28
+ * through the decoder and ~21 through this path on a hardware adapter, against
+ * 0 through either upload path on a software one -- so the threshold sits in a
+ * wide gap rather than next to any of the measurements it has to separate.
+ */
+const MIN_HALF_CONTRAST = 8
 
 /*
  * The vertex stage is shared by both paths on purpose. Both readbacks are then
@@ -69,6 +100,18 @@ fn fs (in: VOut) -> @location(0) vec4f {
 }
 `
 
+/*
+ * No texture and no bindings, so this says something no other readback here
+ * can: the device renders. Three distinct non-zero channels, so "read back
+ * black" is distinguishable from "read back a number" on every one of them.
+ */
+const FRAGMENT_SOLID = `
+@fragment
+fn fs (in: VOut) -> @location(0) vec4f {
+  return vec4f(0.25, 0.5, 0.75, 1.0);
+}
+`
+
 /**
  * Uploads one paused frame of `url` through each path and reads both back.
  *
@@ -79,7 +122,7 @@ fn fs (in: VOut) -> @location(0) vec4f {
 export async function renderVideoBothPaths (
   url: string,
   size = 64
-): Promise<{ external: PathRender, copy: PathRender }> {
+): Promise<VideoPathComparison> {
   const adapter = await navigator.gpu.requestAdapter()
   if (adapter === null) throw new Error('no WebGPU adapter')
   const device = await adapter.requestDevice()
@@ -192,7 +235,8 @@ export async function renderVideoBothPaths (
     usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
   })
   device.queue.copyExternalImageToTexture({ source: video, flipY: false }, { texture: copied }, natural)
-  draw(pipeline(FRAGMENT_COPY), [
+  const copyPipe = pipeline(FRAGMENT_COPY)
+  draw(copyPipe, [
     { binding: 0, resource: copied.createView() },
     { binding: 1, resource: sampler }
   ])
@@ -203,30 +247,98 @@ export async function renderVideoBothPaths (
   // "is this upside down" is a question about the top against the bottom, so
   // the frame has to have a top and a bottom to tell apart. Hence the mean of
   // each half rather than "are there two colours in here".
-  const halfMean = (from: number, to: number): number => {
+  const halfMean = (rgba: Uint8Array, width: number, from: number, to: number): number => {
     let sum = 0
     let count = 0
     for (let y = from; y < to; y++) {
-      for (let x = 0; x < size; x++) {
-        const i = (y * size + x) * 4
-        sum += external[i]! + external[i + 1]! + external[i + 2]!
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4
+        sum += rgba[i]! + rgba[i + 1]! + rgba[i + 2]!
         count += 3
       }
     }
     return sum / count
   }
+  const halfContrast = (rgba: Uint8Array, width: number): number => {
+    const rows = rgba.length / 4 / width
+    const half = Math.floor(rows / 2)
+    return Math.abs(halfMean(rgba, width, 0, half) - halfMean(rgba, width, half, rows))
+  }
+  const channelMax = (rgba: Uint8Array): number => {
+    let max = 0
+    for (let i = 0; i < rgba.length; i += 4) {
+      max = Math.max(max, rgba[i]!, rgba[i + 1]!, rgba[i + 2]!, max)
+    }
+    return max
+  }
   const half = Math.floor(size / 2)
-  const top = halfMean(0, half)
-  const bottom = halfMean(half, size)
-  if (Math.abs(top - bottom) < 8) {
+  const top = halfMean(external, size, 0, half)
+  const bottom = halfMean(external, size, half, size)
+
+  // Either path having a top and a bottom is enough to compare them: the
+  // comparison is the subject, and a path that came back flat while the other
+  // did not is precisely the disagreement this probe exists to catch, so it
+  // has to reach the assertion rather than be excused here.
+  if (
+    halfContrast(external, size) >= MIN_HALF_CONTRAST ||
+    halfContrast(copy, size) >= MIN_HALF_CONTRAST
+  ) {
+    return {
+      kind: 'rendered',
+      external: { width: size, height: size, rgba: external },
+      copy: { width: size, height: size, rgba: copy }
+    }
+  }
+
+  // Both flat. Two very different machines produce that and they want opposite
+  // outcomes, so measure which one this is instead of guessing. Both controls
+  // run only here, where the frame is already known to be flat -- the ordinary
+  // run pays nothing for them, and every number in the answer below was taken
+  // on this run rather than remembered from an investigation.
+  //
+  // First the fixture, with WebGPU out of the picture entirely. A frame that
+  // has no top and no bottom through the decoder is a broken fixture, which is
+  // a failure and not an environment to skip in: no adapter could have
+  // answered, but neither should this pass quietly.
+  const decodeCanvas = document.createElement('canvas')
+  decodeCanvas.width = natural[0]
+  decodeCanvas.height = natural[1]
+  const decodeContext = decodeCanvas.getContext('2d')
+  if (decodeContext === null) throw new Error('no 2d context, so the fixture cannot be checked')
+  decodeContext.drawImage(video, 0, 0)
+  const decoded = new Uint8Array(
+    decodeContext.getImageData(0, 0, natural[0], natural[1]).data
+  )
+  const decodedContrast = halfContrast(decoded, natural[0])
+  if (decodedContrast < MIN_HALF_CONTRAST) {
     throw new Error(
-      `the fixture frame has no top/bottom contrast (top ${top}, bottom ${bottom}); ` +
+      `the fixture has no top/bottom contrast through the decoder (${decodedContrast}); ` +
       'orientation cannot be judged from it'
     )
   }
 
+  // Then the device, with no external image involved: a constant colour needs
+  // no upload, so a device that renders black here is broken in a way that no
+  // skip should cover up.
+  const solidPipe = pipeline(FRAGMENT_SOLID)
+  draw(solidPipe, [])
+  const solidMax = channelMax(await readTarget())
+  if (solidMax === 0) {
+    throw new Error(
+      'this device produced no pixels at all: a constant colour reads back black ' +
+      `(max ${solidMax}) and so does the video frame (top ${top}, bottom ${bottom})`
+    )
+  }
+
   return {
-    external: { width: size, height: size, rgba: external },
-    copy: { width: size, height: size, rgba: copy }
+    kind: 'unavailable',
+    detail:
+      `the WebGPU adapter here reports vendor "${adapter.info.vendor}" architecture ` +
+      `"${adapter.info.architecture}". The fixture decodes with a top/bottom contrast of ` +
+      `${decodedContrast.toFixed(1)} and the device renders a constant colour readably ` +
+      `(max ${solidMax}), but a video frame reads back flat through both upload paths ` +
+      `(top ${top}, bottom ${bottom}). Nothing this probe can do yields a video-backed ` +
+      'texture on this adapter, so the comparison has no subject here; a hardware adapter ' +
+      'runs it.'
   }
 }
