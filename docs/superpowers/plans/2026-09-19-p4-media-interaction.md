@@ -1073,7 +1073,7 @@ git commit -m "feat(media): image source with abortable listeners and a load-sta
 2. **两条路径的朝向必须一致，这是那个「一次 shader 翻转同时修好两条路径」的前提。** P3 把 flip 放在 shader 的 `to_uv` 里，两条路径共用 —— 这个做法只有在**两个浏览器 API 的行序本来就一致**时才成立（`importExternalTexture` 根本没有 `flipY` 可选，所以一旦不一致，没有任何一个 shader 翻转能同时修好两条）。这是一个经验断言，Step 3 的探针就是它的证据。
 3. **外加上限：external texture 导入失败时视频不能静默冻住。** P3 的 `render()` 目前对视频无条件 import，没有回落分支 —— 见本计划末尾「留给 P3 的一处依赖」。
 
-- [ ] **Step 1: 写集成测试**
+- [x] **Step 1: 写集成测试**
 
 `test/integration/video-source.test.ts`：
 
@@ -1268,7 +1268,7 @@ describe('VideoSource', () => {
   })
 })
 ```
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 `src/media/video-source.ts`：
 
@@ -1491,7 +1491,7 @@ export class VideoSource extends Disposable implements MediaSource {
 }
 ```
 
-- [ ] **Step 3: 补一条朝向一致性测试**
+- [x] **Step 3: 补一条朝向一致性测试**
 
 这一条**直接驱动两个浏览器 API，不经过 pano.gl 的后端**。理由是测试要问的问题本来就与我们的代码无关 —— 「`importExternalTexture`（没有 `flipY` 选项）和 `copyExternalImageToTexture`（`flipY: false`）把帧的行序放成一样吗」。后端自己的测试看不见这个差异：**两条路径各自自洽**，各自渲染都对，只是彼此相反；而 P3 的 shader 只翻转一次、两条路径共用，所以一旦相反就是必错其一。
 
@@ -1755,14 +1755,14 @@ describe('video upload paths', () => {
   })
 })
 ```
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `npm run test:integration -- video-source video-orientation`
 Expected: video-source 8 条 + video-orientation 1 条，全 PASS
 
 **`video-orientation` 失败时**：**不要直接给 copy 路径加 `flipY: true` 试**。先确认是**哪一条**需要翻 —— 把读回按行切成上下两半，看哪一条是倒的（探针里的 `split` 检查保证测试帧上下两半的均值差 ≥ 8，否则这条判断无从做起）。翻错了就是把对的翻成错的。若最终必须翻，改动落在**后端**（`WebGPUBackend` 的 copy 路径），不在本层。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/media/video-source.ts test/integration/video-source.test.ts test/integration/video-orientation.test.ts test/integration/support/upload-paths.ts
@@ -1773,6 +1773,15 @@ group holding an external texture does not keep it alive. The two upload
 paths also disagree about flipY, so orientation is pinned by a probe that
 drives both browser APIs directly rather than assumed."
 ```
+
+> **（2026-09-22 登记，Task 4 勘误与质量审查，落地于 ed7203b / 9672634 / 8fa3f41 / e15a30d）**
+> 1. **覆盖率兜底（9672634）**：`video-source.ts` 与 image-source 同理入 coverage exclude（每条路径都要真实 `<video>` 与解码器，node 项目执行不到；浏览器项目不报覆盖率）。thresholds 未动，全仓基线 99.13 / 97.94 / 100 / 99.69 无漂移。实现与 8 条测试的其余部分与 plan 逐字相同（经 /tmp 转写 `cmp` 核对）。
+> 2. **Step 3 探针两处实测否决 plan 原文（8fa3f41）**：
+>    - **拷贝几何**：`copyExternalImageToTexture` **不缩放** —— copySize 小于源时只拷左上角区域。plan 的 `[size, size]` 拷贝在 512×256 素材上等于左上象限内的 64×64 纯色裁剪，渲染恒定跟踪单象限调色板（实现者测得的「恒定色、t=0.2 变色、min=max」全部由此而来，一度被误诊为平台缺陷）。改为按源自然尺寸建 copied texture 并拷贝（`size = [videoWidth, videoHeight]`，copySize 同），归一化 UV 采样把整帧缩进 64×64 目标。实测 maxChannelDiff(external, copy) = 1 ≤ 容差 2。另测得：Dawn 要求拷贝目的地同时带 `COPY_DST | RENDER_ATTACHMENT`，违规是**静默**零初始化纹理，诊断须 `pushErrorScope('validation')`。
+>    - **seek 加固**：`loadeddata` 后仍暂停的 Chromium 视频没有 GPU 后备帧 —— `importExternalTexture` 即便 readyState 4 也抛 "doesn't have back resource"。探针在 `video.pause()` 后补 `video.currentTime = Math.min(0.5, video.duration / 2)` + await `seeked`（仍暂停、仍单帧），强制解码建立 GPU 帧；`Math.min` 取中点是为极短素材兜底。
+>    - 由此，plan 尾部「留给 P3 的一处依赖」中「Step 3 的探针已经证明这条回落与 external 路径的行序一致」一句：原探针因拷贝几何 bug 什么也没证明；**修复后该断言现在为真**（maxChannelDiff = 1）。
+> 3. **质量审查（e15a30d）**：变异测试 22 个变异体（源码 17 + 探针 5），源码无存活变异体指向缺陷、探针 MO1（copy 路径 flipY 翻转）被测试以 diff 173 击杀。六类测试缺口补强（各精确击杀一个目标变异体）：media-load bump（M4）、last-frame 基线读取时序（M7 —— 原测试在 play bump 落定前读基线，删掉 media-ended bump 照样通过）、maxTextureDimension 接线（M12，256 上限 → 256×128 精确态）、dispose 拆除三断言（M14 src 释放 / M15 僵尸监听器经 timeupdate / M16 监听器计数前置为 10）、media-error 载荷（M17，404 镜像 image 侧测试）。测试数 8 → 12。四处注释按实测勘误：HAVE_METADATA 已知尺寸（C1）；Chromium 播完时 paused 亦真，`ended` 项是规范防御（C2）；loadeddata 保证「有帧」不保证「GPU 帧」（C3）；`load()` 算法自身中断抓取（C4）。等价/良性裁定不测：M1（Chromium 实测播完 paused=true，单删 `ended` 项不可区分）、M8/M9（过冲 bump 良性）、M13（dispose 里的 pause() 被 load() 算法吸收）、MO2–MO5（测试削弱/元变异，按设计接受）、MO4（共享 VERTEX 翻转保路径一致；朝向 ground truth 归 gate A）。最终 13/13（12+1）通过。
+> 4. **中断记录**：质量复审于 2026-09-22 00:20 撞 5 小时 API 限额中断（M4/M7/M12 已完成在案；树干净、无变异体残留，经控制器亲验），03:19 限额重置后续做完成 M14–M17 与终验。
 
 ---
 
