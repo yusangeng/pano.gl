@@ -4,8 +4,10 @@
  * All of them exist because the thing being asserted has no other observable --
  * there is no event for "a frame was drawn", none for "the device is gone", and
  * none for "this is the frame the viewer handed the backend". The alternative
- * to spying would be widening `src/index.ts` with a rendering type so that a
- * test could look at it.
+ * to spying would be widening `src/index.ts` -- whose public surface Task 4
+ * froze at the two viewer classes and their option types, none of which
+ * exposes a rendering type or a teardown hook -- so spying through here remains
+ * the narrow way to look at any of it.
  *
  * `vi.spyOn` replaces a prototype method for the whole page, so every file that
  * imports this must call `vi.restoreAllMocks()` in `afterEach`. Files are
@@ -15,6 +17,7 @@
 
 import { vi } from 'vitest'
 import { WebGPUBackend } from '../../../src/renderer/webgpu/backend'
+import { EventEmitter } from '../../../src/core/events'
 import type { RenderableSource } from '../../../src/renderer/backend'
 import type { CameraState, Projection } from '../../../src/core/types'
 
@@ -91,5 +94,35 @@ export function captureRenderInputs (): {
       return call === undefined ? undefined : { state: call[0], projection: call[1] }
     },
     sourceCalls: () => source.mock.calls.length
+  }
+}
+
+/**
+ * Counts the teardown calls one `dispose` must make.
+ *
+ * `dispose-order.test.ts` spies on `RenderLoop.prototype.dispose` and on
+ * `window.cancelAnimationFrame` inline; the user-story files cannot do the
+ * same for these two, because their import discipline allows `src/index.ts`
+ * only and one of the two targets is an internal class's prototype method.
+ * The spy therefore lives here with the other production-class reach-ins, and
+ * the user-story file stays on the public surface.
+ *
+ * `emitterTeardowns` counts EVERY emitter's `removeAllListeners`, not just the
+ * viewer's: one dispose tears down three of them (the source's, the input
+ * controller's and the viewer's own), and the reader comparing against that
+ * count is the same `dispose-order` technique one layer up -- a teardown step
+ * that went missing shows up as a missing call, whatever it was attached to.
+ */
+export function captureTeardown (): {
+  readonly disconnects: () => number
+  readonly emitterTeardowns: () => number
+} {
+  const disconnect = vi.spyOn(ResizeObserver.prototype, 'disconnect')
+  const removeAll = vi.spyOn(EventEmitter.prototype, 'removeAllListeners')
+  disconnect.mockClear()
+  removeAll.mockClear()
+  return {
+    disconnects: () => disconnect.mock.calls.length,
+    emitterTeardowns: () => removeAll.mock.calls.length
   }
 }
