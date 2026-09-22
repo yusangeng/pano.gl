@@ -71,8 +71,16 @@ export class RenderLoop extends Disposable {
   #tick (): void {
     // The first frame draws unconditionally: a loop whose dirty state started
     // false would show nothing at all until the user interacted.
+    //
+    // shouldDraw is still ASKED on that tick; only its answer is discarded. The
+    // call is not without consequence -- implementations consume their dirty
+    // flag here, and the camera controller's starts true -- so short-circuiting
+    // it would leave the flag set and make the second frame redraw what the
+    // first already drew. A still image would render twice, which is the exact
+    // thing this loop exists to prevent.
     const first = !this.#drewOnce
-    if (!first && !this.#options.shouldDraw()) return
+    const dirty = this.#options.shouldDraw()
+    if (!first && !dirty) return
 
     try {
       this.#options.draw()
