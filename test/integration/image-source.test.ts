@@ -15,7 +15,16 @@ describe('ImageSource', () => {
     // The failure this pins: a source that has not loaded looks like a 0x0
     // image, and a 0x0 texture is a WebGPU validation error thrown far from the
     // cause.
-    const src = new ImageSource('/fixtures/panorama.png')
+    //
+    // A URL no other test fetches, because "before the image loads" is only
+    // observable while decoding is pending: the spec lets an image that is
+    // already fully decoded in the session's memory cache complete inside the
+    // `src =` assignment itself, and this suite has enough consumers of the
+    // plain fixture URL that a warm cache made `naturalSize` read 512x256
+    // synchronously -- a green-suite flake, once in a parallel run. A unique
+    // query keeps the cache cold for exactly this construction, and changes
+    // nothing else about the test.
+    const src = new ImageSource(`/fixtures/panorama.png?uncached=${Math.random()}`)
     expect(src.naturalSize).toEqual({ width: 0, height: 0 })
     expect(() => src.frame).toThrow(/not loaded/i)
     src.dispose()
