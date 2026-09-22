@@ -117,6 +117,12 @@ export class CameraController {
     if (delta === 0) return
     if (this.#projection.kind === 'linear') return
     const next = Math.min(1, Math.max(0.01, this.#projection.zoom * (1 + delta)))
+    // The clamp can land back on the value already held -- a wheel held at the
+    // limit, or a delta below the float64 epsilon, where `zoom * (1 + delta)`
+    // rounds to `zoom` itself. Both are the no-redraw case `#apply` and
+    // `setAspect` already guard, and without it a wheel pinned at the ceiling
+    // costs a full-screen redraw and a subscriber wake per event.
+    if (next === this.#projection.zoom) return
     this.#projection = { ...this.#projection, zoom: next }
     this.#dirty = true
     this.#notify()
@@ -147,8 +153,9 @@ export class CameraController {
    * untouched rather than given one nothing consumes.
    *
    * @param aspect - width / height of the drawing surface. Must be positive.
-   * @throws If `aspect` is not finite and greater than zero. A zero aspect makes
-   *   the projection matrix singular, which draws nothing and reports nothing.
+   * @throws If `aspect` is not finite or is not greater than zero. A zero aspect
+   *   makes the projection matrix singular, which draws nothing and reports
+   *   nothing.
    */
   setAspect (aspect: number): void {
     assertPositive(aspect, 'aspect')
@@ -187,6 +194,10 @@ export class CameraController {
   }
 
   #notify (): void {
+    // Iterate a copy. A live Set tolerates removing the listener being visited,
+    // but silently skips one still to come -- so a listener that detaches a
+    // later-registered listener would drop that listener's notification for a
+    // change it was still subscribed to at the time.
     for (const fn of [...this.#changeListeners]) fn()
   }
 }
