@@ -151,9 +151,12 @@ describe('projection kinds', () => {
     // carrying that weight and is not described as if it were. Neither restates
     // the union in this file, which is the one thing this file must not become.
     //
-    // A key REMOVED from `texture` is caught by the literal, and also by `are up
-    // to date with the JSON source` above, where the generator runs out of a
-    // number to emit.
+    // A key REMOVED from `texture` reddens both of the above, and is caught by
+    // `are up to date with the JSON source` as well, where the generator runs
+    // out of a number to emit. Measured, not assumed: deleting the key turns
+    // four cases red by name -- this one, that one, `uploads the numeric values
+    // the legacy shader hard-coded`, and `declares the same numbers as the
+    // TypeScript constants`.
     expect(Object.keys(kinds.texture)).toEqual(['equirectangular'])
     for (const key of Object.keys(kinds.texture)) {
       expect(textureProjectionCode(key as TextureProjection), key)
