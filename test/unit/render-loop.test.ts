@@ -42,17 +42,10 @@ describe('RenderLoop', () => {
     expect(draw).toHaveBeenCalledTimes(1)
   })
 
-  it('asks shouldDraw before drawing, on every tick past the first', () => {
+  it('asks shouldDraw before drawing, every tick', () => {
     // The contract that keeps getCurrentTexture() out of a no-op frame. If the
     // loop ever calls draw() first and checks afterwards, a dropped frame is a
     // WebGPU validation error rather than a wasted draw.
-    //
-    // The first tick is absent from the expectation because shouldDraw is not
-    // asked at all on it: #tick short-circuits on `first` before reaching the
-    // flag, which is what makes the first frame unconditional. The plan's
-    // version of this test ticked once and expected ['check', 'draw']; that
-    // ordering is not observable until the loop is past its first frame, so the
-    // extra tick is what turns the plan's assertion into a true one.
     const s = fakeScheduler()
     const calls: string[] = []
     const loop = new RenderLoop({
@@ -63,8 +56,7 @@ describe('RenderLoop', () => {
     })
     loop.start()
     s.tick(0)
-    s.tick(16)
-    expect(calls).toEqual(['draw', 'check', 'draw'])
+    expect(calls).toEqual(['check', 'draw'])
   })
 
   it('stops scheduling after stop()', () => {
@@ -196,18 +188,25 @@ describe('RenderLoop', () => {
   it('retries the first frame on every tick while draw keeps throwing', () => {
     // #drewOnce is set only AFTER a successful draw, so a first frame that
     // throws leaves it false and the next tick draws unconditionally again,
-    // ignoring shouldDraw -- and so on, once per frame, for as long as the
-    // failure lasts. On a permanently lost device that is a full-screen redraw
-    // attempt every frame rather than a loop that stops. The behaviour is
+    // discarding shouldDraw's answer -- and so on, once per frame, for as long
+    // as the failure lasts. On a permanently lost device that is a full-screen
+    // redraw attempt every frame rather than a loop that stops. The behaviour is
     // incidental to where #drewOnce is assigned rather than a decision, and it
     // is pinned here so that changing it is deliberate.
+    //
+    // shouldDraw is still consulted on each of those ticks -- only its answer is
+    // discarded -- so both counts are pinned. The call count is what distinguishes
+    // this from the alternative, where the check is skipped entirely while the
+    // first frame has not landed.
     const s = fakeScheduler()
+    const shouldDraw = vi.fn(() => false)
     const draw = vi.fn(() => { throw new Error('device lost') })
-    const loop = new RenderLoop({ schedule: s.request, cancel: s.cancel, shouldDraw: () => false, draw })
+    const loop = new RenderLoop({ schedule: s.request, cancel: s.cancel, shouldDraw, draw })
     loop.start()
     s.tick(0)
     s.tick(16)
     s.tick(32)
+    expect(shouldDraw).toHaveBeenCalledTimes(3)
     expect(draw).toHaveBeenCalledTimes(3)
   })
 })
