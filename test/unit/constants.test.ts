@@ -136,15 +136,25 @@ describe('projection kinds', () => {
 
   it('leaves no texture key stranded on the JSON side of the bridge', () => {
     // The texture half of the lock `keeps the JSON keys and the TypeScript
-    // union in lockstep` applies to `camera`: a key added to `texture` with no
-    // member in `TextureProjection` is a kind that exists on one side of the
-    // bridge only. It is checked through the bridge rather than against a list
-    // written here, so this file does not become a second place the union is
-    // declared -- which is the thing the JSON exists to prevent.
+    // union in lockstep` applies to `camera`, and `034069a` is the commit that
+    // opened it: it pinned `Object.keys(kinds.camera)` to PROJECTION_KINDS and
+    // left `texture` without a twin. This is that twin, not new scope.
     //
-    // A key REMOVED from `texture` leaves this loop empty; that is caught by
-    // `are up to date with the JSON source` above, where the generator runs out
-    // of a number to emit.
+    // Two assertions doing different jobs. The literal names the requirement
+    // outright -- an entry for a projection that does not exist is what would
+    // appear here -- and, like the camera lock, fails on the day of the edit
+    // rather than at some later call site. The loop then checks the values
+    // agree across the bridge, which the literal cannot see: it fails if the
+    // two sides ever stop being the same number.
+    //
+    // The literal is what makes a stranded key impossible, so the loop is not
+    // carrying that weight and is not described as if it were. Neither restates
+    // the union in this file, which is the one thing this file must not become.
+    //
+    // A key REMOVED from `texture` is caught by the literal, and also by `are up
+    // to date with the JSON source` above, where the generator runs out of a
+    // number to emit.
+    expect(Object.keys(kinds.texture)).toEqual(['equirectangular'])
     for (const key of Object.keys(kinds.texture)) {
       expect(textureProjectionCode(key as TextureProjection), key)
         .toBe(kinds.texture[key as TextureProjection])
