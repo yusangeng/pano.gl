@@ -18,7 +18,17 @@ export default defineConfig({
         // Pure type declarations compile to nothing, so there is no branch to
         // cover. Listing them keeps the threshold meaningful rather than
         // diluted by files that can never contribute.
-        'src/**/types.ts'
+        'src/**/types.ts',
+        // DOM-bound classes, appended as they land. Their every path needs a
+        // real element and real browser events, so the node project cannot
+        // execute them without mocking the DOM -- which would replay the
+        // author's assumptions back instead of testing anything. They are
+        // exercised by the browser integration project, which does not report
+        // coverage; excluding them here keeps this gate about code the node
+        // project can genuinely reach.
+        'src/media/image-source.ts',
+        'src/media/video-source.ts',
+        'src/interaction/input-controller.ts'
       ],
       thresholds: {
         branches: 90,

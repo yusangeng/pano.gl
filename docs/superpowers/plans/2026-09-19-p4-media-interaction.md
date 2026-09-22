@@ -82,7 +82,7 @@ import { ImageSource } from '../../src/media/image-source'
 - Create: `src/core/events.ts`
 - Test: `test/unit/events.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/unit/events.test.ts`：
 
@@ -213,12 +213,12 @@ describe('Disposable', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- events`
 Expected: FAIL —— 无法解析 `../../src/core/events`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/core/events.ts`：
 
@@ -355,12 +355,12 @@ export abstract class Disposable {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- events`
 Expected: 11 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/core/events.ts test/unit/events.test.ts
@@ -371,6 +371,12 @@ function, so the common leak -- a handler registered as an inline arrow
 that nobody can name at teardown -- stops being the path of least
 resistance."
 ```
+
+> **（2026-09-21 登记，Task 1 勘误，落地于 4fdb84a）**两处 plan 代码被本任务自己的测试 / 类型检查否决，逐字照抄不可能，按最小修复落地：
+> 1. `Disposable.dispose` 的 plan 函数体（仅 `this.#disposed = true`）过不了本任务自己的「runs dispose exactly once」测试——子类约定是「先做自己的清理、最后 `super.dispose()`」，动态分发会先进入 override，基类里的任何守卫都拦不住第二次公有调用重入 override。已改为：首次 dispose 置位 `#disposed` 后，用 `Object.defineProperty` 在实例上盖一个 no-op 影子方法（自有属性查找先于原型链，第二次公有调用成为真正的 no-op，含 override）；基类顶部保留 `if (this.#disposed) return` 守卫，覆盖「子类在一次 override 里直接连调两次 `super.dispose()`」的原型查找路径。规格审查用 node 镜像实证了 plan 原函数体确实失败，且基类守卫 / 模板方法钩子两种更简单的方案都过不了这条测试。
+> 2. `on()` 退订闭包里的 `fn as (event: never) => void` 被 tsc 拒绝（TS2345，strictFunctionTypes 在调用点的逆变检查）。改为 `fn as unknown as (event: M[keyof M & string]) => void`——与 plan 自己在 wildcard 分支用的双重断言同一惯用法，删除仍按同一函数引用进行。
+>
+> **（2026-09-21 登记，Task 1 质量审查补测，落地于 fdf9348）**变异测试证明「拷贝后再迭代」未被钉住：自删在活 Set 上恰好是安全的（删除当前正在访问的元素不影响后续），真正区分活迭代与快照的是「删除**尚未访问**的监听器」——而原测试只测了自删，plan 原注释还按数组语义把这个机制写错了。补两条测试（later-listener 与 wildcard-later-listener，预期 `['a','b','a']`，活迭代变异体得 `['a','a']` 被抓）、修正原注释、给 `EventMap` 补「必须带索引签名」的 TSDoc（下游三个消费者第一天就会撞）。13/13 通过；events.ts 函数覆盖 100%，唯一未覆盖分支是 `#disposed` 守卫（防御性代码，可观测性为零，全局门槛吸收）。
 
 ---
 
@@ -384,7 +390,7 @@ resistance."
 - Create: `public/fixtures/clip.mp4`
 - Test: `test/unit/downscale.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/unit/downscale.test.ts`：
 
@@ -442,12 +448,12 @@ describe('planDownscale', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- downscale`
 Expected: FAIL —— 无法解析 `../../src/media/downscale`
 
-- [ ] **Step 3: 实现 downscale**
+- [x] **Step 3: 实现 downscale**
 
 `src/media/downscale.ts`：
 
@@ -504,7 +510,7 @@ export function planDownscale (width: number, height: number, max: number): Down
 }
 ```
 
-- [ ] **Step 4: 实现接口**
+- [x] **Step 4: 实现接口**
 
 `src/media/source.ts`：
 
@@ -619,12 +625,12 @@ export const MEDIA_EVENT_MAP: ReadonlyArray<readonly [string, keyof MediaEvents 
 ] as const
 ```
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `npm run test:unit -- downscale`
 Expected: 7 个测试 PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/media/source.ts src/media/downscale.ts test/unit/downscale.test.ts
@@ -635,7 +641,7 @@ a gl.RGB/LINEAR/no-CLAMP_TO_EDGE upload. WebGPU has no such requirement, so
 this only scales when the device limit is actually exceeded."
 ```
 
-- [ ] **Step 7: 生成两个 fixture 素材**
+- [x] **Step 7: 生成两个 fixture 素材**
 
 前置说明第 3 条说的两个文件，在这里落地 —— 这是第一个需要它们的任务。
 
@@ -643,7 +649,7 @@ this only scales when the device limit is actually exceeded."
 
 **为什么素材要有这些性质。** 「上下两半可区分」不是审美要求：旧版最难看出来的一个 bug 就是画面上下颠倒，而一张上下同色的图倒过来和正着长得一模一样，谁都发现不了。同理，「左右也要可区分」是给 PTZ 断言用的 —— 只有一条竖直分界的图，水平平移前后像素完全相同，那条测试会对着一个冻住的画布通过。所以是**四个象限**，不是两半。
 
-- [ ] **Step 7a: 写生成器**
+- [x] **Step 7a: 写生成器**
 
 `scripts/gen-fixtures.mjs`：
 
@@ -760,7 +766,7 @@ for (const file of [png, mp4]) {
 }
 ```
 
-- [ ] **Step 7b: 生成**
+- [x] **Step 7b: 生成**
 
 Run: `node scripts/gen-fixtures.mjs`
 Expected: 两行输出，各几 KB（实测 `panorama.png` 1839 字节、`clip.mp4` 约 4.9KB —— 纯色图压缩率极高，**大小不是断言，别写进测试**）
@@ -773,7 +779,7 @@ Expected: **只有两个文件**。四张静帧里只有第一张落在 `public/
 
 > **视频那条断言若红在「解不出来」上，先怀疑路径而不是编码器。** 立项时已用 Playwright 会装的那个 Chromium（`chromium-1243`，`channel: 'chromium'` 指的就是它）实测过 `canPlayType('video/mp4; codecs="avc1.42E01E"')` 返回 `probably`，且加载本脚本产出的同参数文件后 `videoWidth=256`、`readyState=4`（`HAVE_ENOUGH_DATA`）。**注意版本**：更老的缓存副本 `chromium-1169` 对同一文件回 `h264=NO` —— 若本机命中了那个副本，先 `npx playwright install chromium` 再查代码。
 
-- [ ] **Step 7c: Commit**
+- [x] **Step 7c: Commit**
 
 ```bash
 git add scripts/gen-fixtures.mjs public/fixtures/
@@ -788,6 +794,20 @@ is what makes an upside-down source and a frozen pan both detectable."
 
 > **不能拿仓库里已有的 demo 素材充数。** 那些是旧版为 2 的幂尺寸挑的，上下关系没有任何保证 —— 而这里要断言的恰恰是上下关系。
 
+> **（2026-09-21 登记，Task 2 勘误，落地于 fdeff73 / 17f54c4）**三处 plan 代码被仓库自己的检查器否决，逐字照抄不可能，按最小修复落地：
+> 1. `source.ts` 删掉了 plan 的 `import type { SourceState }`：`MediaFrame` 成为 `RenderableSource` 的别名后，`SourceState` 只出现在 TSDoc 散文里，typescript-eslint 的 no-unused-vars 拒绝（往 /tmp 副本里加回该行即复现报错；tsc 两种写法都过）。`Disposable` / `EventMap` / `RenderableSource` 三行 import 保持 plan 原样。
+> 2. `gen-fixtures.mjs` 按 `tsconfig.scripts.json` 的 checkJs 严格检查（noImplicitAny / noUncheckedIndexedAccess；plan 的裸 JS 报 9 处错）改为 JSDoc 注解风格：`@param` / `@returns`、QUADRANTS 注为四元组、`rotated()` 重写为四条显式分支、segments 改为 `[...stills, ...stills]`。行为零差异 —— 重跑生成器后 `cmp` 证明产物逐字节相同（1839 / 4886 字节）。
+> 3. 两笔提交在未推送时用 reset 重写了一次，使每一步的提交内容与修正后的内容对齐；最终 SHA 为 fdeff73 / 17f54c4。
+>
+> **（2026-09-21 登记，Task 2 质量审查补测，落地于 f52856e）**变异测试证明 plan 自带的 7 条测试有四类行为未被钉住（代码本身正确，问题是测试因错误理由通过）：
+> - **高度约束轴**（IMPORTANT）：超标用例全是横版图，删掉 `Math.min` 的 height 侧或 fits 检查的 height 条件后 7/7 照过 —— 竖版源会拿到超标尺寸。补 `5000x10000 → 4096x8192`，两侧同时钉住。
+> - **1px 钳位从未实际生效**（IMPORTANT）：原测试的 `(16384,1)` 乘积恰为 0.5，`Math.round` 半数进一到 1，断言被 round 而不是钳位救活。补 `(20000,1)` / `(1,20000)`（无钳位时 `round(0.4096) = 0`）。
+> - **守卫的 `||` 与 RangeError 类未钉**（MINOR）：只测了 `(0,0)`；原位加固为零测例（单侧零 + `toThrow(RangeError)`）。
+> - **round 对 floor / ceil**（MINOR）：没有测例乘积小数部分落在 (0.5, 1)；补 `10000x5001 → 4097`（杀 floor）并把 T6 改为 `toBe(91)`（杀 ceil）。两条 round 测试各杀一个方向，分工正好。
+> - 三处注释修正：downscale.ts 头部的「与画布区域等大」子句经 v0.2.2 tag 逐行核对为**假**（帧路径是 drawImage 缩放，整个 tag 无 texSubImage2D），删除；`@throws` 改为 "not positive"（守卫是 `<= 0`）；source.ts 的 microtask→task（task 级的外部纹理生存期）。
+> - 等价变异体不测：fits 边界 `<=`→`<` 对整数输入逐位等价（x/x===1）；绑定轴 floor 仅在 1-ulp 浮点事故点可区分（如 w=8474）。钉它们会是坏测试。
+> - 遗留 INFORMATIONAL（未修，记录在案）：'rounds rather than floors' 测试注释里的 "w * (max / w) === max" 不是普遍浮点恒等式（11808 探针中 1400 例失败）；它引导的结论（只钉非绑定轴）正确。
+
 ---
 
 ### Task 3: `ImageSource`
@@ -796,7 +816,7 @@ is what makes an upside-down source and a frozen pan both detectable."
 - Create: `src/media/image-source.ts`
 - Test: `test/integration/image-source.test.ts`
 
-- [ ] **Step 1: 写集成测试**
+- [x] **Step 1: 写集成测试**
 
 `test/integration/image-source.test.ts`：
 
@@ -867,7 +887,7 @@ describe('ImageSource', () => {
 >
 > **不要把它换成包装 `addEventListener`/`removeEventListener` 的全局计数。** `AbortController` 摘监听器时不调 `removeEventListener`，那样的计数会把一个已经清干净的源报成满的。
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 `src/media/image-source.ts`：
 
@@ -1010,17 +1030,23 @@ export class ImageSource extends Disposable implements MediaSource {
 }
 ```
 
-- [ ] **Step 3: 跑测试**
+- [x] **Step 3: 跑测试**
 
 Run: `npm run test:integration -- image-source`
 Expected: 4 个测试 PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/media/image-source.ts test/integration/image-source.test.ts
 git commit -m "feat(media): image source with abortable listeners and a load-state guard"
 ```
+
+> **（2026-09-21 登记，Task 3 勘误与质量审查，落地于 83a8fde / b67c1f1 / 43105a6）**
+> 1. **覆盖率兜底（83a8fde，走卡内预写路径）**：`image-source.ts` 入库后 `test:coverage` 红（Stmts 89.84 / Branches 86.66 / Funcs 85.91 / Lines 90.52）——该类每条路径都要真实 `<img>` 与浏览器事件，node 项目执行不到，浏览器项目不报覆盖率。按任务卡「确实测不到才加 exclude 并写明理由」：`vitest.config.ts` 追加该文件至 coverage exclude，附 8 行英文理由（mock DOM 只会把作者假设回放成「测试」）；thresholds 未动，全仓回到基线 99.13 / 97.94 / 100 / 99.69。实现代码零偏离：plan 的 image-source.ts 与测试经 /tmp 转写 `cmp` 逐字节核对相同（136 + 61 行）。
+> 2. **质量审查补测（b67c1f1）**：变异测试（14 个变异体，6 杀 8 活）证明 plan 自带 4 条测试有六类行为未被观测（代码正确，测试因错误理由通过）：dispose 的 `abort()`（僵尸监听仍向新订阅者派发）、`maxTextureDimension` 选项与 `uploadScale` getter（零覆盖，回归即超限上传撞设备校验——正是 downscale 要防的）、media-error 载荷（`error`/`target` 是公开 API）、`markFramePresented` 的 no-op 与 `version === 1` 精确值（回归即每渲染帧重传纹理）、dispose 的 `src=''` 释放（回归即已销毁源永远可上传）。补 3 条新测试 + 原测试内 3 处加固断言（7/7）；测试 4 更名「dispose zeroes the listener count」——原名声称了断言没测的事。复审重放：六个存活非等价变异体（M3/M5/M7/M8a/M9/M10）全灭、各命中设计断言、零误杀。
+> 3. **注释修正（b67c1f1 / 43105a6）**：`u_TexProjType` 这个 uniform 不存在（真实链路 `textureProjectionCode` → 相机 uniform 的 `texProjKind` 字段，uniforms.ts:46 / panorama.wgsl:25；stale 名承自 constants.ts:57，属 P3 遗留不在本 diff）；「Uploads exactly once.」→「Uploaded exactly once.」（类不上传任何东西，上传的是后端，且只传一次，因为 version 只动一次）；`listenerCount` TSDoc 两轮修正：计数随 abort 手工归零，认证的是「dispose 跑了」而非「监听器已摘」，其独有可观测物是监听器簿记——「did dispose run」由继承的 `isDisposed` 公开回答。
+> 4. **等价变异体裁定（登记不测）**：M1c（无条件 bump：img 只发 `load`，分歧态经 `frame`（0×0 抛出）公开不可读）；M6（删 `crossOrigin`：击杀需第二源 + ACAO 头，同源 fixture 下不可分，跨源污染会在 gate 层暴露）；8192 **默认值**不补钉（需 >8192px 素材，与选项路径已钉的精度不成比例——控制器裁定）；M8b（scale↔width 互换）被 M8a 的 `toBe(0.5)` 击杀吸收。
 
 ---
 
@@ -1047,7 +1073,7 @@ git commit -m "feat(media): image source with abortable listeners and a load-sta
 2. **两条路径的朝向必须一致，这是那个「一次 shader 翻转同时修好两条路径」的前提。** P3 把 flip 放在 shader 的 `to_uv` 里，两条路径共用 —— 这个做法只有在**两个浏览器 API 的行序本来就一致**时才成立（`importExternalTexture` 根本没有 `flipY` 可选，所以一旦不一致，没有任何一个 shader 翻转能同时修好两条）。这是一个经验断言，Step 3 的探针就是它的证据。
 3. **外加上限：external texture 导入失败时视频不能静默冻住。** P3 的 `render()` 目前对视频无条件 import，没有回落分支 —— 见本计划末尾「留给 P3 的一处依赖」。
 
-- [ ] **Step 1: 写集成测试**
+- [x] **Step 1: 写集成测试**
 
 `test/integration/video-source.test.ts`：
 
@@ -1242,7 +1268,7 @@ describe('VideoSource', () => {
   })
 })
 ```
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 `src/media/video-source.ts`：
 
@@ -1465,7 +1491,7 @@ export class VideoSource extends Disposable implements MediaSource {
 }
 ```
 
-- [ ] **Step 3: 补一条朝向一致性测试**
+- [x] **Step 3: 补一条朝向一致性测试**
 
 这一条**直接驱动两个浏览器 API，不经过 pano.gl 的后端**。理由是测试要问的问题本来就与我们的代码无关 —— 「`importExternalTexture`（没有 `flipY` 选项）和 `copyExternalImageToTexture`（`flipY: false`）把帧的行序放成一样吗」。后端自己的测试看不见这个差异：**两条路径各自自洽**，各自渲染都对，只是彼此相反；而 P3 的 shader 只翻转一次、两条路径共用，所以一旦相反就是必错其一。
 
@@ -1729,14 +1755,14 @@ describe('video upload paths', () => {
   })
 })
 ```
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `npm run test:integration -- video-source video-orientation`
 Expected: video-source 8 条 + video-orientation 1 条，全 PASS
 
 **`video-orientation` 失败时**：**不要直接给 copy 路径加 `flipY: true` 试**。先确认是**哪一条**需要翻 —— 把读回按行切成上下两半，看哪一条是倒的（探针里的 `split` 检查保证测试帧上下两半的均值差 ≥ 8，否则这条判断无从做起）。翻错了就是把对的翻成错的。若最终必须翻，改动落在**后端**（`WebGPUBackend` 的 copy 路径），不在本层。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/media/video-source.ts test/integration/video-source.test.ts test/integration/video-orientation.test.ts test/integration/support/upload-paths.ts
@@ -1748,6 +1774,15 @@ paths also disagree about flipY, so orientation is pinned by a probe that
 drives both browser APIs directly rather than assumed."
 ```
 
+> **（2026-09-22 登记，Task 4 勘误与质量审查，落地于 ed7203b / 9672634 / 8fa3f41 / e15a30d）**
+> 1. **覆盖率兜底（9672634）**：`video-source.ts` 与 image-source 同理入 coverage exclude（每条路径都要真实 `<video>` 与解码器，node 项目执行不到；浏览器项目不报覆盖率）。thresholds 未动，全仓基线 99.13 / 97.94 / 100 / 99.69 无漂移。实现与 8 条测试的其余部分与 plan 逐字相同（经 /tmp 转写 `cmp` 核对）。
+> 2. **Step 3 探针两处实测否决 plan 原文（8fa3f41）**：
+>    - **拷贝几何**：`copyExternalImageToTexture` **不缩放** —— copySize 小于源时只拷左上角区域。plan 的 `[size, size]` 拷贝在 512×256 素材上等于左上象限内的 64×64 纯色裁剪，渲染恒定跟踪单象限调色板（实现者测得的「恒定色、t=0.2 变色、min=max」全部由此而来，一度被误诊为平台缺陷）。改为按源自然尺寸建 copied texture 并拷贝（`size = [videoWidth, videoHeight]`，copySize 同），归一化 UV 采样把整帧缩进 64×64 目标。实测 maxChannelDiff(external, copy) = 1 ≤ 容差 2。另测得：Dawn 要求拷贝目的地同时带 `COPY_DST | RENDER_ATTACHMENT`，违规是**静默**零初始化纹理，诊断须 `pushErrorScope('validation')`。
+>    - **seek 加固**：`loadeddata` 后仍暂停的 Chromium 视频没有 GPU 后备帧 —— `importExternalTexture` 即便 readyState 4 也抛 "doesn't have back resource"。探针在 `video.pause()` 后补 `video.currentTime = Math.min(0.5, video.duration / 2)` + await `seeked`（仍暂停、仍单帧），强制解码建立 GPU 帧；`Math.min` 取中点是为极短素材兜底。
+>    - 由此，plan 尾部「留给 P3 的一处依赖」中「Step 3 的探针已经证明这条回落与 external 路径的行序一致」一句：原探针因拷贝几何 bug 什么也没证明；**修复后该断言现在为真**（maxChannelDiff = 1）。
+> 3. **质量审查（e15a30d）**：变异测试 22 个变异体（源码 17 + 探针 5），源码无存活变异体指向缺陷、探针 MO1（copy 路径 flipY 翻转）被测试以 diff 173 击杀。六类测试缺口补强（各精确击杀一个目标变异体）：media-load bump（M4）、last-frame 基线读取时序（M7 —— 原测试在 play bump 落定前读基线，删掉 media-ended bump 照样通过）、maxTextureDimension 接线（M12，256 上限 → 256×128 精确态）、dispose 拆除三断言（M14 src 释放 / M15 僵尸监听器经 timeupdate / M16 监听器计数前置为 10）、media-error 载荷（M17，404 镜像 image 侧测试）。测试数 8 → 12。四处注释按实测勘误：HAVE_METADATA 已知尺寸（C1）；Chromium 播完时 paused 亦真，`ended` 项是规范防御（C2）；loadeddata 保证「有帧」不保证「GPU 帧」（C3）；`load()` 算法自身中断抓取（C4）。等价/良性裁定不测：M1（Chromium 实测播完 paused=true，单删 `ended` 项不可区分）、M8/M9（过冲 bump 良性）、M13（dispose 里的 pause() 被 load() 算法吸收）、MO2–MO5（测试削弱/元变异，按设计接受）、MO4（共享 VERTEX 翻转保路径一致；朝向 ground truth 归 gate A）。最终 13/13（12+1）通过。
+> 4. **中断记录**：质量复审于 2026-09-22 00:20 撞 5 小时 API 限额中断（M4/M7/M12 已完成在案；树干净、无变异体残留，经控制器亲验），03:19 限额重置后续做完成 M14–M17 与终验。
+
 ---
 
 ### Task 5: `InputController`
@@ -1758,7 +1793,7 @@ drives both browser APIs directly rather than assumed."
 - Test: `test/unit/gestures.test.ts`
 - Test: `test/integration/ptz.test.ts`
 
-- [ ] **Step 1: 写手势识别的单元测试**
+- [x] **Step 1: 写手势识别的单元测试**
 
 手势识别做成**纯函数**，这样它可以在 Node 里测：
 
@@ -1865,12 +1900,12 @@ describe('classifyDrag', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- gestures`
 Expected: FAIL —— 无法解析 `../../src/interaction/gestures`
 
-- [ ] **Step 3: 实现手势识别**
+- [x] **Step 3: 实现手势识别**
 
 `src/interaction/gestures.ts`：
 
@@ -1988,12 +2023,12 @@ export function classifyDrag (delta: DragInput, surface: SurfaceSize): { lat: nu
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- gestures`
 Expected: 15 个测试 PASS
 
-- [ ] **Step 5: 实现 `InputController`**
+- [x] **Step 5: 实现 `InputController`**
 
 `src/interaction/input-controller.ts`：
 
@@ -2143,7 +2178,7 @@ export class InputController extends Disposable {
 }
 ```
 
-- [ ] **Step 6: 写交互的集成测试**
+- [x] **Step 6: 写交互的集成测试**
 
 `test/integration/ptz.test.ts`：
 
@@ -2227,12 +2262,12 @@ describe('InputController', () => {
   })
 })
 ```
-- [ ] **Step 7: 跑全部**
+- [x] **Step 7: 跑全部**
 
 Run: `npm run test:unit && npm run test:integration`
 Expected: 全 PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/interaction/ test/unit/gestures.test.ts test/integration/ptz.test.ts
@@ -2244,22 +2279,32 @@ mouse wheel went through the same divisor. All listeners share one
 AbortController, and the element's touch-action is restored on dispose."
 ```
 
+> **（2026-09-22 登记，Task 5 勘误与质量审查，落地于 27679eb / ba3c3f0）**
+> 1. **落地核对与覆盖率兜底（27679eb）**：四块 plan 代码（gestures.ts / input-controller.ts / gestures.test.ts / ptz.test.ts）经 /tmp 转写 `cmp` 逐字节核对相同——实现首报存在一处注释 rewrap 的 verbatim 违规，reset+amend 修正后复验通过（未推送，同 Task 2 先例）。`input-controller.ts` 追加至 coverage exclude（同 image/video-source 理由：每条路径都要真实指针事件，node 项目执行不到；浏览器项目不报覆盖率），thresholds 未动，全仓 99.17 / 98.10 / 100 / 99.70。
+> 2. **质量审查发现的结构性缺陷与源码修复（ba3c3f0）**：46 个变异体证明 wheel 监听器从未被任何测试派发过、pinch 分支按 plan 原文**不可测**——`#onPointerDown` 在跟踪前调 `setPointerCapture`，而 Chromium 对一切非活动指针 id 抛 NotFoundError（控制器亲测：`id1:no-throw id2:NotFoundError id42:NotFoundError`），合成事件只能命名非活动 id，第二根手指永远进不了 `#pointers`，且未处理异常直接打断 handler。修复走规范定义的异常路径：跟踪先行，捕获包 try/catch、失败降级为「手势不再存活出界」而非中断跟踪；真指针行为零变化，下游合成事件测试不再吃到未处理异常。复审变异矩阵证明修复被钉住（全量回退、裸捕获、重抛三类变异体均被击杀）。
+> 3. **补测 11 条**：单元 4 条（log 比对减法的尺度不变性、滚轮两侧钳位、重合手指、极值捏合）+ 集成 7 条（wheel→zoom 含 preventDefault 探针与 PTZ 门、双指捏合含第二手势状态隔离、悬停移动卫生、手势中 PTZ 开关的累计位移语义、pointercancel + 未知 pointerup、dispose 后静默、dragToRotation 委托）。钳位断言硬编码 `±1` 而非回读 `WheelZoom.MAX_STEP`——常量断言常量会让变异常量自证通过（U8 型）。单元 15→19、集成 4→11，19 个目标变异体全部击杀。
+> 4. **两处注释修正**：`passive: false` 的「required」实测为假——Chromium 默认 passive 只作用于 window/document/body，div 上无 flag 也能 preventDefault；但宿主元素是调用方的（可能是 body），flag 保留、注释改为如实陈述。antisymmetry 测试注释改准确：减法同样反对称，尺度不变性由新增专测钉住。
+> 5. **一处类型系统否决审查报告原文**：报告提议的 pinch 测试 helper（表达式体箭头 + 显式 `: void` 注解）是 TS2322——`dispatchEvent` 返回 boolean，void 可赋值特例覆盖函数类型赋值、不覆盖直接注解（控制器独立探针复现）。改为块体、注解保留，行为零差异。
+> 6. **等价/良性变异体裁定（登记不测）**：R1–R7（监听器无 signal 仅 DevTools 可见 / div 场景 drop flag 良性 / 合成场景下 capture 无可观测物 / down 的 prevPinch 重置与 up 证明冗余但双删被击杀 / hypot 对称 / dispose 漏 abort 无可观测物 / 拆除顺序被掩盖）+ 复审新增 N1（catch 在位时 set/capture 顺序不可观测，顺序降为自文档防御）、N3b（catch 早退只跳过与 up 冗余的重置）。I17/N2b/N3a 经 vitest 未处理异常策略击杀（监听器内抛错即红），复审裁定该机制充分稳定。
+
 ---
 
 ## 完成标准
 
-- [ ] 图片和视频都不存在「未加载就被上传」的路径（两条集成测试证明会抛）
-- [ ] `dispose()` 后每个源的 DOM 监听数归零，且这个数字是**公开可读的**
-- [ ] `src/media/` 下不存在 `frameSize` 及其任何同义词
-- [ ] 本层不重新定义 `SourceState`，只组合 core 的那一个
-- [ ] 源不缓存帧（同一任务内两次读 `frame` 得到两个对象）
-- [ ] external / copy 两条上传路径的朝向一致
-- [ ] **暂停的视频不再推进版本号** —— 播放中会前进，暂停后不动，`play()` / seek 之后又能继续动（否则渲染循环要么永远重画，要么永远醒不过来）
-- [ ] `PTZ = false` 不产生事件，且重新打开后恢复
-- [ ] `touch-action` 在 dispose 时还原
-- [ ] 不存在任何 2 的幂量化逻辑
-- [ ] 本阶段的集成测试**直接 import `src/media/` 与 `src/interaction/` 的类**，仓库里没有重新长出 `demo/test-entry.ts`、`test-entry-hooks/` 或 `window.__panoTest`
-- [ ] `public/fixtures/panorama.png` 与 `public/fixtures/clip.mp4` 已由 `scripts/gen-fixtures.mjs` 生成并提交，且 `ffprobe` 复核为 `512x256`、`64` 帧（P5 的全部 User Story、P6 的后端对比都读它们）
+- [x] 图片和视频都不存在「未加载就被上传」的路径（两条集成测试证明会抛）
+- [x] `dispose()` 后每个源的 DOM 监听数归零，且这个数字是**公开可读的**
+- [x] `src/media/` 下不存在 `frameSize` 及其任何同义词
+- [x] 本层不重新定义 `SourceState`，只组合 core 的那一个
+- [x] 源不缓存帧（同一任务内两次读 `frame` 得到两个对象）
+- [x] external / copy 两条上传路径的朝向一致
+- [x] **暂停的视频不再推进版本号** —— 播放中会前进，暂停后不动，`play()` / seek 之后又能继续动（否则渲染循环要么永远重画，要么永远醒不过来）
+- [x] `PTZ = false` 不产生事件，且重新打开后恢复
+- [x] `touch-action` 在 dispose 时还原
+- [x] 不存在任何 2 的幂量化逻辑
+- [x] 本阶段的集成测试**直接 import `src/media/` 与 `src/interaction/` 的类**，仓库里没有重新长出 `demo/test-entry.ts`、`test-entry-hooks/` 或 `window.__panoTest`
+- [x] `public/fixtures/panorama.png` 与 `public/fixtures/clip.mp4` 已由 `scripts/gen-fixtures.mjs` 生成并提交，且 `ffprobe` 复核为 `512x256`、`64` 帧（P5 的全部 User Story、P6 的后端对比都读它们）
+
+> **（2026-09-22 登记，终末全分支审查）**opus 全分支审查于 `7c51586`（`master...HEAD`；**本节原写「13 commits」是陈旧口径，真值为 20 commits / 20 files / +2360−33，更正见本计划末尾整改轮勘误第 4 条**）结论 **APPROVED**：零 CRITICAL、零 IMPORTANT；两条 MINOR 均为交卷流程自有的文档状态项（本清单勾选、任务卡填写），随交卷提交处理。完成标准 12 条经终审逐条验证后勾选（两处 `frame` getter 未加载即抛、`listenerCount` 公开且 dispose 归零、`frameSize` 仅存于 downscale.ts:4 的 legacy 说明注释、`state` 字面量经 `RenderableSource` 别名链满足 core `SourceState`、每读必新对象、orientation 探针含上下对比自检、暂停守卫 + 四事件 bump、PTZ 门、touch-action 还原、非 POT 尺寸钉住、四文件直 import 无桥再生、ffprobe `512x256/64`）。跨阶段留档三条：`src/renderer/backend.ts:48-53`（P3 产物）TSDoc 对上传门槛的描述窄于实际实现（实际另比较 element 同一性，backend.ts:414 —— P4 的按源版本号因此在换源时安全），修正不在本卡 scope；`emit` 载荷在全部 8 个事件上携带 `error: undefined`（仅 media-error 声明，联合成员匹配可编译，运行时无害）；`test/integration/image-source.test.ts:8` 说明性注释提及 `__panoTest`，P7 的悬空引用 grep（docs/ 之外须为空）会命中（已记入任务卡风险栏）。
 
 ## 交给下游的东西
 
@@ -2277,6 +2322,7 @@ AbortController, and the element's touch-action is restored on dispose."
 | `WheelZoom` 常量 | 没有下游，但**它是行为变更**：旧版鼠标滚轮与触控板共用一个除数 |
 | `public/fixtures/` 的两个素材 | P5 的全部 User Story、P6 的后端对比都从 `/fixtures/...` 取它们。**P4 之后不再有人产出它们**，所以这一条是下游能不能跑起来的硬前提 |
 | `renderVideoBothPaths` 里「两个 readback 都是 RGBA」的结论 | **P6 的补充证据**：P3 只说了「canvas 的 readback 在 macOS 上是 BGRA」，没说什么情况下不是。这里是另一半 —— 显式建的 `rgba8unorm` 纹理走 `copyTextureToBuffer` 出来就是 RGBA，跟 canvas 的 `getPreferredCanvasFormat()` 无关。判据是**读的是不是 canvas**，不是读的是哪个后端 |
+| `renderVideoBothPaths` 的 `kind: 'unavailable'` 分支 | **P6 必须知道的边界**：软件 adapter（CI 上的 SwiftShader）上视频帧进不了任何纹理，本探针在那里响亮跳过。P6 的跨后端像素对比若含视频，要么带同样的守卫，要么在该环境改用图片素材 —— 详见本计划末尾整改轮勘误第 3 条 |
 
 > **给 P5 的一条纪律**：P4 的集成测试直接 import `src/media/` 与 `src/interaction/` 的类，那是因为
 > P4 交付的**就是这两个类**。P5 交付的是 `FramelessImageViewer` / `FramelessVideoViewer`，
@@ -2289,3 +2335,16 @@ AbortController, and the element's touch-action is restored on dispose."
 **视频的 external texture 导入失败时没有回落分支。** P3 的 `WebGPUBackend.render()` 对 `source.kind === 'video'` 无条件走 `importExternalTexture`；如果某个设备上这一步抛错，异常会一路走到 `RenderLoop` 的 `onError`，结果是一块不再更新的画布 —— 正是本计划 Task 4 想避免的那种「静默冻住」。可用的回落是 `copyExternalImageToTexture` 到一张 rgba8unorm 纹理，也就是图片那条路径；**Step 3 的探针已经证明这条回落与 external 路径的行序一致**，所以补它不会再引入第二个朝向 bug。
 
 这属于 `src/renderer/webgpu/backend.ts`，本计划无权修改，**由 P3 补上**：`render()` 里对视频先试 import，失败则退到 copy 路径，并把 `Capabilities.externalTextures` 置为 `false` 让应用看得见。
+
+---
+
+## 整改轮勘误（协调者打回，意见 1 / 2）
+
+> **（2026-09-22 登记，落地于 `7df8d96`）**
+>
+> 1. **软件 adapter 上取不到视频帧，且换一条取帧方式并不成立（意见 1 的实测根因）。** 本卡集成套件在 GitHub CI 上确定性红：Ubuntu runner 无 GPU，Chromium 落到 SwiftShader 软件 WebGPU。实测把「换条路径就能取到帧」这个选项证伪了 —— 该 adapter 上 `importExternalTexture` 与 `copyExternalImageToTexture` 对 `<video>` 元素**都采出全黑帧**（上下半均值 0 / 0），而同一素材经 `drawImage` + `getImageData` 解出来是有对比度的真帧（28.4），同一 device 画常量色也读得回来（max 191）；硬件 adapter（本机 Metal）上两条路径分别量到 96.31 / 117.66 与 96.33 / 117.67，朝向比较本身是成立的。
+>    整改按意见给出的方向 (a)：探针改为返回结果联合（`VideoPathComparison`），`unavailable` **只在同一次运行里当场量到下面两个控制之后**才可能返回 —— ① 素材控制（绕开 WebGPU，量解码器里的上下对比度，不够即抛错）；② 设备控制（常量色 fragment，无纹理无绑定，读回全 0 即抛错）。于是坏素材与瞎子设备仍是硬失败，软件 adapter 得到的是**响亮的 skip**（理由里带上 adapter 自报的 vendor / architecture 与当场量到的三个数字），真 GPU 环境照常全跑。
+>    这一改顺带修掉一个**假通过**：软件 adapter 上 copy 路径的读回同样是黑的，若只比 external 与 copy，会得到 0 对 0 的「相等」；是上下对比度守卫把这种情形变成响亮失败。
+> 2. **一处未解释的实测，留档但不建屋。** 同一轮调查里，`copyExternalImageToTexture` 从一块 2D canvas 上传**成功过一次**（读回 74.67 / 191.67，与填充色精确相符），此后每一次都是 max 0 —— 覆盖 2×2…512×256 全尺寸、两个 adapter、加不加 rAF / 挂不挂文档 / 有没有先 `getImageData`，而同文件里的常量色控制始终读回 191（测试装置本身没坏）。因为无法稳定复现，canvas 控制被**整个放弃**，换成上面两条可稳定重测的控制。留给后来者：在软件 adapter 上，「canvas → 纹理」也不可依赖。
+> 3. **给 P6 的下游提醒。** 软件 adapter 上视频帧既然进不了纹理，**库自身的视频渲染在该环境下同样不可像素观测**。P6 的跨后端像素对比若包含视频，必须带同样的守卫（或在该环境改用图片素材），否则会在 CI 上拿到一片「黑对黑的一致」。
+> 4. **口径更正（意见 2）。** 本节上一段与任务卡自报的「13 commits」是**陈旧计数**：13 是到 `ed7203b`（09-21 23:25，T4 feat 刚落地）为止的累计数。终审实际跑在 `7c51586`，`master...HEAD` 的真值是 **20 commits / 20 files / +2360−33** —— 终审报告头部的 diffstat 与此一致，且报告逐条点到 T5 的 `gestures.ts` / `ptz.test.ts`，可见它读的 diff 覆盖是全分支，不受这个错计数影响。终审之后另有交卷 docs 两笔（`49ba781` / `c02d064`，正是它 MINOR-1 / MINOR-2 要求补的文档状态项）与本轮整改 `7df8d96`，这些未经任何审查，由本轮 verify 重跑与协调者复审覆盖。
