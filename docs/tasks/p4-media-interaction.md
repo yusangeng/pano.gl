@@ -4,7 +4,7 @@ scope: [src/core/events.ts, src/media/**, src/interaction/**, scripts/gen-fixtur
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: domain
 deps: [p3-renderer-webgpu]
-state: reported
+state: rejected
 createdAt: 2026-09-19T08:51:52.642Z
 ---
 # 任务：P4 — media + interaction
@@ -56,4 +56,23 @@ effective-testing 评估以变异测试机械化执行（「破坏实现看测�
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：reject，退回整改（1 项阻塞 + 1 项随卷修正）。**（2026-09-22，superloop-verify 第 5 关）
+
+**手段**：协调者直审——卡面红线静态核查 ＋ 七个交付文件逐个亲读 ＋ verify 全链在分支树上亲跑 ＋ 集成双环境亲跑（真 GPU 与 `CI=1` SwiftShader）＋ 定向变异亲测。
+
+**亲验记录**：
+
+- **红线全过**：`src/media/` 无 `frameSize` 代码用法（唯一命中 downscale.ts:4 legacy 说明注释）；桥零再生（`__panoTest`/`PanoTestApi` 在 src / demo / test-unit 零命中，integration 侧唯一命中为 image-source.test.ts:8 **注释行**——内容正是解释「没有这个桥」，与登记一致）；thresholds 90×4 未动；三个 coverage exclude 均附成段英文理由。
+- **代码亲读（7 文件全部）**：EventEmitter 快照迭代与影子方法 dispose（勘误登记与实现严格一致）；downscale 的 device-limit-only + `Math.max(1, round)` 钳位 + 零维 RangeError；`MediaFrame = RenderableSource` 别名（renderer←media 分层红线守住）；VideoSource 的 version 契约（load/play/seeked/ended 推进、pause/progress 故意不推进的死锁注释在案、`loadedmetadata` 承担 0→N 元数据推进——P3 移交风险 #1 满足）；ImageSource 8 监听器单 AbortController、未加载读 frame 即抛；InputController track-before-capture + try/catch、touch-action 借还、PTZ 开关不重绑；gestures 纯函数、常量导出供反同构断言。卡面主张逐条吻合。
+- **verify 静态链 EXIT=0**（分支树亲跑）：gen:shaders --check → typecheck → lint → coverage **206/206、99.17 / 98.10 / 100 / 99.70（与自报逐字一致）** → build。
+- **集成真 GPU**：10 文件 **45/45 全绿**。
+- **定向变异亲测**：删 `markFramePresented` 的 paused/ended 守卫 → 「does not advance a paused video, so the loop can stop」红（exit 1）；还原后 12/12 复绿、树净。钉子有牙。
+- **素材亲验**：ffprobe `h264,512,256,64`；panorama.png 1839B / clip.mp4 4886B，逐字对上。
+- **门禁证据**：21 改动文件全在 scope 白名单（plan+卡为常规伴随物）；**22/22** commit 前缀合规；分支侧 plan 44/44 全勾、diff 仅勾选与登记勘误块；执行期 master 侧仅开工认领与卡同步两笔。
+
+**打回意见（逐条编号）**：
+
+1. **【阻塞】video-orientation.test.ts 在 CI 环境确定性红，合并即把 GitHub CI 拉成 permanently red**。亲跑 `CI=1 npm run test:integration`：45 条中**唯一红即本条**（单独复跑仍红，确定性非抖动），失败点是探针自身的对比度守卫 `the fixture frame has no top/bottom contrast (top 0, bottom 0)`——SwiftShader（软件 WebGPU）上 `importExternalTexture` 路径对 video 元素采出**全黑帧**（copy 路径未及参与比较即被拦截），external 路径无帧可判朝向（守卫行为正确：拒绝在黑屏上判朝向）。而 ci.yml 的 integration job 以 `CI: 'true'` 跑全量 `npm run test:integration`（ubuntu-latest 无 GPU → SwiftShader 双 flag），即**本卡一合并、用户一 push，远端 CI 必红且永久红**——ci.yml 自己的注释写着「a permanently red job is a job people learn to ignore」，那是 P1 建起来的底线，P3 也以「只在一边绿 = 容差定错了」守过同一条。plan 对 SwiftShader/CI=1 零提及、卡面自报也只声明「真实 WebGPU adapter 守卫」，所以这不是实现质量问题，是**这条测试的环境口径既没登记也没处理**。整改方向（执行者定夺）：按仓库守卫纪律在软件 adapter 下显式 skip 并写明理由（响亮跳过而非静默过，真 GPU 环境照常全跑），或证明 SwiftShader 存在可用取帧方式并让探针在该环境下成立。其余 44 条在 CI=1 下已绿，无连带。
+2. **【随卷修正】自报数字过期**：卡面「分支 13 commits（+2360/−33）」，实际 `master...HEAD` 为 **22 commits / +2399/−49**。13 恰为到 ed7203b（09-21 23:25，T4 feat 刚落地）为止的累计数——若 CR 节「终末全分支审查（master...HEAD，13 commits）」按字面理解，该终审**没有看到** T4 加固两笔（8fa3f41 / e15a30d）、全部 T5 与交卷 docs；行数差额（+39/−16）与这些提交吻合。本轮验收的全部亲验都跑在最终树上，已覆盖该缺口；重新交卷时请把卡面数字更正为最终状态（含终审实际覆盖范围的如实表述）。
+
+整改完成重新报 `reported` 即复审。本轮其余证据（红线 / 亲读 / verify 静态链 / GPU 45 条 / 变异）复审时直接沿用，只增量验证第 1 条的整改与第 2 条的更正。
