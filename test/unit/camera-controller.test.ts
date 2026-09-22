@@ -216,6 +216,31 @@ describe('CameraController', () => {
     expect(fn).not.toHaveBeenCalled()
   })
 
+  it('zoom by zero is a no-op even when the current zoom is out of range', () => {
+    // The zero guard is NOT redundant with the equal-value guard below it, which
+    // only catches a clamp that lands back on the value already held. That
+    // reasoning assumes the zoom in hand is one `zoom()` produced, and this
+    // controller's is not: the constructor and setProjection take a Projection as
+    // given and validate nothing, so `Projection.zoom` being a bare number makes
+    // 5 reachable. Without the zero guard, zoom(0) falls through to the clamp and
+    // snaps 5 to 1 -- dirtying the frame and waking every subscriber for a wheel
+    // event that asked for nothing.
+    //
+    // This pins what zoom(0) does when holding such a zoom; it does not bless the
+    // unclamped state that produced it. Nothing here validates an incoming
+    // projection, and whether anything should is a separate question from this
+    // guard -- one this fixture deliberately leaves open.
+    const c = new CameraController(undefined, { kind: 'cylindrical', zoom: 5, extent: [1, 1] })
+    const fn = vi.fn()
+    c.onChange(fn)
+    c.consumeDirty()
+
+    c.zoom(0)
+    expect(c.projection).toEqual({ kind: 'cylindrical', zoom: 5, extent: [1, 1] })
+    expect(c.consumeDirty()).toBe(false)
+    expect(fn).not.toHaveBeenCalled()
+  })
+
   it('rejects a non-finite zoom delta', () => {
     // The same argument as setPose's finiteness guard: a NaN that reached the
     // assignment would make the projection's zoom NaN, and an all-NaN matrix
@@ -360,10 +385,23 @@ describe('CameraController', () => {
   it('rejects a non-positive aspect', () => {
     // Reached through `#resize` with `height === 0` if the guard there were ever
     // dropped, and a zero aspect makes the projection matrix singular.
+    //
+    // The kind guard must sit BELOW the assert, and the non-linear controller is
+    // what pins that: checked first, it returns for every other camera model and
+    // the invalid aspect is swallowed there while still throwing on a linear one.
+    // An aspect is the surface's shape rather than the projection's -- a zero one
+    // is invalid whatever the camera model -- so a contract that varied by kind
+    // would be the kind of difference nobody finds until it bites. Same ruling as
+    // `zoom`'s guard order.
     const c = new CameraController(undefined, linear)
     expect(() => c.setAspect(0)).toThrow(/greater than 0/i)
     expect(() => c.setAspect(-1)).toThrow(/greater than 0/i)
     expect(() => c.setAspect(NaN)).toThrow(/greater than 0/i)
+
+    const nonLinear = new CameraController(undefined, cylindrical)
+    expect(() => nonLinear.setAspect(0)).toThrow(/greater than 0/i)
+    expect(() => nonLinear.setAspect(-1)).toThrow(/greater than 0/i)
+    expect(() => nonLinear.setAspect(NaN)).toThrow(/greater than 0/i)
   })
 
   it('invalidate forces the next frame to draw', () => {
@@ -381,6 +419,24 @@ describe('CameraController', () => {
     const c = new CameraController(undefined, linear)
     expect(() => c.setPose({ povLatitude: NaN, povLongitude: 0 })).toThrow(/finite/i)
     expect(() => c.rotate(0, Infinity)).toThrow(/finite/i)
+  })
+
+  it('names the offending angle, so the two guards cannot be swapped', () => {
+    // The name is the only thing that says WHICH of a caller's two angles was
+    // wrong, and every other assertion here is `/finite/i` -- a pattern both
+    // guards satisfy however they are named. Swapping the two names therefore
+    // survives the whole file. The frame is black either way; what a swapped name
+    // costs is the hour spent looking at the angle that was already correct.
+    //
+    // Each pair leaves the other offender finite, so the second guard is actually
+    // reached and the two names become distinguishable. `rotate(Infinity, 0)` is
+    // also the axis nothing else covers: the test above only ever sends the
+    // infinity down the longitude, so a dropped latitude guard was invisible.
+    const c = new CameraController(undefined, linear)
+    expect(() => c.setPose({ povLatitude: NaN, povLongitude: 0 })).toThrow(/povLatitude/)
+    expect(() => c.setPose({ povLatitude: 0, povLongitude: NaN })).toThrow(/povLongitude/)
+    expect(() => c.rotate(Infinity, 0)).toThrow(/deltaLat/)
+    expect(() => c.rotate(0, Infinity)).toThrow(/deltaLng/)
   })
 })
 
