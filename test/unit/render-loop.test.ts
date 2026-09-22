@@ -40,6 +40,18 @@ describe('RenderLoop', () => {
     s.tick(16)
     s.tick(32)
     expect(draw).toHaveBeenCalledTimes(1)
+    // The count above cannot tell an idle loop from a dead one: 1 is satisfied
+    // both by "skipped the frame and is still being polled" and by "gave up
+    // after the first frame". The queue depth is what separates the two -- a
+    // loop that is merely idle still has its next frame scheduled.
+    expect(s.pending).toBe(1)
+    // And an idle tick must not be a one-way door. An implementation that skips
+    // this frame and every frame after it satisfies everything above, and
+    // freezes the canvas permanently the first time the input goes quiet --
+    // the legacy failure this loop exists to prevent.
+    dirty = true
+    s.tick(48)
+    expect(draw).toHaveBeenCalledTimes(2)
   })
 
   it('asks shouldDraw before drawing, every tick', () => {
