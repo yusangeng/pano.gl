@@ -30,14 +30,34 @@ export default defineConfig({
         'src/media/video-source.ts',
         'src/interaction/input-controller.ts',
         // Task 3's two. `viewer.ts` builds a ResizeObserver, drives
-        // requestAnimationFrame and appends a canvas; `backend-factory.ts` asks
-        // `navigator.gpu` for an adapter and creates a canvas to test for
-        // WebGL2. Neither reaches a single line under the node project, and
-        // `viewer.ts` alone is 129 statements -- measured, leaving them in drops
-        // the global statements figure from 99.32% to 78.43% and fails the gate
-        // by construction rather than because anything is untested. Both ARE
-        // exercised, by `dispose-order.test.ts` and `camera-options.test.ts` in
-        // the integration project, which reports no coverage.
+        // requestAnimationFrame and reads a laid-out element for its size;
+        // `backend-factory.ts` asks `navigator.gpu` for an adapter and creates a
+        // canvas to probe for WebGL2. Neither reaches a single line under the
+        // node project, and the obstacle is the DOM rather than the GPU: the
+        // unit project runs `environment: 'node'`, package.json installs no DOM
+        // implementation, and no file under test/unit/ carries a
+        // `@vitest-environment` directive -- so every DOM global these two touch
+        // is simply absent. That is why the card's preferred remedy (a fake rAF
+        // clock plus a stub backend) does not close the gap either: the stub
+        // would have to supply the DOM as well, and what it supplied would be
+        // this file's assumptions replayed back rather than tested.
+        //
+        // Measured at a447fb9 (2026-09-22) by running
+        // `npx vitest run --project unit --coverage --coverage.reporter=text
+        // --coverage.reporter=json` with these two lines removed (the JSON
+        // report is where the per-file counts below come from): statements
+        // 440/443 -> 440/563 (99.32% -> 78.15%), branches 191/194 -> 191/232
+        // (98.45% -> 82.32%), functions 85/85 -> 85/121 (100% -> 70.24%), lines
+        // 405/406 -> 405/516 (99.75% -> 78.48%). All four gate limits fail. The
+        // two files are 120 statements between them -- `viewer.ts` 106,
+        // `backend-factory.ts` 14 -- so the gate falls by construction rather
+        // than because anything is untested. The figures in 8d0a9ce's commit
+        // body are that commit's and are not current: they were measured before
+        // `viewer.ts` had ever been committed.
+        //
+        // Both ARE exercised, by the integration project, which reports no
+        // coverage: `dispose-order`, `camera-options`, `viewer-events` and
+        // `viewer-capabilities` each drive a real `Viewer`.
         'src/viewer/viewer.ts',
         'src/viewer/backend-factory.ts'
       ],
