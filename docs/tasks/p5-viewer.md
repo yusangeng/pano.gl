@@ -4,7 +4,7 @@ scope: [src/viewer/**, src/index.ts, test/**, vitest.config.ts, demo/**]
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: app
 deps: [p4-media-interaction]
-state: reported
+state: rejected
 createdAt: 2026-09-19T08:51:52.772Z
 ---
 # 任务：P5 — viewer
@@ -279,3 +279,39 @@ P4 前置注释提及 `PanoTestApi`，零代码引用；无 `src/core/index.ts` 
 结论：六个 Task 证据链完整（变异测试具名击杀判据 + 阴性对照 + 沙箱还原核对），偏离全部
 双关核实，质量门整改闭环，终审 merge-ready-with-registrations 的三项登记均已按上面对应
 处置。**approve，即行合并。**
+
+4. **合并后 verify 红，已自动回退（2026-09-22T19:01:10.497Z）**：合并前主分支 verify 已证绿，红归因于本次合并；主分支已 reset 回 9bc4ed8（未 push，本地回退安全）。分支 feature/p5-viewer 原样保留——按下方失败输出整改后重跑 task-finish 重新交卷。
+
+失败输出尾部：
+```
+
+ ❯ |no-webgpu (chromium)| test/integration/fallback/smoke.test.ts (0 test)
+ ❯ |no-webgpu (chromium)| test/integration/fallback/user-story-no-webgpu.test.ts (0 test)
+
+ Test Files  2 failed | 18 passed (20)
+      Tests  103 passed (103)
+   Start at  03:01:05
+   Duration  5.14s (worker 69%, tests 28%, import 3%)
+
+03:01:07 [vite] (client) ✨ new dependencies optimized: debug, gl-matrix
+03:01:07 [vite] (client) ✨ optimized dependencies changed. reloading
+
+[vitest] Vite unexpectedly reloaded a test. This may cause tests to fail, lead to flaky behaviour or duplicated test runs.
+For a stable experience, add the newly optimized dependencies to your config's `optimizeDeps.include` field manually.
+
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |no-webgpu (chromium)| test/integration/fallback/smoke.test.ts [ test/integration/fallback/smoke.test.ts ]
+ FAIL  |no-webgpu (chromium)| test/integration/fallback/user-story-no-webgpu.test.ts [ test/integration/fallback/user-story-no-webgpu.test.ts ]
+Error: Failed to import test file /Users/yusangeng/workspace/pano.gl/test/integration/support/require-no-webgpu.ts
+Caused by: Error: Vitest failed to find the runner. One of the following is possible:
+- "vitest" is imported directly without running "vitest" command
+- "vitest" is imported inside "globalSetup" (to fix this, use "setupFiles" instead, because "globalSetup" runs in a different context)
+- "vitest" is imported inside Vite / Vitest config file
+- Otherwise, it might be a Vitest bug. Please report it to https://github.com/vitest-dev/vitest/issues
+
+ ❯ test/integration/support/require-no-webgpu.ts:9:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+```
