@@ -28,7 +28,64 @@ export default defineConfig({
         // project can genuinely reach.
         'src/media/image-source.ts',
         'src/media/video-source.ts',
-        'src/interaction/input-controller.ts'
+        'src/interaction/input-controller.ts',
+        // Task 3's two. `viewer.ts` builds a ResizeObserver, drives
+        // requestAnimationFrame and reads a laid-out element for its size;
+        // `backend-factory.ts` asks `navigator.gpu` for an adapter and creates a
+        // canvas to probe for WebGL2. Neither reaches a single line under the
+        // node project, and the obstacle is the DOM rather than the GPU: the
+        // unit project runs `environment: 'node'`, package.json installs no DOM
+        // implementation, and no file under test/unit/ carries a
+        // `@vitest-environment` directive -- so every DOM global these two touch
+        // is simply absent. That is why the card's preferred remedy (a fake rAF
+        // clock plus a stub backend) does not close the gap either: the stub
+        // would have to supply the DOM as well, and what it supplied would be
+        // this file's assumptions replayed back rather than tested.
+        //
+        // Measured at a447fb9 (2026-09-22) by running
+        // `npx vitest run --project unit --coverage --coverage.reporter=text
+        // --coverage.reporter=json` with these two lines removed (the JSON
+        // report is where the per-file counts below come from): statements
+        // 440/443 -> 440/563 (99.32% -> 78.15%), branches 191/194 -> 191/232
+        // (98.45% -> 82.32%), functions 85/85 -> 85/121 (100% -> 70.24%), lines
+        // 405/406 -> 405/516 (99.75% -> 78.48%). All four gate limits fail. The
+        // two files are 120 statements between them -- `viewer.ts` 106,
+        // `backend-factory.ts` 14 -- so the gate falls by construction rather
+        // than because anything is untested. The figures in 8d0a9ce's commit
+        // body are that commit's and are not current: they were measured before
+        // `viewer.ts` had ever been committed.
+        //
+        // Both ARE exercised, by the integration project, which reports no
+        // coverage: `dispose-order`, `camera-options`, `viewer-events` and
+        // `viewer-capabilities` each drive a real `Viewer`.
+        'src/viewer/viewer.ts',
+        'src/viewer/backend-factory.ts',
+        // Task 4's two public classes, for the same reason as `viewer.ts` and
+        // by measurement rather than by analogy. `create` calls
+        // `document.createElement('canvas')` and then awaits a GPU adapter;
+        // `src` builds a source; `play`/`pause`/`element` reach a real
+        // `<video>`. The node project has no `document` at all, so not one of
+        // those paths can run, and the obstacle is the DOM rather than the GPU.
+        //
+        // Measured at Task 4 (2026-09-22) with these two lines absent, via
+        // `npx vitest run --project unit --coverage --coverage.reportOnFailure=true`
+        // (the JSON report is where the per-file counts come from): statements
+        // 468/524 (89.31%), branches 214/229 (93.44%), functions 95/108
+        // (87.96%), lines 89.21%. Three of the four gates fail. The two files
+        // are 56 statements between them -- `image-viewer.ts` 24 (1 covered),
+        // `video-viewer.ts` 32 (1 covered) -- so the gate falls by construction
+        // rather than because anything is untested.
+        //
+        // NOT `options.ts`, which Task 4 also adds: measured at the same run it
+        // is 25/25 statements, 23/23 branches, 6/6 functions, and it is covered
+        // by `test/unit/constructor-validation.test.ts`. Excluding it would
+        // strike that file's own tests off the books.
+        //
+        // Both ARE exercised, by the integration project, which reports no
+        // coverage: Task 5's five user stories drive these two classes, and the
+        // `no-webgpu` project drives their failure paths.
+        'src/viewer/image-viewer.ts',
+        'src/viewer/video-viewer.ts'
       ],
       thresholds: {
         branches: 90,
