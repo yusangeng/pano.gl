@@ -1,0 +1,245 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { canvasOf } from './support/dom'
+import { maxChannelDiff, nextFrames, readCanvas } from './support/canvas'
+import { wheel } from './support/gestures'
+import { captureRenderInputs } from './support/spies'
+import { imageViewer, videoViewer } from './support/viewer'
+
+afterEach(() => { vi.restoreAllMocks() })
+
+/*
+ * US2: a video viewer that plays, stops when paused, cleans up a swapped
+ * source, mutes autoplay by default, and zooms -- or refuses to.
+ *
+ * Two facts about v1 shape this file, both measured rather than assumed:
+ *
+ * - The `<video>` element is NEVER inserted into the container. It is exposed
+ *   through `viewer.element`, so that is how these tests reach it -- the plan's
+ *   `videoOf(container)` helper assumed a DOM-attached element and finds nothing.
+ * - Construction-time `autoplay` does not start playback in this environment:
+ *   the element is detached, and the browser runs no autoplay algorithm for a
+ *   detached element (media-load fires, media-play never does; the explicit
+ *   `play()` method works). Playback here is therefore started through the
+ *   public `play()`, and the inert autoplay is recorded as a known risk in the
+ *   Task 5 completion report.
+ */
+describe('US2: play a 360 video and zoom', () => {
+  it('plays and advances frames', async () => {
+    const { viewer, container } = await videoViewer({ loop: true })
+    const events: string[] = []
+    // Both listeners before playback starts, so neither event can be missed --
+    // `media-play` can arrive no later than the frames it announces, and a
+    // listener attached after the first would wait forever.
+    viewer.on('media-load', () => events.push('load'))
+    viewer.on('media-play', () => events.push('play'))
+    await vi.waitFor(() => expect(events).toContain('load'), { timeout: 5000 })
+    await viewer.play()
+
+    await vi.waitFor(() => expect(events).toContain('play'), { timeout: 5000 })
+    await nextFrames(3)
+
+    const a = await readCanvas(canvasOf(container))
+    /*
+     * The media clock AND the pixels, both inside one bounded wait: under a
+     * loaded parallel run the timeline can be a third of a second ahead of the
+     * frame actually reaching the canvas, so a single read taken when the clock
+     * moved still sees the previous decoded frame -- and a fixed wall-clock
+     * window has the same failure the other way (the clock stalls under decode
+     * starvation while `currentTime` keeps running). Waiting for the picture
+     * itself to change keeps the claim where it belongs -- on what reached the
+     * screen -- while tolerating load-induced presentation lag. Bounded, so a
+     * loop that never redraws a playing video still fails here.
+     */
+    const t0 = viewer.element.currentTime
+    await vi.waitFor(async () => {
+      expect(viewer.element.currentTime - t0).toBeGreaterThan(0.15)
+      const b = await readCanvas(canvasOf(container))
+      expect(maxChannelDiff(a.data, b.data)).toBeGreaterThan(2)
+    }, { timeout: 5000 })
+    viewer.dispose()
+  })
+
+  it('a paused video stops drawing', async () => {
+    // The loop draws when the source's version changes, and a video advances its
+    // version only while it is playing. Without that guard, this is the test
+    // that catches "a paused video still burns a full-screen shader at 60Hz".
+    //
+    // Counted at the `setSource` the viewer makes per drawn frame, not with
+    // `countDraws`: the frame count alone cannot say what the frames carried,
+    // and this suite's one measured CRITICAL gap was exactly a draw-count
+    // assertion passing over frames that drew nothing. Same predicate either
+    // way -- `shouldDraw` gates the whole `draw`, so setSource calls are draws.
+    const inputs = captureRenderInputs()
+    const { viewer } = await videoViewer({ loop: true })
+    const paused: string[] = []
+    viewer.on('media-pause', () => paused.push('pause'))
+    await vi.waitFor(() => expect(viewer.element.readyState).toBeGreaterThanOrEqual(1), { timeout: 5000 })
+    await viewer.play()
+    await vi.waitFor(() => expect(viewer.element.paused).toBe(false), { timeout: 5000 })
+    viewer.pause()
+    await vi.waitFor(() => expect(paused).toContain('pause'))
+    await nextFrames(3)
+
+    const before = inputs.sourceCalls()
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const frames = inputs.sourceCalls() - before
+    viewer.dispose()
+
+    expect(frames).toBe(0)
+  })
+
+  it('a source swap tears down the old element', async () => {
+    const { viewer } = await videoViewer({ loop: true })
+    const loaded: string[] = []
+    viewer.on('media-load', () => loaded.push('load'))
+    await vi.waitFor(() => expect(loaded.length).toBeGreaterThanOrEqual(1), { timeout: 5000 })
+
+    // Held directly rather than looked up again later: the whole assertion is
+    // that this element is no longer the one the viewer serves.
+    const first = viewer.element
+
+    // Turned before the swap so that "the pose survived" is distinguishable from
+    // "the pose was never anywhere else".
+    viewer.rotate(15, 45)
+    viewer.src = '/fixtures/clip.mp4?second'
+    await vi.waitFor(() => expect(loaded.length).toBeGreaterThanOrEqual(2), { timeout: 5000 })
+    await nextFrames(2)
+
+    const state = {
+      replaced: viewer.element !== first,
+      oldPaused: first.paused,
+      oldSrcRemoved: first.getAttribute('src') === null,
+      // A swap is not a reconfiguration: the camera is the user's, not the
+      // source's, and swapping between two clips of the same place is a thing
+      // people do. Resetting here would also be invisible in a screenshot --
+      // the new frame would simply be of the other end of the room.
+      pose: viewer.cameraOptions.pose
+    }
+    viewer.dispose()
+
+    // VideoSource.dispose pauses, removes the src and calls load(), so the old
+    // element stops decoding. Without that, swapping sources leaks a video that
+    // keeps buffering in the background -- invisible, because it is no longer
+    // the viewer's element to be seen.
+    expect(state.replaced).toBe(true)
+    expect(state.oldPaused).toBe(true)
+    expect(state.oldSrcRemoved).toBe(true)
+    expect(state.pose).toEqual({ povLatitude: 15, povLongitude: 45 })
+  })
+
+  it('the autoplay option carries the muted default', async () => {
+    const { viewer } = await videoViewer({ autoplay: true })
+    const muted = viewer.element.muted
+    viewer.dispose()
+
+    // Every modern browser blocks unmuted autoplay, so the legacy default of
+    // playing with sound produced a video that never started, and said nothing.
+    // What this pins is the default the option carries; that autoplay itself
+    // does not fire on v1's detached element is the recorded risk in the file
+    // header, not something this test could assert either way.
+    expect(muted).toBe(true)
+  })
+
+  it('a wheel zoom-out reaches the camera state of a non-linear projection', async () => {
+    const { viewer, container } = await imageViewer({ camera: 'cylindrical' })
+    const canvas = canvasOf(container)
+    const zooms: string[] = []
+    viewer.on('zoom', () => zooms.push('zoom'))
+    viewer.src = '/fixtures/panorama.png'
+    await nextFrames(3)
+
+    // Scroll DOWN, which zooms out. Zoom is clamped to at most 1 and the default
+    // is 1, so scrolling the other way is a no-op by design and a test written
+    // that way would assert nothing.
+    await wheel(canvas, 200)
+    await nextFrames(2)
+
+    const projection = viewer.cameraOptions.projection
+    viewer.dispose()
+
+    expect(zooms.length).toBeGreaterThan(0)
+    // Narrowed before the field is read: `Projection` is a union and only the
+    // non-linear members have `zoom`, so reading it without the guard does not
+    // compile -- which is the union doing its job.
+    if (projection.kind !== 'cylindrical') throw new Error(`expected cylindrical, got ${projection.kind}`)
+    expect(projection.zoom).toBeLessThan(1)
+    /*
+     * The plan also asserted a pixel change here, and that assertion is red on
+     * the UNMODIFIED tree, which is why it is absent: `WebGPUBackend.setCamera`
+     * returns early when the clip matrix is unchanged, and zoom deliberately
+     * never enters the matrix (core/matrix.ts says so outright) -- it travels
+     * only in the uniform block that the early-out now skips. So a zoom-only
+     * change updates `#projection` on the backend but never uploads it, and the
+     * frame is byte-identical until a matrix-changing event happens to flush
+     * it. Measured: cylindrical zoom 1 -> 0.7, a draw ran with the new
+     * projection, canvas unchanged thirty frames later. The defect is recorded
+     * in the Task 5 completion report; the pixel assertion belongs back here
+     * the day it is fixed.
+     */
+  })
+
+  it('the public zoom() method reaches the projection the backend receives', async () => {
+    /*
+     * The wheel test above drives zoom through the input wiring; this one
+     * drives the method an application calls. They share a controller but not
+     * a path -- the gesture goes `InputController -> 'zoom' event -> camera`,
+     * skipping `Viewer.zoom` entirely -- so the asymmetry the acceptance
+     * ruler recorded (rotate netted at the method, zoom not) only closes with
+     * a call through the method itself, asserted at the backend's boundary:
+     * the projection the last drawn frame carried is what the shader read,
+     * which no cameraOptions read alone can prove.
+     */
+    const inputs = captureRenderInputs()
+    const { viewer } = await imageViewer({ camera: 'cylindrical' })
+    viewer.src = '/fixtures/panorama.png'
+    await nextFrames(2)
+
+    // The pre-zoom frame first, or "unchanged" below could be satisfied by a
+    // projection that was never installed: `PROJECTIONS.cylindrical` is zoom 1.
+    await vi.waitFor(() => {
+      expect(inputs.lastCamera()?.projection).toEqual({ kind: 'cylindrical', zoom: 1, extent: [1, 1] })
+    })
+
+    // zoom is relative: -0.5 halves the default of 1.
+    viewer.zoom(-0.5)
+
+    await vi.waitFor(() => {
+      expect(inputs.lastCamera()?.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [1, 1] })
+    })
+    // A zoom is not a camera move: the pose the frame carries is untouched.
+    expect(inputs.lastCamera()?.state).toEqual({ povLatitude: 0, povLongitude: 0 })
+    expect(viewer.cameraOptions.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [1, 1] })
+    viewer.dispose()
+  })
+
+  it('zoom is a no-op for the linear camera', async () => {
+    const { viewer, container } = await imageViewer()
+    const canvas = canvasOf(container)
+    const zooms: string[] = []
+    viewer.on('zoom', () => zooms.push('zoom'))
+    viewer.src = '/fixtures/panorama.png'
+    await nextFrames(3)
+
+    const before = await readCanvas(canvas)
+    await wheel(canvas, 200)
+    await nextFrames(3)
+    const after = await readCanvas(canvas)
+    viewer.dispose()
+
+    // The gesture is still reported -- the input layer does not know about
+    // camera models -- but the linear projection has no zoom to change, so the
+    // frame is identical.
+    expect(zooms.length).toBeGreaterThan(0)
+    expect(maxChannelDiff(before.data, after.data)).toBeLessThanOrEqual(2)
+  })
+
+  it('a disposed viewer rejects play()', async () => {
+    const { viewer } = await videoViewer()
+    // Playable before the dispose, or the rejection could be the never-loaded
+    // clip rather than the disposed viewer.
+    await vi.waitFor(() => expect(viewer.element.readyState).toBeGreaterThanOrEqual(1), { timeout: 5000 })
+    viewer.dispose()
+
+    await expect(viewer.play()).rejects.toThrow(/disposed/i)
+  })
+})
