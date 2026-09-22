@@ -137,6 +137,13 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：**分支覆盖 
 | T5-6 | m9b | **未做（裁决许可）** | 只在「第二次 `backend.dispose()` 会抛」的构造下才可观测，m9 的加强版而 m9 已杀；优先级最低，按裁决记入本陈述 |
 | — | M21 | **纯契约转发，本轮未列入范围** | PTZ setter 去 `assertAlive`；裁决原文照录 |
 
+**质量门记录（2026-09-23，approve-with-findings）**：0 CRITICAL / 0 IMPORTANT / 0 MINOR / 4 NOTE（报告 `.vibe/p5/evidence/p5-task5-quality.md`；五条击杀重跑全部复现，`83d3986` 专核通过）。协调者裁决：两修两记，一个提交整改。
+
+1. **NOTE 1（已修，本提交）**：`user-story-photo.test.ts` 首条用例的 `vi.waitFor` 补 `{ timeout: 5000 }`，与本层其余 wait 惯例对齐；就这一行。
+2. **NOTE 4（已修，本提交）**：`user-story-video.test.ts` 播放用例注释里「timeline 可领先三分之一秒」是全层最后一个未复核的量级主张（O24：未验证的注释主张按缺陷处理）。实测一轮只会在「安静跑 lag≈0」与「单样本轶事数」之间二选一，都不干净，故按裁决改写：去掉量级数字，保留已验证的部分（该等待替换掉的 flake 本身——时钟已动而单次读仍见上一帧——与不依赖数字的「双条件等待更稳」理由）。改写后注释里无未测数字。
+3. **NOTE 2（裁决：接受 plan 形状）**：失败路径不 dispose 只影响同文件后续失败用例的诊断信息，浏览器模式按文件隔离；跨五个文件加 try/finally 是结构性搅动，不为 NOTE 级收益做。
+4. **NOTE 3（挂 P6）**：换源用例 source-survived 半边的可选加固手段是断言 `sourceCalls()` 差分（x1 类缺陷现已有网）。
+
 ## 自审记录
 
 ### CR 结论

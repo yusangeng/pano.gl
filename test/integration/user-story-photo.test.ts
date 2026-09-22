@@ -30,7 +30,7 @@ describe('US1: view a 360 photo and look around', () => {
     // Before `src`, always. See rule 1.
     viewer.on('media-load', () => loaded.push('media-load'))
     viewer.src = '/fixtures/panorama.png'
-    await vi.waitFor(() => expect(loaded).toContain('media-load'))
+    await vi.waitFor(() => expect(loaded).toContain('media-load'), { timeout: 5000 })
     await nextFrames(2)
 
     const image = await readCanvas(canvasOf(container))
