@@ -423,20 +423,34 @@ describe('CameraController', () => {
 
   it('names the offending angle, so the two guards cannot be swapped', () => {
     // The name is the only thing that says WHICH of a caller's two angles was
-    // wrong, and every other assertion here is `/finite/i` -- a pattern both
-    // guards satisfy however they are named. Swapping the two names therefore
-    // survives the whole file. The frame is black either way; what a swapped name
-    // costs is the hour spent looking at the angle that was already correct.
+    // wrong, and every other assertion here is `/finite/i` -- a pattern the guards
+    // satisfy however they are named. The frame is black either way; what a wrong
+    // name costs is the hour spent looking at the angle that was already correct.
     //
-    // Each pair leaves the other offender finite, so the second guard is actually
-    // reached and the two names become distinguishable. `rotate(Infinity, 0)` is
-    // also the axis nothing else covers: the test above only ever sends the
-    // infinity down the longitude, so a dropped latitude guard was invisible.
+    // Two properties, and they need different inputs. That each name belongs to
+    // the angle it names shows up as soon as ONE of the two is invalid: the four
+    // singly-invalid pairs below leave the other offender finite, so the guard
+    // that fires is unambiguous and its name can be read off. The ORDER of the two
+    // guards is invisible to those -- with one angle finite, that guard passes
+    // whichever line it sits on, and the NaN is caught under its own name either
+    // way, so reordering changes nothing observable. Only both-invalid input makes
+    // the order visible: the first line is then the one that throws, and its name
+    // is what the caller sees. The last two assertions are the only ones that a
+    // reordering of the pair can fail.
+    //
+    // `rotate(Infinity, 0)` is also the axis nothing else covers: the test above
+    // only ever sends the infinity down the longitude, so a dropped latitude guard
+    // was invisible.
     const c = new CameraController(undefined, linear)
     expect(() => c.setPose({ povLatitude: NaN, povLongitude: 0 })).toThrow(/povLatitude/)
     expect(() => c.setPose({ povLatitude: 0, povLongitude: NaN })).toThrow(/povLongitude/)
     expect(() => c.rotate(Infinity, 0)).toThrow(/deltaLat/)
     expect(() => c.rotate(0, Infinity)).toThrow(/deltaLng/)
+
+    // Both angles invalid: the order of the two guards is the only thing left to
+    // decide which name comes back.
+    expect(() => c.setPose({ povLatitude: NaN, povLongitude: NaN })).toThrow(/povLatitude/)
+    expect(() => c.rotate(Infinity, Infinity)).toThrow(/deltaLat/)
   })
 })
 
