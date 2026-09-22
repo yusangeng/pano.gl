@@ -4,7 +4,7 @@ scope: [src/viewer/**, src/index.ts, test/**, vitest.config.ts, demo/**]
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: app
 deps: [p4-media-interaction]
-state: open
+state: doing
 createdAt: 2026-09-19T08:51:52.772Z
 ---
 # 任务：P5 — viewer
