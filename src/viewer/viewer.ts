@@ -65,6 +65,29 @@ export interface ViewerInit {
   readonly backend: Backend
 }
 
+/**
+ * A copy of a projection, deep enough that nothing the caller holds aliases the
+ * controller's.
+ *
+ * `extent` is copied as well as the object: it is an array, so a shallow copy
+ * would still share it, and `projection.extent[0] = 4` would reach the shader
+ * through a write that looks like it touches only the caller's own value.
+ *
+ * The `linear` branch has no `extent` to copy -- the four-member union is why
+ * this is written per kind rather than as a single `structuredClone`.
+ *
+ * A module-level function rather than a private method because it is genuinely
+ * pure and reads no instance state. That matters at exactly one call site: the
+ * constructor needs the copy before `#camera` exists, so a private method would
+ * be running against a half-initialised `this` and would stay safe only for as
+ * long as nobody later had it read a field.
+ */
+function snapshotProjection (projection: Projection): Projection {
+  return projection.kind === 'linear'
+    ? { ...projection }
+    : { ...projection, extent: [...projection.extent] }
+}
+
 export class Viewer extends Disposable {
   protected readonly events = new EventEmitter<ViewerEvents>()
   readonly #camera: CameraController
@@ -91,7 +114,16 @@ export class Viewer extends Disposable {
     init.container.appendChild(this.canvas)
 
     this.#backend = init.backend
-    this.#camera = new CameraController(init.camera?.pose, init.camera?.projection ?? DEFAULT_PROJECTION)
+    // The projection is copied here too. This is the door a real application
+    // comes through -- a public viewer class passes its caller's `camera`
+    // straight in -- and `CameraController` stores what it is given, so without
+    // this the caller keeps write access to live camera state and a write
+    // through it never marks the controller dirty. The pose needs no copy:
+    // the controller rebuilds it from scalars.
+    this.#camera = new CameraController(
+      init.camera?.pose,
+      init.camera?.projection ? snapshotProjection(init.camera.projection) : DEFAULT_PROJECTION
+    )
     this.#input = new InputController(this.canvas)
 
     this.#loop = new RenderLoop({
@@ -177,7 +209,7 @@ export class Viewer extends Disposable {
   get cameraOptions (): CameraOptions {
     return {
       pose: { ...this.#camera.state },
-      projection: this.#snapshot(this.#camera.projection)
+      projection: snapshotProjection(this.#camera.projection)
     }
   }
 
@@ -196,24 +228,7 @@ export class Viewer extends Disposable {
     // by the other door. Copying on one side only is the arrangement that is
     // incoherent; copying on both closes it. The pose needs no copy here:
     // `setPose` builds a new object rather than adopting this one.
-    this.#camera.setProjection(this.#snapshot(options.projection))
-  }
-
-  /**
-   * A copy of a projection, deep enough that nothing the caller holds aliases
-   * the controller's.
-   *
-   * `extent` is copied as well as the object: it is an array, so a shallow copy
-   * would still share it, and `projection.extent[0] = 4` would reach the shader
-   * through a write that looks like it touches only the caller's own value.
-   *
-   * The `linear` branch has no `extent` to copy -- the four-member union is why
-   * this is written per kind rather than as a single `structuredClone`.
-   */
-  #snapshot (projection: Projection): Projection {
-    return projection.kind === 'linear'
-      ? { ...projection }
-      : { ...projection, extent: [...projection.extent] }
+    this.#camera.setProjection(snapshotProjection(options.projection))
   }
 
   /** Rotates the camera. Public so applications can drive it programmatically. */
