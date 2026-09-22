@@ -1793,7 +1793,7 @@ drives both browser APIs directly rather than assumed."
 - Test: `test/unit/gestures.test.ts`
 - Test: `test/integration/ptz.test.ts`
 
-- [ ] **Step 1: 写手势识别的单元测试**
+- [x] **Step 1: 写手势识别的单元测试**
 
 手势识别做成**纯函数**，这样它可以在 Node 里测：
 
@@ -1900,12 +1900,12 @@ describe('classifyDrag', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- gestures`
 Expected: FAIL —— 无法解析 `../../src/interaction/gestures`
 
-- [ ] **Step 3: 实现手势识别**
+- [x] **Step 3: 实现手势识别**
 
 `src/interaction/gestures.ts`：
 
@@ -2023,12 +2023,12 @@ export function classifyDrag (delta: DragInput, surface: SurfaceSize): { lat: nu
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- gestures`
 Expected: 15 个测试 PASS
 
-- [ ] **Step 5: 实现 `InputController`**
+- [x] **Step 5: 实现 `InputController`**
 
 `src/interaction/input-controller.ts`：
 
@@ -2178,7 +2178,7 @@ export class InputController extends Disposable {
 }
 ```
 
-- [ ] **Step 6: 写交互的集成测试**
+- [x] **Step 6: 写交互的集成测试**
 
 `test/integration/ptz.test.ts`：
 
@@ -2262,12 +2262,12 @@ describe('InputController', () => {
   })
 })
 ```
-- [ ] **Step 7: 跑全部**
+- [x] **Step 7: 跑全部**
 
 Run: `npm run test:unit && npm run test:integration`
 Expected: 全 PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/interaction/ test/unit/gestures.test.ts test/integration/ptz.test.ts
@@ -2278,6 +2278,14 @@ testable -- the legacy plugins mixed the two, which is why a trackpad and a
 mouse wheel went through the same divisor. All listeners share one
 AbortController, and the element's touch-action is restored on dispose."
 ```
+
+> **（2026-09-22 登记，Task 5 勘误与质量审查，落地于 27679eb / ba3c3f0）**
+> 1. **落地核对与覆盖率兜底（27679eb）**：四块 plan 代码（gestures.ts / input-controller.ts / gestures.test.ts / ptz.test.ts）经 /tmp 转写 `cmp` 逐字节核对相同——实现首报存在一处注释 rewrap 的 verbatim 违规，reset+amend 修正后复验通过（未推送，同 Task 2 先例）。`input-controller.ts` 追加至 coverage exclude（同 image/video-source 理由：每条路径都要真实指针事件，node 项目执行不到；浏览器项目不报覆盖率），thresholds 未动，全仓 99.17 / 98.10 / 100 / 99.70。
+> 2. **质量审查发现的结构性缺陷与源码修复（ba3c3f0）**：46 个变异体证明 wheel 监听器从未被任何测试派发过、pinch 分支按 plan 原文**不可测**——`#onPointerDown` 在跟踪前调 `setPointerCapture`，而 Chromium 对一切非活动指针 id 抛 NotFoundError（控制器亲测：`id1:no-throw id2:NotFoundError id42:NotFoundError`），合成事件只能命名非活动 id，第二根手指永远进不了 `#pointers`，且未处理异常直接打断 handler。修复走规范定义的异常路径：跟踪先行，捕获包 try/catch、失败降级为「手势不再存活出界」而非中断跟踪；真指针行为零变化，下游合成事件测试不再吃到未处理异常。复审变异矩阵证明修复被钉住（全量回退、裸捕获、重抛三类变异体均被击杀）。
+> 3. **补测 11 条**：单元 4 条（log 比对减法的尺度不变性、滚轮两侧钳位、重合手指、极值捏合）+ 集成 7 条（wheel→zoom 含 preventDefault 探针与 PTZ 门、双指捏合含第二手势状态隔离、悬停移动卫生、手势中 PTZ 开关的累计位移语义、pointercancel + 未知 pointerup、dispose 后静默、dragToRotation 委托）。钳位断言硬编码 `±1` 而非回读 `WheelZoom.MAX_STEP`——常量断言常量会让变异常量自证通过（U8 型）。单元 15→19、集成 4→11，19 个目标变异体全部击杀。
+> 4. **两处注释修正**：`passive: false` 的「required」实测为假——Chromium 默认 passive 只作用于 window/document/body，div 上无 flag 也能 preventDefault；但宿主元素是调用方的（可能是 body），flag 保留、注释改为如实陈述。antisymmetry 测试注释改准确：减法同样反对称，尺度不变性由新增专测钉住。
+> 5. **一处类型系统否决审查报告原文**：报告提议的 pinch 测试 helper（表达式体箭头 + 显式 `: void` 注解）是 TS2322——`dispatchEvent` 返回 boolean，void 可赋值特例覆盖函数类型赋值、不覆盖直接注解（控制器独立探针复现）。改为块体、注解保留，行为零差异。
+> 6. **等价/良性变异体裁定（登记不测）**：R1–R7（监听器无 signal 仅 DevTools 可见 / div 场景 drop flag 良性 / 合成场景下 capture 无可观测物 / down 的 prevPinch 重置与 up 证明冗余但双删被击杀 / hypot 对称 / dispose 漏 abort 无可观测物 / 拆除顺序被掩盖）+ 复审新增 N1（catch 在位时 set/capture 顺序不可观测，顺序降为自文档防御）、N3b（catch 早退只跳过与 up 冗余的重置）。I17/N2b/N3a 经 vitest 未处理异常策略击杀（监听器内抛错即红），复审裁定该机制充分稳定。
 
 ---
 
