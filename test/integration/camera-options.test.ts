@@ -154,6 +154,26 @@ describe('cameraOptions', () => {
     expect(viewer.cameraOptions.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [4, 4] })
   })
 
+  it('merges a partial pose, so an omitted angle means unchanged', async () => {
+    /*
+     * The half of the setter's contract nothing above exercises: `pose` is a
+     * Partial and "Omitted means 'unchanged'" (src/viewer/types.ts) is a claim
+     * about a merge, not something the type system can check. Every assignment
+     * in the tests above omits `pose` entirely, so the merge itself could be
+     * deleted with this file none the wiser -- the only pose movement anywhere
+     * here is `rotate`, which bypasses the setter.
+     *
+     * Moved off the origin first, or the test agrees with a missing merge by
+     * coincidence: a viewer at {0, 0} sits at {0, 0} whether the merge ran or
+     * not. Both angles asserted exactly -- the latitude the caller named
+     * moved to 5, and the longitude they omitted survived at 20 rather than
+     * falling back to the origin.
+     */
+    const viewer = await mount({ projection: cylindrical(0.5) })
+    viewer.rotate(10, 20)
+    viewer.cameraOptions = { pose: { povLatitude: 5 }, projection: viewer.cameraOptions.projection }
+    expect(viewer.cameraOptions.pose).toEqual({ povLatitude: 5, povLongitude: 20 })
+  })
 })
 
 describe('a surface with no width', () => {
