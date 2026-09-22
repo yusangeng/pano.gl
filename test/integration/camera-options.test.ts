@@ -34,8 +34,7 @@ interface WritableProjection {
   extent: number[]
 }
 
-async function mount (camera: CameraOptions): Promise<Viewer> {
-  const container = makeContainer()
+async function mount (camera: CameraOptions, container = makeContainer()): Promise<Viewer> {
   const canvas = document.createElement('canvas')
   const backend = await createBackend(canvas)
   return new Viewer({ container, canvas, camera, backend })
@@ -76,6 +75,36 @@ describe('cameraOptions', () => {
     pose.povLongitude = 45
 
     expect(viewer.cameraOptions.pose).toEqual({ povLatitude: 10, povLongitude: 20 })
+  })
+
+  it('hands out a copy of the linear projection, which has no extent to copy', async () => {
+    /*
+     * The other arm of the snapshot. `linear` is the one member of the
+     * `Projection` union with no `extent` field, so a copy written only for the
+     * three extent-bearing kinds would be wrong here in a way none of the tests
+     * above could see -- `{ ...projection, extent: [...projection.extent] }`
+     * throws on the default projection, which is exactly the one a viewer built
+     * with `camera: undefined` gets.
+     *
+     * The container is 600x300 rather than the default so that the aspect
+     * asserted below cannot be satisfied by the 1 the caller passed in: the
+     * linear projection's aspect belongs to the surface, and the viewer
+     * overwrites it in `#resize`. That is worth pinning here, because it is the
+     * one projection field a caller sets and does not get back.
+     */
+    const viewer = await mount(
+      { projection: { kind: 'linear', fov: Math.PI / 2, aspect: 1 } },
+      makeContainer(600, 300)
+    )
+
+    const handed = viewer.cameraOptions
+    expect(handed.projection).toEqual({ kind: 'linear', fov: Math.PI / 2, aspect: 2 })
+
+    const projection = handed.projection as unknown as { fov: number, aspect: number }
+    projection.fov = Math.PI
+    projection.aspect = 3
+
+    expect(viewer.cameraOptions.projection).toEqual({ kind: 'linear', fov: Math.PI / 2, aspect: 2 })
   })
 
   it("does not adopt the caller's projection object, so writing to it later cannot move the camera", async () => {
