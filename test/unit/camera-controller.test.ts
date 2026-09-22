@@ -76,6 +76,28 @@ describe('CameraController', () => {
     expect(c.consumeDirty()).toBe(false)
   })
 
+  it('setPose to a pose that normalises to the current one is a no-op', () => {
+    // A redundant setPose must not cost a full-screen redraw, for the same
+    // reason rotate-by-zero must not: the interaction layer re-derives an
+    // absolute pose on every pointermove, and most of those moves land on the
+    // angle it already had. The guard compares NORMALISED angles against the
+    // stored ones -- 380 is the same longitude as 20 -- so a guard that compared
+    // the raw arguments would find a change here, and a guard that fell through
+    // would notify subscribers as well as dirtying the frame.
+    const c = new CameraController({ povLatitude: 10, povLongitude: 20 }, linear)
+    const fn = vi.fn()
+    c.onChange(fn)
+    c.consumeDirty()
+
+    c.setPose({ povLatitude: 10, povLongitude: 20 })
+    expect(c.consumeDirty()).toBe(false)
+    expect(fn).not.toHaveBeenCalled()
+
+    c.setPose({ povLatitude: 10, povLongitude: 380 })
+    expect(c.consumeDirty()).toBe(false)
+    expect(fn).not.toHaveBeenCalled()
+  })
+
   it('zoom only applies to projections that have one', () => {
     const c = new CameraController(undefined, { kind: 'linear', fov: Math.PI / 2, aspect: 1 })
     c.consumeDirty()
