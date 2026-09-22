@@ -28,7 +28,18 @@ export default defineConfig({
         // project can genuinely reach.
         'src/media/image-source.ts',
         'src/media/video-source.ts',
-        'src/interaction/input-controller.ts'
+        'src/interaction/input-controller.ts',
+        // Task 3's two. `viewer.ts` builds a ResizeObserver, drives
+        // requestAnimationFrame and appends a canvas; `backend-factory.ts` asks
+        // `navigator.gpu` for an adapter and creates a canvas to test for
+        // WebGL2. Neither reaches a single line under the node project, and
+        // `viewer.ts` alone is 129 statements -- measured, leaving them in drops
+        // the global statements figure from 99.32% to 78.43% and fails the gate
+        // by construction rather than because anything is untested. Both ARE
+        // exercised, by `dispose-order.test.ts` and `camera-options.test.ts` in
+        // the integration project, which reports no coverage.
+        'src/viewer/viewer.ts',
+        'src/viewer/backend-factory.ts'
       ],
       thresholds: {
         branches: 90,
