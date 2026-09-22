@@ -1,0 +1,97 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createBackend } from '../../src/viewer/backend-factory'
+import { Viewer } from '../../src/viewer/viewer'
+import type { CameraOptions } from '../../src/viewer/types'
+import type { Projection } from '../../src/core/types'
+import { makeContainer } from './support/dom'
+
+/*
+ * The public camera boundary: `viewer.cameraOptions`.
+ *
+ * `CameraController.state` and `CameraController.projection` both return the
+ * object the controller is holding, so the naive getter and setter hand the
+ * caller a live reference to viewer state. `Projection`'s fields are `readonly`,
+ * but that is a compile-time modifier -- at runtime the caller can write to
+ * them, and `extent` is a shared array besides.
+ *
+ * What makes that worth a test rather than a comment is that the damage is
+ * silent. A write through the handed-out reference changes what the next frame
+ * would draw while leaving the controller's dirty flag clear, so the change
+ * never reaches a frame at all: no error, no event, a canvas that disagrees with
+ * the object the application is holding. `Viewer`'s public boundary therefore
+ * copies in both directions; the per-frame path inside `#drawFrame` still reads
+ * the live reference, because copying there would allocate once per frame.
+ */
+
+/** A fresh projection per call, never a module-scope one: a shared fixture would be a channel between tests. */
+function cylindrical (zoom: number): Projection {
+  return { kind: 'cylindrical', zoom, extent: [4, 4] }
+}
+
+/** The snapshot with its `readonly`s taken off -- writing to it is the point. */
+interface WritableProjection {
+  zoom: number
+  extent: number[]
+}
+
+async function mount (camera: CameraOptions): Promise<Viewer> {
+  const container = makeContainer()
+  const canvas = document.createElement('canvas')
+  const backend = await createBackend(canvas)
+  return new Viewer({ container, canvas, camera, backend })
+}
+
+afterEach(() => { vi.restoreAllMocks() })
+
+describe('cameraOptions', () => {
+  it('hands out a copy of the projection, so writing to it cannot move the camera', async () => {
+    const viewer = await mount({ projection: cylindrical(0.5) })
+
+    const handed = viewer.cameraOptions
+    // Assert what is about to be overwritten before overwriting it. Without this
+    // the assertions at the end could hold because the field was never there to
+    // begin with -- the vacuous-assertion trap E8 in the plan's errata records.
+    expect(handed.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [4, 4] })
+
+    const projection = handed.projection as unknown as WritableProjection
+    projection.zoom = 0.9
+    projection.extent[0] = 99
+
+    expect(viewer.cameraOptions.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [4, 4] })
+
+    // And the reader is live rather than a constant that happened to match: a
+    // getter returning the same object every time would satisfy every line above.
+    viewer.rotate(0, 10)
+    expect(viewer.cameraOptions.pose).toEqual({ povLatitude: 0, povLongitude: 10 })
+  })
+
+  it('hands out a copy of the pose, so writing to it cannot move the camera', async () => {
+    const viewer = await mount({ pose: { povLatitude: 10, povLongitude: 20 }, projection: cylindrical(0.5) })
+
+    const handed = viewer.cameraOptions
+    expect(handed.pose).toEqual({ povLatitude: 10, povLongitude: 20 })
+
+    const pose = handed.pose as unknown as { povLatitude: number, povLongitude: number }
+    pose.povLatitude = 45
+    pose.povLongitude = 45
+
+    expect(viewer.cameraOptions.pose).toEqual({ povLatitude: 10, povLongitude: 20 })
+  })
+
+  it("does not adopt the caller's projection object, so writing to it later cannot move the camera", async () => {
+    const viewer = await mount({ projection: cylindrical(1) })
+    const projection = cylindrical(0.5)
+
+    viewer.cameraOptions = { projection }
+    // The setter has to have taken the value, or everything below is vacuous:
+    // "nothing changed" asserted against an object that was never installed
+    // proves nothing. This is what shows the viewer's value actually moved.
+    expect(viewer.cameraOptions.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [4, 4] })
+
+    const writable = projection as unknown as WritableProjection
+    writable.zoom = 0.9
+    writable.extent[0] = 99
+
+    expect(viewer.cameraOptions.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [4, 4] })
+  })
+})
