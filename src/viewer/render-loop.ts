@@ -25,10 +25,34 @@ export interface RenderLoopOptions {
    * Whether this frame needs drawing. Called once per tick, before `draw`.
    *
    * Implementations should consume their dirty state here, not in `draw`.
+   *
+   * Throwing from here stops the loop. The call sits outside the `try` that
+   * surrounds `draw`, and `#scheduleNext` is what the tick ends with -- so an
+   * exception escaping this callback means the next frame is never scheduled
+   * and the loop is over. It is deliberately not caught: the production
+   * implementation is `consumeDirty() || #sourceChanged()`, a boolean read
+   * followed by a call that catches its own failure, so a throw from here is a
+   * defect in the callback rather than a condition to survive. See `onError`.
    */
   readonly shouldDraw: () => boolean
   readonly draw: () => void
-  /** Called when `draw` throws. The loop keeps running. */
+  /**
+   * Called when `draw` throws. The loop keeps running.
+   *
+   * This is the ONE callback failure the loop absorbs, and it is absorbed for a
+   * specific reason: a `draw` that failed and a `draw` that was never attempted
+   * both leave the canvas unchanged, so a device lost mid-frame would otherwise
+   * freeze the canvas with no event and no further attempt -- the legacy bug
+   * where a lost context produced a permanently black canvas.
+   *
+   * Throwing from `onError` itself stops the loop, on the same path as
+   * `shouldDraw`. That asymmetry is intentional rather than overlooked.
+   * Swallowing every callback failure and rescheduling regardless is the
+   * pattern this class exists to replace: it is what makes a broken renderer
+   * look like a working one that has nothing to draw. A throw here is also not
+   * silent -- an exception escaping a `requestAnimationFrame` callback reaches
+   * `window.onerror`, which is a channel an application can actually act on.
+   */
   readonly onError?: (error: unknown) => void
 }
 
