@@ -122,6 +122,32 @@ describe('CameraController', () => {
     expect(zoomOf()).toBeGreaterThan(0)
   })
 
+  it('zoom by zero does not dirty the controller', () => {
+    // Cylindrical on purpose: a linear projection returns at the kind guard
+    // whatever the delta is, so a linear fixture would pass this test without the
+    // zero guard existing at all. A wheel notch or a pinch that nets to nothing
+    // is the common input, not the corner, and each one would otherwise allocate
+    // a projection, dirty the frame and wake every subscriber.
+    const c = new CameraController(undefined, cylindrical)
+    const fn = vi.fn()
+    c.onChange(fn)
+    c.consumeDirty()
+    c.zoom(0)
+    expect(c.consumeDirty()).toBe(false)
+    expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('rejects a non-finite zoom delta', () => {
+    // The same argument as setPose's finiteness guard: a NaN that reached the
+    // assignment would make the projection's zoom NaN, and an all-NaN matrix
+    // draws black with nothing reported anywhere. Cylindrical on purpose -- it is
+    // the variant where the assignment actually happens, so this is the fixture
+    // in which the check is load-bearing rather than incidentally satisfied.
+    const c = new CameraController(undefined, cylindrical)
+    expect(() => c.zoom(NaN)).toThrow(/finite/i)
+    expect(() => c.zoom(Infinity)).toThrow(/finite/i)
+  })
+
   it('replacing the projection marks dirty and does not reset the pose', () => {
     // cameraOptions is a live setter. Swapping the projection must not move the
     // camera -- the legacy version reconstructed the whole camera and silently
