@@ -144,15 +144,87 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：**分支覆盖 
 3. **NOTE 2（裁决：接受 plan 形状）**：失败路径不 dispose 只影响同文件后续失败用例的诊断信息，浏览器模式按文件隔离；跨五个文件加 try/finally 是结构性搅动，不为 NOTE 级收益做。
 4. **NOTE 3（挂 P6）**：换源用例 source-survived 半边的可选加固手段是断言 `sourceCalls()` 差分（x1 类缺陷现已有网）。
 
+### Task 6 · demo 接上真 viewer
+
+**做了什么**
+
+- `demo/main.ts` 整文件替换（+31/−13），提交 `72442ba`。与 plan Task 6 的代码块
+  **byte 级一致**（两侧各 1497 字节，SHA-256 相同）；commit message 用 plan 自带的
+  `task-p5-viewer: feat(demo): mount the real viewer on the demo page`。零偏离。
+- 静态面：typecheck / lint 0 错（终审在 `72442ba` 独立复跑确认）。
+
+**双关审查记录**
+
+- **Spec 审（零发现）**：byte SHA 核对、注毒守卫（往 demo 塞标记确认是替换而非追加）、
+  headless 实测 catch 路径、文件面核对。报告 `.vibe/p5/evidence/p5-task6-spec.md`。
+- **质量审（approve-with-findings，1 IMPORTANT + 2 NOTE）**：必查项 media-error 时序竞态
+  判定「demo 形态不存在」——结构性证明（`create()` 最后一个 await 之后零任务边界，DOM img
+  error 是任务）+ 执行佐证（404 变体挂载先于触发、坏 data-URI 5/5）+ 阳性对照（插入
+  120ms 任务让渡后事件确实丢失——**竞态对「让渡过任务的消费者」是真的**，demo 形态永不
+  触发）。报告 `.vibe/p5/evidence/p5-task6-quality.md`。
+
+**协调者裁决（三条发现全部登记，不改本卡代码）**
+
+1. **F1 → 勘误 E34**：media-error 红字 `appendChild` 在 100%×100% canvas 之后，实测
+   `pTop 733 > 视口 719`，首屏不可见——素材失败呈现仍是黑屏（catch 路径不受影响）。
+   plan 缺陷（demo 与 plan byte 级一致），候选修法 `host.prepend(note)`，归后续卡。
+2. **F2 → 勘误 E34**：plan 的「可能在 create() 返回前解码完」机制句与现形态不符。
+3. **F3 → 采纳改写**：三条移交观察定稿——(a) favicon 404 如实；(b)
+   `CopyExternalImageToTexture` 警告在本机不可复现，每载必现的是 canvas 格式警告
+   （`backend.ts:31`/`:317` 硬编码 `rgba8unorm` vs 本机偏好 `bgra8unorm`，修法方向
+   `getPreferredCanvasFormat()`，P6 renderer 侧）；(c) headed Chrome 页内 WebGPU canvas
+   回读（drawImage/toDataURL 双路 alpha-0）完全不可用，`support/canvas.ts` 的
+   vitest-browser 结论不外推真实浏览器——P6 测试基建约束。
+
+**遗留风险**
+
+1. `backend.ts` 上传时序 warning（实现者移交，两台审查机器均不可复现）——登记，P6 分诊。
+2. E16 顺延确认：`.gitignore` 缺 `test-results/`，但 `.gitignore` 不在本卡 scope 白名单，
+   顺延下一张卡；实测树干净，无实际影响。
+
 ## 自审记录
 
 ### CR 结论
 
-（执行者填：用了什么 review 手段（gstack review / codex review 等）、发现什么、整改了什么、循环了几轮）
+本卡按 SDD 执行：六个 Task 全部走「实现 → spec 符合性审 → 质量审」双关，最后全分支终审
+（opus，用户指定）。
+
+- **手段**：每 Task 派全新实现者子代理 + 两道独立审查（spec 符合性 → 质量）；变异测试作为
+  击杀判据贯穿 Task 4/5（具名失败用例 = 击杀，退出码不算数，`git archive` 沙箱 + sha 还原
+  核对）；终审 `p5-final-review`（opus）在 `72442ba` 独立复跑全套（382/382/40 文件、
+  typecheck/lint/coverage 全绿，此前没有任何审查在这个尖端跑过全套）+ 四项独立抽查
+  （矩阵 pose 无关性 node 探针、公开面 byte SHA、分层 grep、v0.2.2 取证）。
+- **发现与整改**：Task 4 质量 2 IMPORTANT（零宽守卫不对称、pose 合并无红测）已修 + 复审
+  confirm；Task 5 质量 4 NOTE（两修两记）；Task 6 质量 1 IMPORTANT + 2 NOTE 全部登记勘误
+  （plan 缺陷，代码与 plan byte 级一致，无整改必要）。spec 侧：Task 4 一条文档缺口（偏离 7
+  补登记）；Task 4 审者一条假缺陷经协调者执行复核 REFUTED；Task 5/6 零发现。
+- **轮数**：每 Task 双关各 1–2 轮循环，无 CRITICAL 存量。
+- **终审结论**：**merge-ready-with-registrations**（0 CRITICAL / 2 IMPORTANT 均已登记 /
+  5 NOTE），报告 `.vibe/p5/evidence/p5-final-review.md`，plan 完成标准十一条逐条判定达成
+  （第一条带 US2 断言移除的登记星号）。附带条件 R1c：相机冻结缺陷的修复卡必须**排在 P6
+  开工前**（有序，不是挂起），其测试网 = 恢复 zoom 像素断言 + pan 像素断言（两半）+ 按
+  v1 自身语义的纬度断言；US5 的两条 P6 断言与 `no-webgpu` project 不动。
 
 ### 测试质量结论
 
-（执行者填：effective-testing 评估发现什么、整改了什么）
+effective-testing 评估在每 Task 质量关执行（Task 1–3 的结论沉淀进
+`.vibe/p5/p5-coordinator-observations.md`；Task 4–6 报告在 `.vibe/p5/evidence/`）。
+整改全部闭环：Task 4 补 partial-pose 合并红测 + 零宽双轴守卫（变异复测具名转红）；
+Task 5 按 NOTE 1/4 修正；反模式扫描（弱断言 / 验收点碎片化 / countDraws 回潮）历轮零命中。
+
+**覆盖陈述**：`test:coverage` 99.57 / 98.61 / 100 / 100，四门槛全过（thresholds 未动）。
+有测试网的路径：五个 User Story 的完整用户旅程含异常场景（integration 31 条）、构造校验 /
+probe / 常量桥锁（unit）、dispose 顺序与重入。**未网路径及理由**：
+
+1. `src/viewer/image-viewer.ts` / `video-viewer.ts` 在 `coverage.exclude`（node 环境一行
+   跑不了——实测排除前四门槛倒三条）；其证据面由变异测试 + 集成测试承担，盲区曾用两个
+   阴性对照（C1/C2）量到具体位置，后由 US 集成测试实际覆盖。
+2. T5-6/m9b（「第二次 dispose 会抛」构造下的加强变异体）：只在特定构造下可观测，m9 已杀，
+   按裁决记入。
+3. M21（PTZ setter 的 `assertAlive` 纯契约转发）：裁决出范围。
+4. 相机冻结缺陷（非线性投影 pan/zoom 不达画布）：**源缺陷不在本卡 scope**（P2+P3 文件，
+   终审以 diff 归属核实），US2 滚轮像素断言红-on-pristine 已按纪律移除并在原处写明恢复
+   条件；终审判定「green 套件不断言任何假话」（US1 拖拽是 linear、US3 切换触发冲刷路径）。
 
 ## 审查意见
 
