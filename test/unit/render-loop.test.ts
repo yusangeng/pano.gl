@@ -163,6 +163,73 @@ describe('RenderLoop', () => {
     expect(calls).toBe(2)
   })
 
+  it('a throw from shouldDraw stops the loop', () => {
+    // shouldDraw is called OUTSIDE the try that surrounds draw, and
+    // #scheduleNext is the last thing a tick does -- so an exception from here
+    // escapes the frame callback and the next frame is never queued. The
+    // production callback is a boolean read followed by a call that catches its
+    // own failure, so a throw from it is a defect rather than a condition the
+    // loop is built to survive.
+    //
+    // The queue depth is the assertion that carries this test. "The error
+    // escaped" on its own would hold just as well for a loop that swallowed it
+    // and rescheduled -- which is the shape that leaves a canvas frozen with no
+    // event and no further attempt, the legacy failure this class exists to
+    // prevent.
+    const s = fakeScheduler()
+    const draw = vi.fn()
+    const loop = new RenderLoop({
+      schedule: s.request,
+      cancel: s.cancel,
+      shouldDraw: () => { throw new Error('defective callback') },
+      draw
+    })
+    loop.start()
+    expect(s.pending).toBe(1)
+
+    expect(() => s.tick(0)).toThrow('defective callback')
+    expect(s.pending).toBe(0)
+    // The frame never reached draw, so what stopped the loop is the check
+    // rather than something raised from inside the frame itself.
+    expect(draw).not.toHaveBeenCalled()
+
+    // Nothing is queued, so a later tick cannot revive it: "stopped" and "idle"
+    // differ exactly here, and an idle loop still holds a pending frame.
+    s.tick(16)
+    expect(draw).not.toHaveBeenCalled()
+    expect(s.pending).toBe(0)
+  })
+
+  it('a throw from onError stops the loop, on the same path as shouldDraw', () => {
+    // The asymmetry with draw is deliberate, and this test is what makes it a
+    // contract rather than a coincidence: draw's failure is absorbed because a
+    // failed draw and a skipped draw both leave the canvas unchanged, but a
+    // throw from the reporter itself is a defect, and absorbing it would leave
+    // a loop that neither draws nor reports. The exit is the same as
+    // shouldDraw's -- #scheduleNext is never reached.
+    const s = fakeScheduler()
+    const draw = vi.fn(() => { throw new Error('device lost') })
+    const loop = new RenderLoop({
+      schedule: s.request,
+      cancel: s.cancel,
+      shouldDraw: () => true,
+      draw,
+      onError: () => { throw new Error('the reporter itself failed') }
+    })
+    loop.start()
+    expect(s.pending).toBe(1)
+
+    expect(() => s.tick(0)).toThrow('the reporter itself failed')
+    expect(s.pending).toBe(0)
+    // draw DID run: the loop reached the frame, so what stopped it is the
+    // reporter and not an earlier failure.
+    expect(draw).toHaveBeenCalledTimes(1)
+
+    s.tick(16)
+    expect(draw).toHaveBeenCalledTimes(1)
+    expect(s.pending).toBe(0)
+  })
+
   it('a frame that fires after stop() draws nothing', () => {
     // cancelAnimationFrame is not guaranteed to reach a callback that has
     // already been dispatched, so the callback re-checks #running when it runs
