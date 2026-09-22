@@ -2304,7 +2304,7 @@ AbortController, and the element's touch-action is restored on dispose."
 - [x] 本阶段的集成测试**直接 import `src/media/` 与 `src/interaction/` 的类**，仓库里没有重新长出 `demo/test-entry.ts`、`test-entry-hooks/` 或 `window.__panoTest`
 - [x] `public/fixtures/panorama.png` 与 `public/fixtures/clip.mp4` 已由 `scripts/gen-fixtures.mjs` 生成并提交，且 `ffprobe` 复核为 `512x256`、`64` 帧（P5 的全部 User Story、P6 的后端对比都读它们）
 
-> **（2026-09-22 登记，终末全分支审查）**opus 全分支审查于 `7c51586`（`master...HEAD`，13 commits）结论 **APPROVED**：零 CRITICAL、零 IMPORTANT；两条 MINOR 均为交卷流程自有的文档状态项（本清单勾选、任务卡填写），随交卷提交处理。完成标准 12 条经终审逐条验证后勾选（两处 `frame` getter 未加载即抛、`listenerCount` 公开且 dispose 归零、`frameSize` 仅存于 downscale.ts:4 的 legacy 说明注释、`state` 字面量经 `RenderableSource` 别名链满足 core `SourceState`、每读必新对象、orientation 探针含上下对比自检、暂停守卫 + 四事件 bump、PTZ 门、touch-action 还原、非 POT 尺寸钉住、四文件直 import 无桥再生、ffprobe `512x256/64`）。跨阶段留档三条：`src/renderer/backend.ts:48-53`（P3 产物）TSDoc 对上传门槛的描述窄于实际实现（实际另比较 element 同一性，backend.ts:414 —— P4 的按源版本号因此在换源时安全），修正不在本卡 scope；`emit` 载荷在全部 8 个事件上携带 `error: undefined`（仅 media-error 声明，联合成员匹配可编译，运行时无害）；`test/integration/image-source.test.ts:8` 说明性注释提及 `__panoTest`，P7 的悬空引用 grep（docs/ 之外须为空）会命中（已记入任务卡风险栏）。
+> **（2026-09-22 登记，终末全分支审查）**opus 全分支审查于 `7c51586`（`master...HEAD`；**本节原写「13 commits」是陈旧口径，真值为 20 commits / 20 files / +2360−33，更正见本计划末尾整改轮勘误第 4 条**）结论 **APPROVED**：零 CRITICAL、零 IMPORTANT；两条 MINOR 均为交卷流程自有的文档状态项（本清单勾选、任务卡填写），随交卷提交处理。完成标准 12 条经终审逐条验证后勾选（两处 `frame` getter 未加载即抛、`listenerCount` 公开且 dispose 归零、`frameSize` 仅存于 downscale.ts:4 的 legacy 说明注释、`state` 字面量经 `RenderableSource` 别名链满足 core `SourceState`、每读必新对象、orientation 探针含上下对比自检、暂停守卫 + 四事件 bump、PTZ 门、touch-action 还原、非 POT 尺寸钉住、四文件直 import 无桥再生、ffprobe `512x256/64`）。跨阶段留档三条：`src/renderer/backend.ts:48-53`（P3 产物）TSDoc 对上传门槛的描述窄于实际实现（实际另比较 element 同一性，backend.ts:414 —— P4 的按源版本号因此在换源时安全），修正不在本卡 scope；`emit` 载荷在全部 8 个事件上携带 `error: undefined`（仅 media-error 声明，联合成员匹配可编译，运行时无害）；`test/integration/image-source.test.ts:8` 说明性注释提及 `__panoTest`，P7 的悬空引用 grep（docs/ 之外须为空）会命中（已记入任务卡风险栏）。
 
 ## 交给下游的东西
 
@@ -2322,6 +2322,7 @@ AbortController, and the element's touch-action is restored on dispose."
 | `WheelZoom` 常量 | 没有下游，但**它是行为变更**：旧版鼠标滚轮与触控板共用一个除数 |
 | `public/fixtures/` 的两个素材 | P5 的全部 User Story、P6 的后端对比都从 `/fixtures/...` 取它们。**P4 之后不再有人产出它们**，所以这一条是下游能不能跑起来的硬前提 |
 | `renderVideoBothPaths` 里「两个 readback 都是 RGBA」的结论 | **P6 的补充证据**：P3 只说了「canvas 的 readback 在 macOS 上是 BGRA」，没说什么情况下不是。这里是另一半 —— 显式建的 `rgba8unorm` 纹理走 `copyTextureToBuffer` 出来就是 RGBA，跟 canvas 的 `getPreferredCanvasFormat()` 无关。判据是**读的是不是 canvas**，不是读的是哪个后端 |
+| `renderVideoBothPaths` 的 `kind: 'unavailable'` 分支 | **P6 必须知道的边界**：软件 adapter（CI 上的 SwiftShader）上视频帧进不了任何纹理，本探针在那里响亮跳过。P6 的跨后端像素对比若含视频，要么带同样的守卫，要么在该环境改用图片素材 —— 详见本计划末尾整改轮勘误第 3 条 |
 
 > **给 P5 的一条纪律**：P4 的集成测试直接 import `src/media/` 与 `src/interaction/` 的类，那是因为
 > P4 交付的**就是这两个类**。P5 交付的是 `FramelessImageViewer` / `FramelessVideoViewer`，
@@ -2334,3 +2335,16 @@ AbortController, and the element's touch-action is restored on dispose."
 **视频的 external texture 导入失败时没有回落分支。** P3 的 `WebGPUBackend.render()` 对 `source.kind === 'video'` 无条件走 `importExternalTexture`；如果某个设备上这一步抛错，异常会一路走到 `RenderLoop` 的 `onError`，结果是一块不再更新的画布 —— 正是本计划 Task 4 想避免的那种「静默冻住」。可用的回落是 `copyExternalImageToTexture` 到一张 rgba8unorm 纹理，也就是图片那条路径；**Step 3 的探针已经证明这条回落与 external 路径的行序一致**，所以补它不会再引入第二个朝向 bug。
 
 这属于 `src/renderer/webgpu/backend.ts`，本计划无权修改，**由 P3 补上**：`render()` 里对视频先试 import，失败则退到 copy 路径，并把 `Capabilities.externalTextures` 置为 `false` 让应用看得见。
+
+---
+
+## 整改轮勘误（协调者打回，意见 1 / 2）
+
+> **（2026-09-22 登记，落地于 `7df8d96`）**
+>
+> 1. **软件 adapter 上取不到视频帧，且换一条取帧方式并不成立（意见 1 的实测根因）。** 本卡集成套件在 GitHub CI 上确定性红：Ubuntu runner 无 GPU，Chromium 落到 SwiftShader 软件 WebGPU。实测把「换条路径就能取到帧」这个选项证伪了 —— 该 adapter 上 `importExternalTexture` 与 `copyExternalImageToTexture` 对 `<video>` 元素**都采出全黑帧**（上下半均值 0 / 0），而同一素材经 `drawImage` + `getImageData` 解出来是有对比度的真帧（28.4），同一 device 画常量色也读得回来（max 191）；硬件 adapter（本机 Metal）上两条路径分别量到 96.31 / 117.66 与 96.33 / 117.67，朝向比较本身是成立的。
+>    整改按意见给出的方向 (a)：探针改为返回结果联合（`VideoPathComparison`），`unavailable` **只在同一次运行里当场量到下面两个控制之后**才可能返回 —— ① 素材控制（绕开 WebGPU，量解码器里的上下对比度，不够即抛错）；② 设备控制（常量色 fragment，无纹理无绑定，读回全 0 即抛错）。于是坏素材与瞎子设备仍是硬失败，软件 adapter 得到的是**响亮的 skip**（理由里带上 adapter 自报的 vendor / architecture 与当场量到的三个数字），真 GPU 环境照常全跑。
+>    这一改顺带修掉一个**假通过**：软件 adapter 上 copy 路径的读回同样是黑的，若只比 external 与 copy，会得到 0 对 0 的「相等」；是上下对比度守卫把这种情形变成响亮失败。
+> 2. **一处未解释的实测，留档但不建屋。** 同一轮调查里，`copyExternalImageToTexture` 从一块 2D canvas 上传**成功过一次**（读回 74.67 / 191.67，与填充色精确相符），此后每一次都是 max 0 —— 覆盖 2×2…512×256 全尺寸、两个 adapter、加不加 rAF / 挂不挂文档 / 有没有先 `getImageData`，而同文件里的常量色控制始终读回 191（测试装置本身没坏）。因为无法稳定复现，canvas 控制被**整个放弃**，换成上面两条可稳定重测的控制。留给后来者：在软件 adapter 上，「canvas → 纹理」也不可依赖。
+> 3. **给 P6 的下游提醒。** 软件 adapter 上视频帧既然进不了纹理，**库自身的视频渲染在该环境下同样不可像素观测**。P6 的跨后端像素对比若包含视频，必须带同样的守卫（或在该环境改用图片素材），否则会在 CI 上拿到一片「黑对黑的一致」。
+> 4. **口径更正（意见 2）。** 本节上一段与任务卡自报的「13 commits」是**陈旧计数**：13 是到 `ed7203b`（09-21 23:25，T4 feat 刚落地）为止的累计数。终审实际跑在 `7c51586`，`master...HEAD` 的真值是 **20 commits / 20 files / +2360−33** —— 终审报告头部的 diffstat 与此一致，且报告逐条点到 T5 的 `gestures.ts` / `ptz.test.ts`，可见它读的 diff 覆盖是全分支，不受这个错计数影响。终审之后另有交卷 docs 两笔（`49ba781` / `c02d064`，正是它 MINOR-1 / MINOR-2 要求补的文档状态项）与本轮整改 `7df8d96`，这些未经任何审查，由本轮 verify 重跑与协调者复审覆盖。
