@@ -107,6 +107,35 @@ describe('cameraOptions', () => {
     expect(viewer.cameraOptions.projection).toEqual({ kind: 'linear', fov: Math.PI / 2, aspect: 2 })
   })
 
+  it('does not adopt the projection object handed to the constructor, so writing to it cannot move the camera', async () => {
+    /*
+     * The third door, and the one a real application goes through: Task 4's
+     * `FramelessImageViewer.create` reaches `new Viewer(...)` with
+     * `camera: valid.camera` taken straight from its own caller. `cameraOptions`
+     * is copied on the way out and on the way in, but the constructor handed the
+     * caller's object to `CameraController`, which stores what it is given --
+     * the same silent no-redraw write as the two tests above, arriving by a door
+     * neither of them can see.
+     *
+     * 0.5 rather than 1: 1 is the default zoom, so an assertion written against
+     * defaults would hold for a constructor that ignored its argument entirely.
+     * The kind does the same work here -- ignoring the argument yields the
+     * linear `DEFAULT_PROJECTION`, not a cylindrical projection at all.
+     */
+    const projection = cylindrical(0.5)
+    const viewer = await mount({ projection })
+
+    // First, that the value was really taken. Without this the assertion below
+    // is vacuous -- see the E8 note in the first test.
+    expect(viewer.cameraOptions.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [4, 4] })
+
+    const writable = projection as unknown as WritableProjection
+    writable.zoom = 0.9
+    writable.extent[0] = 99
+
+    expect(viewer.cameraOptions.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [4, 4] })
+  })
+
   it("does not adopt the caller's projection object, so writing to it later cannot move the camera", async () => {
     const viewer = await mount({ projection: cylindrical(1) })
     const projection = cylindrical(0.5)
