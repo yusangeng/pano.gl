@@ -25,8 +25,25 @@ verify 用的是 `npm run test:coverage` 而不是 `test:unit`：**分支覆盖 
 
 ## 完成报告
 
-（执行者填：做了什么 / 自测结果 / 偏离 plan 的点 / 风险。**卡级总结仍在 Task 6 收工时写**；
-下面这一节是 Task 4 的分节报告。）
+**卡级总结（Task 6 收工时写；Task 4/5/6 分节明细见下方各节。）**
+
+**做了什么**：六个 Task 全部完成——Task 1 `CameraController`、Task 2 `RenderLoop`、
+Task 3 `Viewer` 组装与 dispose 顺序、Task 4 两个公开类与冻结的 `src/index.ts`、
+Task 5 五个用户故事的集成测试层（31 条用例 + 支撑层）、Task 6 demo 接上真 viewer。
+分支 23 文件 +4886/−21；公开面与 plan 冻结块 byte 级一致（SHA 核对）。
+
+**自测结果**：verify 六连全绿（gen:shaders --check / typecheck 三程序 / lint /
+coverage 99.57·98.61·100·100 四门槛 / integration 106 用例 / build）。变异测试 Task 4
+18 体 16 杀 + 2 预期存活（阴性对照）、Task 5 应测 12 体 12 杀。opus 全分支终审在最终
+尖端独立复跑全套并四项独立抽查，结论 **merge-ready-with-registrations**。
+
+**偏离 plan 的点**：Task 4 七条、Task 5 十条、Task 6 零条，逐条登记在各分节，
+全部经双关审查核实（要么 plan 原文佐证、要么实测佐证）。
+
+**风险**：相机冻结缺陷（非线性投影 pan/zoom 不达画布——P2+P3 遗留、不在本卡 scope；
+终审判定不阻塞合并，但修复卡必须排在 P6 开工前，测试网三件套与 R1c 条件见自审记录）；
+demo media-error 红字首屏不可见（plan 缺陷，候选 `host.prepend`，勘误 E34）；三条移交
+观察（canvas 格式警告 / 回读不可用 / 上传警告不可复现，勘误 E35，P6 输入）。
 
 ### Task 4 · 两个公开类与 `src/index.ts`
 
