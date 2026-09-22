@@ -350,7 +350,13 @@ export class Viewer extends Disposable {
     // projection's aspect IS this surface's, which is knowledge only this method
     // has (see `CameraController.setAspect`).
     this.#camera.invalidate()
-    if (height > 0) this.#camera.setAspect(width / height)
+    // Both axes, not height alone: a collapsed side panel or a splitter dragged
+    // shut is zero wide with its height intact, and that is the one layout
+    // where width / height is 0 -- a value `setAspect` rejects. A height-only
+    // guard turns that layout into a `create()` rejection naming `aspect`, an
+    // option the caller never wrote, and after construction into an uncaught
+    // throw from inside the ResizeObserver callback on every layout pass.
+    if (width > 0 && height > 0) this.#camera.setAspect(width / height)
   }
 
   #sourceChanged (): boolean {
