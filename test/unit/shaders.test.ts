@@ -122,11 +122,14 @@ describe('panorama WGSL', () => {
     expect(toUv).toContain('1.0 - phi / PI')
   })
 
-  it('subtracts povLongitude / 4, the legacy units bug, and not a degree conversion', () => {
-    // v0.2.2 subtracted a degree value from a radian angle. Reproducing that is
-    // the acceptance criterion for this phase; "fixing" it here would change
-    // panning sensitivity, which v1 deliberately does not do (spec §11.4 B1).
-    expect(PANORAMA_WGSL).toContain('camera.povLongitude / 4.0')
-    expect(PANORAMA_WGSL).not.toMatch(/povLongitude \* PI \/ 180/)
+  it('subtracts an honestly converted povLongitude, not the legacy /4 units bug', () => {
+    // v0.2.2 subtracted a degree value from a radian angle; the port carried
+    // that through as the retention recorded in v1-design §11.4 (B1), and it
+    // was corrected 2026-09-23 by user adjudication -- the pan-zoom-semantics
+    // spec §1 supersedes that retention. The GLSL twin and `lngOffset` in
+    // src/core/reference.ts carry the same formula; changing one without the
+    // others is what gate C exists to catch.
+    expect(PANORAMA_WGSL).toContain('camera.povLongitude * PI / 180.0')
+    expect(PANORAMA_WGSL).not.toMatch(/povLongitude \/ 4\.0/)
   })
 })

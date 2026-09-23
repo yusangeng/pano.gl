@@ -12,25 +12,32 @@
  *
  * **Everything here is transcribed line by line from
  * `legacy/shader/fshader.glsl`, including its quirks, and must stay that
- * way** -- with exactly one exception, the latitude term of the F5 fix (see
- * `latOffset`). That is not laziness -- it is the requirement. v1's acceptance
- * criterion is "renders what v0.2.2 rendered", so the reference must encode what
- * v0.2.2 actually computed, not what it should have. Two consequences worth
- * stating up front, because they look like transcription errors and are not:
+ * way** -- with two exceptions, each an adjudicated behaviour change rather
+ * than a transcription choice (see `lngOffset` and `latOffset`). That is not
+ * laziness -- it is the requirement. v1's acceptance criterion is "renders
+ * what v0.2.2 rendered", so the reference must encode what v0.2.2 actually
+ * computed, not what it should have. One consequence worth stating up front,
+ * because it looks like a transcription error and is not:
  *
  *   - `theta` is NOT divided by a normalising constant and `u` is NOT shifted
  *     by 0.5. The shader returns `theta / TWO_PI` raw, and the legacy texture
  *     object used the default `REPEAT` wrap, so the sampler did the wrapping.
  *     A `+ 0.5` here would rotate the panorama half a turn.
- *   - The longitude subtraction is `povLongitude / 4`, in *degrees*, subtracted
- *     from a value in *radians*. See `lngOffset` below.
  *
- * And one departure, which is neither a quirk nor an error: the three
- * non-linear projections subtract a properly-converted latitude from `phi`.
- * v0.2.2 read latitude nowhere on those cameras -- the shader declared
- * `u_CamPOVLatitude` and never read it, and the recorded uniform stream shows
- * the viewer never uploaded it either (defect F5). There is nothing to
- * transcribe, so the term is v1's own, with correct units. See `latOffset`.
+ * And two departures, each of which is neither a quirk nor an error:
+ *
+ *   - The three non-linear projections subtract a properly-converted latitude
+ *     from `phi`. v0.2.2 read latitude nowhere on those cameras -- the shader
+ *     declared `u_CamPOVLatitude` and never read it, and the recorded uniform
+ *     stream shows the viewer never uploaded it either (defect F5). There is
+ *     nothing to transcribe, so the term is v1's own, with correct units. See
+ *     `latOffset`.
+ *   - The longitude subtraction was `povLongitude / 4`, in *degrees*,
+ *     subtracted from a value in *radians* -- a v0.2.2 defect the port carried
+ *     through deliberately, corrected 2026-09-23 by user adjudication: the
+ *     pan-zoom-semantics spec §1
+ *     (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md) supersedes the
+ *     retention recorded in v1-design §11.4 (B1). See `lngOffset`.
  */
 
 import type { CameraState, Projection } from './types'
@@ -46,45 +53,51 @@ export interface UV {
 }
 
 /**
- * The legacy shader's longitude offset, transcribed exactly.
+ * The longitude offset, converted honestly: degrees to radians.
  *
- * The shader declares `float lng = u_CamPOVLongitude / 2.0;` at file scope and
- * then each non-linear projection does `theta -= lng / 2.0`. So the value
- * subtracted from a radian angle is `u_CamPOVLongitude / 4`, where
- * `u_CamPOVLongitude` is `CameraState.povLongitude` in **degrees**.
+ * v0.2.2 subtracted `povLongitude / 4` from a radian angle. The shader
+ * declared `float lng = u_CamPOVLongitude / 2.0;` at file scope and each
+ * non-linear projection then did `theta -= lng / 2.0` -- net `/4`, where
+ * `u_CamPOVLongitude` is `CameraState.povLongitude` in **degrees**. That mixes
+ * units, and it was a defect, not a convention: one full turn per `8 * PI`
+ * (about 25.13) degrees of `povLongitude` -- about 14.3x (`45 / PI`) the rate
+ * of a one-turn-per-360-degrees pan. The same rate is why v0.2.2's
+ * `CylindricalCamera` wrapped its longitude with `% 25`: 25 degrees works out
+ * to `25 / 4 = 6.25` radians, 0.53% short of the `2 * PI` of a full turn, so
+ * the wrap point approximately coincides with the seam -- a patch serving the
+ * very misalignment this conversion removes.
  *
- * This mixes units, and it is a bug in v0.2.2, not a convention. It is
- * reproduced here because reproducing v0.2.2 is the acceptance criterion; fixing
- * it changes panning sensitivity and is a separate, user-visible decision that
- * must not be smuggled in as part of a port. The observable effect is one full
- * turn per `8 * PI` (about 25.13) degrees of `povLongitude` -- about 14.3x
- * (`45 / PI`) the rate of a naive one-turn-per-360-degrees pan. That rate is
- * also why `CylindricalCamera` wraps its longitude with `% 25`: 25 degrees
- * works out to `25 / 4 = 6.25` radians, 0.53% short of the `2 * PI` of a full
- * turn, so the wrap point approximately coincides with the seam.
+ * The port carried the defect through deliberately (the acceptance criterion
+ * was "renders what v0.2.2 rendered"; the retention is recorded in v1-design
+ * §11.4, item B1). Corrected 2026-09-23 by user adjudication: the
+ * pan-zoom-semantics spec §1
+ * (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md) supersedes that
+ * retention. The WGSL and GLSL copies of this formula changed in the same
+ * commit, and their comment blocks point at the same spec -- gate C holds the
+ * three formulas together.
  *
- * A second hazard, recorded because P0's baseline is the arbiter for it: `lng`
- * is a file-scope initialiser that is not a constant expression, which is
- * invalid in GLSL ES 1.0. Some drivers may have compiled it as 0, in which case
- * the legacy non-linear cameras never rotated at all. Whether the captured
- * baseline shows rotation or not determines which states are comparable; P3's
- * gate A derives its comparable set from the capture rather than assuming.
+ * A second hazard, recorded because P0's baseline is the arbiter for it: the
+ * legacy `lng` was a file-scope initialiser that is not a constant expression,
+ * which is invalid in GLSL ES 1.0. Some drivers may have compiled it as 0, in
+ * which case the legacy non-linear cameras never rotated at all. Whether the
+ * captured baseline shows rotation or not determines which states are
+ * comparable; P3's gate A derives its comparable set from the capture rather
+ * than assuming.
  */
 function lngOffset (state: CameraState): number {
-  const lng = state.povLongitude / 2
-  return lng / 2
+  return (state.povLongitude * PI) / 180
 }
 
 /**
  * The latitude offset the three non-linear projections subtract from `phi`.
  *
- * This is the ONE term in this module that is not a transcription of v0.2.2:
- * on the non-linear cameras the legacy shader never read latitude and the
- * legacy viewer never uploaded it (defect F5), so latitude influenced no pixel
- * and there is no legacy number to preserve. Making it work is v1's explicit
- * behaviour change, pinned by gate B -- and because it is a new term rather
- * than a retained bug, it is a proper degrees-to-radians conversion, the
- * opposite of `lngOffset`'s deliberately mixed units above.
+ * This term is not a transcription of v0.2.2: on the non-linear cameras the
+ * legacy shader never read latitude and the legacy viewer never uploaded it
+ * (defect F5), so latitude influenced no pixel and there is no legacy number
+ * to preserve. Making it work is v1's explicit behaviour change, pinned by
+ * gate B -- and because it is a new term rather than a retained bug, it is a
+ * proper degrees-to-radians conversion, born with the same units `lngOffset`
+ * above was corrected to (2026-09-23) rather than ever carrying.
  */
 function latOffset (state: CameraState): number {
   return (state.povLatitude * PI) / 180
@@ -216,8 +229,8 @@ function projectPannini (x: number, y: number, z: number, zoom: number, lng: num
  * @param z - Surface position. Drives `theta` in every projection; scaled by
  *   `zoom` by the three non-linear ones, and negated by planet.
  * @param state - Camera angles. The non-linear projections read both fields as
- *   offsets -- `povLongitude` through the legacy `lngOffset`, `povLatitude`
- *   through `latOffset`; the linear projection reads neither, because its
+ *   offsets -- `povLongitude` through `lngOffset`, `povLatitude` through
+ *   `latOffset`; the linear projection reads neither, because its
  *   angles are already baked into the view matrix it is paired with.
  * @param projection - Which formula to apply.
  */

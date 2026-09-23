@@ -111,6 +111,95 @@ describe('US1: view a 360 photo and look around', () => {
     expect(maxChannelDiff(before.data, after.data), `rotate(${lat}, ${lng}) did not move the picture`).toBeGreaterThan(2)
   })
 
+  it('a full 360° turn on a non-linear camera returns to the picture it started from', async () => {
+    /*
+     * A full turn comes home. The pose wraps into [0, 360) on every
+     * rotate, so 90 + 270 lands on exactly 0 -- and lngOffset(0) is 0
+     * under ANY longitude scaling, honest or legacy. This test is
+     * therefore a green pin of the intended semantics, not a
+     * discriminator between formulas: the conversion itself is pinned
+     * by the quarter-turn test below (which holds a pose whose offset
+     * differs) and by the reference pins. It still earns its place: a
+     * wrap or accumulate bug that lost or doubled the final pose would
+     * fail here, silently, with everything else green.
+     */
+    const { viewer, container } = await imageViewer({ camera: 'cylindrical' })
+    const canvas = canvasOf(container)
+    viewer.src = '/fixtures/panorama.png'
+    await nextFrames(3)
+
+    const home = await readCanvas(canvas)
+    viewer.rotate(0, 90)
+    await nextFrames(2)
+    const quarter = await readCanvas(canvas)
+    viewer.rotate(0, 270)
+    await nextFrames(2)
+    const back = await readCanvas(canvas)
+    viewer.dispose()
+
+    expect(maxChannelDiff(home.data, quarter.data), 'a 90° turn did not move the picture').toBeGreaterThan(2)
+    expect(maxChannelDiff(home.data, back.data), 'a 360° round trip did not come home').toBeLessThanOrEqual(2)
+  })
+
+  it('a 90° pose turns the picture by exactly a quarter of its width', async () => {
+    /*
+     * The round-trip test above is formula-blind: the pose wraps into
+     * [0, 360) on every rotate, 90 + 270 lands on exactly 0, and
+     * lngOffset(0) is 0 under any longitude scaling. This one holds the
+     * pose the round trip cannot. Prediction, not eyeball: for
+     * cylindrical at the equator the fragment shader samples
+     * u = (x + 0.5) / W - lng / 360 -- linear in the column -- so an
+     * honest 90° pose shows exactly the columns the home picture shows
+     * a quarter of the width earlier: quarter(x, y) === home((x - W/4)
+     * mod W, y). The legacy /4 offset subtracted 22.5 RADIANS at this
+     * pose (degrees divided by four, fed to a radian subtraction -- the
+     * mixed-units bug this card fixes), which is ~209° of turn and
+     * misses this comparison by a wide margin on a real photograph.
+     *
+     * Read back at the canvas's own resolution rather than the 64x32
+     * default: the default rescales through a filter, and a filtered
+     * downscale is only shift-invariant where the bucket ratio aligns.
+     * The 1:1 read leaves the shader's float32 wobble at texel
+     * boundaries as the only difference between two renders of the
+     * same pipeline.
+     */
+    const { viewer, container } = await imageViewer({ camera: 'cylindrical' })
+    const canvas = canvasOf(container)
+    viewer.src = '/fixtures/panorama.png'
+    await nextFrames(3)
+
+    const home = await readCanvas(canvas, canvas.width, canvas.height)
+    viewer.rotate(0, 90)
+    await nextFrames(2)
+    const quarter = await readCanvas(canvas, canvas.width, canvas.height)
+    viewer.dispose()
+
+    // Cyclic column shift, written inline because maxChannelDiff compares
+    // arrays element-for-element and has no shifted mode. The `?? 0` arms
+    // only satisfy noUncheckedIndexedAccess -- the indices are bounded by
+    // the loops, so the fallback is unreachable.
+    const { width, height, data } = quarter
+    // The geometry the prediction needs: a width divisible by four, or the
+    // quarter shift is not a whole column count and the comparison below
+    // smears a half-texel across every column.
+    expect(width % 4).toBe(0)
+    const shift = width / 4
+    let worst = 0
+    let where = ''
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const sx = (x - shift + width) % width
+        for (let c = 0; c < 4; c++) {
+          const a = data[(y * width + x) * 4 + c] ?? 0
+          const b = home.data[(y * width + sx) * 4 + c] ?? 0
+          const diff = Math.abs(a - b)
+          if (diff > worst) { worst = diff; where = `x=${x} y=${y} c=${c}` }
+        }
+      }
+    }
+    expect(worst, `a 90° pose is not a quarter turn: worst=${worst} at ${where}`).toBeLessThanOrEqual(2)
+  })
+
   it('a press and release without movement reports nothing', async () => {
     /*
      * The pan wiring has an early return for a zero displacement, and this is

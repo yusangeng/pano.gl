@@ -142,7 +142,7 @@ describe('US2: play a 360 video and zoom', () => {
     expect(muted).toBe(true)
   })
 
-  it('a wheel zoom-out reaches the camera state of a non-linear projection', async () => {
+  it('a wheel zoom-in reaches the camera state of a non-linear projection', async () => {
     const inputs = captureRenderInputs()
     const { viewer, container } = await imageViewer({ camera: 'cylindrical' })
     const canvas = canvasOf(container)
@@ -154,10 +154,12 @@ describe('US2: play a 360 video and zoom', () => {
     const before = await readCanvas(canvas)
     const drawsBefore = inputs.sourceCalls()
 
-    // Scroll DOWN, which zooms out. Zoom is clamped to at most 1 and the default
-    // is 1, so scrolling the other way is a no-op by design and a test written
-    // that way would assert nothing.
-    await wheel(canvas, 200)
+    // Scroll UP, which magnifies: classifyWheel produces positive = magnify
+    // and a scroll up arrives as one. The unified formula
+    // `zoom / (1 + delta)` starting from the default of 1 can only go DOWN
+    // (magnify), and scrolling down is a no-op AT the ceiling -- which is
+    // why this test scrolls up.
+    await wheel(canvas, -200)
     await nextFrames(2)
 
     const after = await readCanvas(canvas)
@@ -185,8 +187,8 @@ describe('US2: play a 360 video and zoom', () => {
      * gate B varies extent between cases, which reflushes through setSource
      * -- so this test is the net.
      */
-    expect(inputs.sourceCalls() - drawsBefore, 'the zoom-out did not redraw').toBeGreaterThan(0)
-    expect(maxChannelDiff(before.data, after.data), 'the zoom-out did not move the picture').toBeGreaterThan(2)
+    expect(inputs.sourceCalls() - drawsBefore, 'the zoom-in did not redraw').toBeGreaterThan(0)
+    expect(maxChannelDiff(before.data, after.data), 'the zoom-in did not move the picture').toBeGreaterThan(2)
   })
 
   it('the public zoom() method reaches the projection the backend receives', async () => {
@@ -211,8 +213,10 @@ describe('US2: play a 360 video and zoom', () => {
       expect(inputs.lastCamera()?.projection).toEqual({ kind: 'cylindrical', zoom: 1, extent: [1, 1] })
     })
 
-    // zoom is relative: -0.5 halves the default of 1.
-    viewer.zoom(-0.5)
+    // A delta of 1 magnifies by 2x: 1 / (1 + 1) = 0.5. Under the old reading
+    // ("-0.5 halves") this same call would be a ceiling no-op and the waitFor
+    // below would time out.
+    viewer.zoom(1)
 
     await vi.waitFor(() => {
       expect(inputs.lastCamera()?.projection).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [1, 1] })
@@ -223,7 +227,8 @@ describe('US2: play a 360 video and zoom', () => {
     viewer.dispose()
   })
 
-  it('zoom is a no-op for the linear camera', async () => {
+  it('a wheel zoom reaches the linear projection as fov', async () => {
+    const inputs = captureRenderInputs()
     const { viewer, container } = await imageViewer()
     const canvas = canvasOf(container)
     const zooms: string[] = []
@@ -232,16 +237,27 @@ describe('US2: play a 360 video and zoom', () => {
     await nextFrames(3)
 
     const before = await readCanvas(canvas)
-    await wheel(canvas, 200)
-    await nextFrames(3)
+    const drawsBefore = inputs.sourceCalls()
+    const fovBefore = (() => {
+      const p = viewer.cameraOptions.projection
+      if (p.kind !== 'linear') throw new Error(`expected linear, got ${p.kind}`)
+      return p.fov
+    })()
+
+    await wheel(canvas, -200)
+    await nextFrames(2)
+
     const after = await readCanvas(canvas)
+    const p = viewer.cameraOptions.projection
     viewer.dispose()
 
-    // The gesture is still reported -- the input layer does not know about
-    // camera models -- but the linear projection has no zoom to change, so the
-    // frame is identical.
     expect(zooms.length).toBeGreaterThan(0)
-    expect(maxChannelDiff(before.data, after.data)).toBeLessThanOrEqual(2)
+    if (p.kind !== 'linear') throw new Error(`expected linear, got ${p.kind}`)
+    // Scroll UP magnifies: a narrower fov. v1 returned at the kind guard and
+    // the frame never changed -- the test this one replaces pinned that no-op.
+    expect(p.fov).toBeLessThan(fovBefore)
+    expect(inputs.sourceCalls() - drawsBefore, 'the zoom did not redraw').toBeGreaterThan(0)
+    expect(maxChannelDiff(before.data, after.data), 'the zoom did not move the picture').toBeGreaterThan(2)
   })
 
   it('a disposed viewer rejects play()', async () => {

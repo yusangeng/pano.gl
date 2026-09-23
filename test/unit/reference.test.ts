@@ -93,14 +93,15 @@ describe('exact output pins', () => {
     expect(uv.v).toBeCloseTo(0.5767104994935404, 12)
   })
 
-  it('cylindrical scales z by zoom, subtracts the degree-mixed lng, and wraps negative', () => {
+  it('cylindrical scales z by zoom, subtracts the honestly-converted lng, and wraps negative', () => {
     // cam_proj_cylindrical(1, 0, 0.5) at povLongitude 350, zoom 1: theta is
-    // 0.5 * TWO_PI - 350/4 = -84.358..., deeply negative, so u only lands in
-    // [0, 1) through wrap01's negative branch -- the seam behaviour. phi is
-    // atan(0) + HALF_PI = exactly PI/2, so v is exactly 0.5.
+    // 0.5 * TWO_PI - 350 honestly converted = PI * (1/2 - 35/18) =
+    // -17/18 PI, deeply negative, so u only lands in [0, 1) through
+    // wrap01's negative branch -- the seam behaviour -- at exactly 19/36.
+    // phi is atan(0) + HALF_PI = exactly PI/2, so v is exactly 0.5.
     const projection: Projection = { kind: 'cylindrical', zoom: 1, extent: [1, 1] }
     const uv = project(1, 0, 0.5, { povLatitude: 0, povLongitude: 350 }, projection)
-    expect(uv.u).toBeCloseTo(0.5739424794591574, 12)
+    expect(uv.u).toBeCloseTo(0.52777777777777790, 12)
     expect(uv.v).toBeCloseTo(0.5, 12)
   })
 
@@ -111,21 +112,22 @@ describe('exact output pins', () => {
     // state where 2 is not (planet and pannini clamp to [0.1, 2], which is
     // why their zoom rows use 2). Halving the scaled z shifts theta by
     // exactly a quarter turn, so u lands a quarter of a turn below the
-    // zoom-1 row's literal after the same negative wrap; v stays exactly 0.5.
+    // zoom-1 row's literal after the same negative wrap (0.25 - 350/360 =
+    // -13/18, wrapped to 5/18); v stays exactly 0.5.
     const projection: Projection = { kind: 'cylindrical', zoom: 0.5, extent: [1, 1] }
     const uv = project(1, 0, 0.5, { povLatitude: 0, povLongitude: 350 }, projection)
-    expect(uv.u).toBeCloseTo(0.32394247945915744, 12)
+    expect(uv.u).toBeCloseTo(0.27777777777777790, 12)
     expect(uv.v).toBeCloseTo(0.5, 12)
   })
 
-  it('planet negates z, takes the Q>0 && P<0 fixup, and subtracts lng in degrees', () => {
+  it('planet negates z, takes the Q>0 && P<0 fixup, and subtracts the converted lng', () => {
     // cam_proj_planet(1, 0.3, 0.7) at povLongitude 90, zoom 1: the negated z
     // makes P negative while y keeps Q positive -- the Q>0 && P<0 branch --
-    // and theta then crosses zero through the -22.5 subtraction, exercising
-    // the negative wrap as well.
+    // and the converted lng subtracts PI/2 from theta (about 5.117), which
+    // stays positive, so u lands inside [0, 1) at 0.5644 with no wrap.
     const projection: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }
     const uv = project(1, 0.3, 0.7, { povLatitude: 0, povLongitude: 90 }, projection)
-    expect(uv.u).toBeCloseTo(0.23345430963693303, 12)
+    expect(uv.u).toBeCloseTo(0.56444052920457832, 12)
     expect(uv.v).toBeCloseTo(0.41435639705845567, 12)
   })
 
@@ -137,30 +139,35 @@ describe('exact output pins', () => {
     // the two assertions.
     const projection: Projection = { kind: 'planet', zoom: 2, extent: [4, 4] }
     const uv = project(1, 0.3, 0.7, { povLatitude: 0, povLongitude: 90 }, projection)
-    expect(uv.u).toBeCloseTo(0.23345430963693303, 12)
+    expect(uv.u).toBeCloseTo(0.56444052920457832, 12)
     expect(uv.v).toBeCloseTo(0.6301534806039966, 12)
   })
 
   it('pannini applies the x<0 fixup AFTER doubling theta', () => {
     // cam_proj_pannini(-1, 0.3, 0.7) at povLongitude 90, zoom 1: theta is
     // 2 * atan(-0.35) = -0.673... first, and only then does the x<0 branch
-    // add PI. This is the row an atan2 "simplification" gets wrong: atan2
-    // yields a different angle before the doubling, and the fixup then lands
-    // in another quadrant -- exactly the trap the module header warns about.
+    // add PI and the converted lng subtract PI/2 -- net PI/2 - 0.673 =
+    // 0.897..., so u is 0.897... / TWO_PI = 0.1428... with no wrap. This is
+    // the row an atan2 "simplification" gets wrong: atan2 yields a different
+    // angle before the doubling, and the fixup then lands in another
+    // quadrant -- exactly the trap the module header warns about.
     const projection: Projection = { kind: 'pannini', zoom: 1, extent: [4, 4] }
     const uv = project(-1, 0.3, 0.7, { povLatitude: 0, povLongitude: 90 }, projection)
-    expect(uv.u).toBeCloseTo(0.8118468569924171, 12)
+    expect(uv.u).toBeCloseTo(0.14283307656006256, 12)
     expect(uv.v).toBeCloseTo(0.5767104994935404, 12)
   })
 
   it('pannini zoom enters both the doubled atan and phi', () => {
     // cam_proj_pannini(1, 0.3, 0.7) at povLongitude 90, zoom 2: z scales to
-    // 1.4, so theta = 2 * atan(0.7) with no fixup (x>0, z>0), and phi reads
-    // the scaled y against sqrt(x^2 + z^2) with the scaled z. Both halves of
-    // the formula see the zoom, so dropping it fails either assertion.
+    // 1.4, so theta = 2 * atan(0.7) = 1.221... with no fixup (x>0, z>0),
+    // and the converted lng subtracts PI/2, leaving theta at -0.349... --
+    // u = 1 - 0.349... / TWO_PI = 0.944... through the negative wrap -- and
+    // phi reads the scaled y against sqrt(x^2 + z^2) with the scaled z. Both
+    // halves of the formula see the zoom, so dropping it fails either
+    // assertion.
     const projection: Projection = { kind: 'pannini', zoom: 2, extent: [4, 4] }
     const uv = project(1, 0.3, 0.7, { povLatitude: 0, povLongitude: 90 }, projection)
-    expect(uv.u).toBeCloseTo(0.6134138926465695, 12)
+    expect(uv.u).toBeCloseTo(0.94440011221421483, 12)
     expect(uv.v).toBeCloseTo(0.6068103096969111, 12)
   })
 })
