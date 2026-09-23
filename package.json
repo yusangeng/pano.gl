@@ -43,7 +43,7 @@
     "test:unit": "vitest run --project unit",
     "test:unit:watch": "vitest --project unit",
     "test:integration": "vitest run --project integration --project no-webgpu",
-    "test:coverage": "vitest run --project unit --coverage",
+    "test:coverage": "vitest run --project unit --coverage --coverage.reporter=text --coverage.reporter=json-summary && node scripts/check-coverage.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/integration && tsc --noEmit -p tsconfig.scripts.json",
     "lint": "eslint src test scripts \"demo/**/*.ts\"",
     "gen:shaders": "node scripts/gen-shader-constants.mjs",
