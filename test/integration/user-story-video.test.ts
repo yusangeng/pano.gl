@@ -143,6 +143,7 @@ describe('US2: play a 360 video and zoom', () => {
   })
 
   it('a wheel zoom-out reaches the camera state of a non-linear projection', async () => {
+    const inputs = captureRenderInputs()
     const { viewer, container } = await imageViewer({ camera: 'cylindrical' })
     const canvas = canvasOf(container)
     const zooms: string[] = []
@@ -150,12 +151,16 @@ describe('US2: play a 360 video and zoom', () => {
     viewer.src = '/fixtures/panorama.png'
     await nextFrames(3)
 
+    const before = await readCanvas(canvas)
+    const drawsBefore = inputs.sourceCalls()
+
     // Scroll DOWN, which zooms out. Zoom is clamped to at most 1 and the default
     // is 1, so scrolling the other way is a no-op by design and a test written
     // that way would assert nothing.
     await wheel(canvas, 200)
     await nextFrames(2)
 
+    const after = await readCanvas(canvas)
     const projection = viewer.cameraOptions.projection
     viewer.dispose()
 
@@ -166,22 +171,22 @@ describe('US2: play a 360 video and zoom', () => {
     if (projection.kind !== 'cylindrical') throw new Error(`expected cylindrical, got ${projection.kind}`)
     expect(projection.zoom).toBeLessThan(1)
     /*
-     * The plan also asserted a pixel change here, and that assertion is red on
-     * the UNMODIFIED tree, which is why it is absent. On a non-linear
-     * projection the clip matrix does not depend on the camera AT ALL:
-     * core/matrix.ts builds those views from the constant LEGACY_QUAD_VIEW and
-     * their projection from extent only -- zoom included -- so WebGPUBackend's
-     * `mat4.equals` early-out skips the uniform write for EVERY camera change,
-     * pan as much as zoom, and nothing the camera does reaches the canvas. The
-     * only things that write the uniforms again are a projection-kind or
-     * extent change (the clip matrix genuinely moves) and a source whose
-     * texture projection differs (setSource's own write). Measured here:
-     * cylindrical zoom 1 -> 0.7, a draw ran with the new projection, canvas
-     * unchanged thirty frames later; rotate(10, 0), rotate(0, 90) and a full
-     * drag read back diff 0 the same way. The defect is recorded in the Task 5
-     * completion report; the pixel assertion belongs back here the day it is
-     * fixed.
+     * The pixel half, back where the plan had it. It was red on the
+     * unmodified tree (P2+P3 defect: setCamera's matrix-equality early-out
+     * skipped the uniform write AND the dirty flag for every camera change
+     * on the non-linear kinds -- their clip matrix is constant by design --
+     * so zoom never reached the canvas). A failure names its layer: the
+     * redraw count watches the loop only -- setSource fires for every frame
+     * the loop selects, upstream of the backend's dirty gate -- so "did not
+     * redraw" means no frame was ever attempted, while the pixel assertion
+     * is the half that catches the backend freeze (under the early-out it
+     * went red with the redraw count still passing). No gate covers this
+     * family -- gate A compares only states this defect never touches,
+     * gate B varies extent between cases, which reflushes through setSource
+     * -- so this test is the net.
      */
+    expect(inputs.sourceCalls() - drawsBefore, 'the zoom-out did not redraw').toBeGreaterThan(0)
+    expect(maxChannelDiff(before.data, after.data), 'the zoom-out did not move the picture').toBeGreaterThan(2)
   })
 
   it('the public zoom() method reaches the projection the backend receives', async () => {

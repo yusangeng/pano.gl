@@ -66,7 +66,13 @@ export class WebGPUBackend implements Backend {
   // and fail both the packer's ArrayBuffer parameter and writeBuffer's view
   // type. This array is always over a plain ArrayBuffer we allocated.
   #cameraValues: Float32Array<ArrayBuffer>
-  /** The clip matrix as last uploaded, for detecting an unchanged camera. */
+  /**
+   * The clip matrix as last handed in. Write-only: no reader remains (the
+   * equality early-out that read it is gone -- deliberately, see setCamera),
+   * and the copy stays as a minimal-diff record of the last camera
+   * transform. The matrix the fragment stage consumes is the inverse kept
+   * in `#invClip`.
+   */
   #clip: mat4 = mat4.create()
   #invClip: mat4 = mat4.create()
   #sampler: GPUSampler
@@ -350,8 +356,6 @@ export class WebGPUBackend implements Backend {
     const clip = mat4.create()
     buildCameraTransform(state, projection, 'zero-to-one', clip)
 
-    if (mat4.equals(clip, this.#clip)) return
-
     mat4.copy(this.#clip, clip)
     // The fragment stage inverts it. `invert` returns null when the matrix is
     // singular; every matrix this builder produces is invertible, so a null here
@@ -360,6 +364,15 @@ export class WebGPUBackend implements Backend {
       throw new Error('camera clip matrix is singular')
     }
 
+    // Unconditional upload, deliberately. The non-linear kinds build their
+    // view from the constant LEGACY_QUAD_VIEW (see matrix.ts), so their clip
+    // matrix does not depend on the camera at all -- pose and zoom reach the
+    // shader through these uniforms alone. A matrix-equality early-out here
+    // skipped the upload AND the dirty flag (both live in
+    // #writeCameraUniforms) for every camera change on those kinds, freezing
+    // pan and zoom on three of the four camera models. No skip means no
+    // premise to get wrong; the render loop already calls setCamera only on
+    // frames it is drawing, so this costs one small upload per drawn frame.
     this.#writeCameraUniforms()
   }
 
