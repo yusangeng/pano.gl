@@ -1,3 +1,5 @@
+import type { TestContext } from 'vitest'
+
 /*
  * Renders one video frame through both WebGPU upload paths, offscreen, and
  * returns both readbacks.
@@ -205,42 +207,9 @@ export async function renderVideoBothPaths (
     device.queue.submit([encoder.finish()])
   }
 
-  // Path 1: importExternalTexture. No flipY exists on this path, so whatever
-  // row order it produces is the row order everything else has to live with.
-  //
-  // Import, bind, draw and submit happen in one synchronous stretch with no
-  // `await` between them, because the external texture is destroyed when this
-  // task ends. The awaits that follow are after the submit, which is safe.
-  const externalPipe = pipeline(FRAGMENT_EXTERNAL)
-  draw(externalPipe, [
-    { binding: 0, resource: device.importExternalTexture({ source: video }) },
-    { binding: 1, resource: sampler }
-  ])
-  const external = await readTarget()
-
-  // Path 2: copyExternalImageToTexture. `flipY: false` is the claim under test:
-  // it should agree with the external path, because that is the value P3's
-  // backend passes and the value no single shader flip can compensate for if
-  // the two APIs disagreed.
-  //
-  // copyExternalImageToTexture does not scale, so a [size, size] copy of the
-  // 512x256 fixture carries only its top-left quadrant and the comparison
-  // degenerates to a constant. The probe copies the whole frame at its natural
-  // size, and the normalised UV mapping scales it into the square render
-  // target.
+  // The fixture's natural size, shared by the copy path (which cannot scale)
+  // and the decoder control below.
   const natural: [number, number] = [video.videoWidth, video.videoHeight]
-  const copied = device.createTexture({
-    size: natural,
-    format: 'rgba8unorm',
-    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
-  })
-  device.queue.copyExternalImageToTexture({ source: video, flipY: false }, { texture: copied }, natural)
-  const copyPipe = pipeline(FRAGMENT_COPY)
-  draw(copyPipe, [
-    { binding: 0, resource: copied.createView() },
-    { binding: 1, resource: sampler }
-  ])
-  const copy = await readTarget()
 
   // A uniform frame is useless as a probe -- the test would pass on a black
   // screen -- and so is one whose top half and bottom half happen to match:
@@ -271,6 +240,126 @@ export async function renderVideoBothPaths (
     }
     return max
   }
+
+  /*
+   * The two controls every `unavailable` verdict has to earn, measured on the
+   * run that reports it. They are what keep "this machine cannot answer" from
+   * covering up "this probe is broken": the fixture must decode with a
+   * top/bottom contrast of its own, or orientation was never judgeable from it
+   * and no adapter could have answered; and the device must render a constant
+   * colour, which needs no upload at all, or the flat or refused frame is the
+   * device's doing and not the upload path's. Either control failing is a
+   * throw -- a failure, never a skip.
+   */
+  const runControls = async (): Promise<{ decodedContrast: number, solidMax: number }> => {
+    const decodeCanvas = document.createElement('canvas')
+    decodeCanvas.width = natural[0]
+    decodeCanvas.height = natural[1]
+    const decodeContext = decodeCanvas.getContext('2d')
+    if (decodeContext === null) throw new Error('no 2d context, so the fixture cannot be checked')
+    decodeContext.drawImage(video, 0, 0)
+    const decoded = new Uint8Array(
+      decodeContext.getImageData(0, 0, natural[0], natural[1]).data
+    )
+    const decodedContrast = halfContrast(decoded, natural[0])
+    if (decodedContrast < MIN_HALF_CONTRAST) {
+      throw new Error(
+        `the fixture has no top/bottom contrast through the decoder (${decodedContrast}); ` +
+        'orientation cannot be judged from it'
+      )
+    }
+
+    const solidPipe = pipeline(FRAGMENT_SOLID)
+    draw(solidPipe, [])
+    const solidMax = channelMax(await readTarget())
+    if (solidMax === 0) {
+      throw new Error(
+        'this device produced no pixels at all: a constant colour reads back black ' +
+        `(max ${solidMax}), so the frame was the device and not the video`
+      )
+    }
+    return { decodedContrast, solidMax }
+  }
+
+  /*
+   * Both paths inside one try, because either upload can be refused at the API
+   * itself: on the Linux SwiftShader CI adapter importExternalTexture throws
+   * OperationError ("Failed to import texture from video element that doesn't
+   * have back resource") for a video that HAS decoded and seeked -- measured
+   * on CI run 35923591134, deterministic on that runner and window-dependent
+   * on a macOS SwiftShader launch, while a hardware adapter never throws it.
+   * A refusal by the machine is a fact rather than a defect, so it reaches the
+   * same measured `unavailable` verdict as a flat readback, controls first.
+   */
+  const uploadBoth = async (): Promise<
+    | { readonly ok: true, readonly external: Uint8Array, readonly copy: Uint8Array }
+    | { readonly ok: false, readonly refusal: DOMException }
+  > => {
+    try {
+      // Path 1: importExternalTexture. No flipY exists on this path, so whatever
+      // row order it produces is the row order everything else has to live with.
+      //
+      // Import, bind, draw and submit happen in one synchronous stretch with no
+      // `await` between them, because the external texture is destroyed when this
+      // task ends. The awaits that follow are after the submit, which is safe.
+      const externalPipe = pipeline(FRAGMENT_EXTERNAL)
+      draw(externalPipe, [
+        { binding: 0, resource: device.importExternalTexture({ source: video }) },
+        { binding: 1, resource: sampler }
+      ])
+      const external = await readTarget()
+
+      // Path 2: copyExternalImageToTexture. `flipY: false` is the claim under test:
+      // it should agree with the external path, because that is the value P3's
+      // backend passes and the value no single shader flip can compensate for if
+      // the two APIs disagreed.
+      //
+      // copyExternalImageToTexture does not scale, so a [size, size] copy of the
+      // 512x256 fixture carries only its top-left quadrant and the comparison
+      // degenerates to a constant. The probe copies the whole frame at its natural
+      // size, and the normalised UV mapping scales it into the square render
+      // target.
+      const copied = device.createTexture({
+        size: natural,
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+      })
+      device.queue.copyExternalImageToTexture({ source: video, flipY: false }, { texture: copied }, natural)
+      const copyPipe = pipeline(FRAGMENT_COPY)
+      draw(copyPipe, [
+        { binding: 0, resource: copied.createView() },
+        { binding: 1, resource: sampler }
+      ])
+      const copy = await readTarget()
+      return { ok: true, external, copy }
+    } catch (err) {
+      // Only the measured refusal shape becomes a verdict; anything else --
+      // a validation error, a bug in this probe -- propagates and fails the
+      // test honestly.
+      if (err instanceof DOMException && err.name === 'OperationError') {
+        return { ok: false, refusal: err }
+      }
+      throw err
+    }
+  }
+
+  const uploads = await uploadBoth()
+  if (!uploads.ok) {
+    const measured = await runControls()
+    return {
+      kind: 'unavailable',
+      detail:
+        `the WebGPU adapter here reports vendor "${adapter.info.vendor}" architecture ` +
+        `"${adapter.info.architecture}", and it refuses the video element at the upload ` +
+        `API itself: ${uploads.refusal.name}: ${uploads.refusal.message}. The fixture ` +
+        `decodes with a top/bottom contrast of ${measured.decodedContrast.toFixed(1)} and ` +
+        `the device renders a constant colour readably (max ${measured.solidMax}), so the ` +
+        'video and the device are both fine and it is the video-to-texture upload this ' +
+        'adapter cannot do; the comparison has no subject here, a hardware adapter runs it.'
+    }
+  }
+  const { external, copy } = uploads
+
   const half = Math.floor(size / 2)
   const top = halfMean(external, size, 0, half)
   const bottom = halfMean(external, size, half, size)
@@ -290,55 +379,53 @@ export async function renderVideoBothPaths (
     }
   }
 
-  // Both flat. Two very different machines produce that and they want opposite
-  // outcomes, so measure which one this is instead of guessing. Both controls
-  // run only here, where the frame is already known to be flat -- the ordinary
-  // run pays nothing for them, and every number in the answer below was taken
-  // on this run rather than remembered from an investigation.
-  //
-  // First the fixture, with WebGPU out of the picture entirely. A frame that
-  // has no top and no bottom through the decoder is a broken fixture, which is
-  // a failure and not an environment to skip in: no adapter could have
-  // answered, but neither should this pass quietly.
-  const decodeCanvas = document.createElement('canvas')
-  decodeCanvas.width = natural[0]
-  decodeCanvas.height = natural[1]
-  const decodeContext = decodeCanvas.getContext('2d')
-  if (decodeContext === null) throw new Error('no 2d context, so the fixture cannot be checked')
-  decodeContext.drawImage(video, 0, 0)
-  const decoded = new Uint8Array(
-    decodeContext.getImageData(0, 0, natural[0], natural[1]).data
-  )
-  const decodedContrast = halfContrast(decoded, natural[0])
-  if (decodedContrast < MIN_HALF_CONTRAST) {
-    throw new Error(
-      `the fixture has no top/bottom contrast through the decoder (${decodedContrast}); ` +
-      'orientation cannot be judged from it'
-    )
-  }
-
-  // Then the device, with no external image involved: a constant colour needs
-  // no upload, so a device that renders black here is broken in a way that no
-  // skip should cover up.
-  const solidPipe = pipeline(FRAGMENT_SOLID)
-  draw(solidPipe, [])
-  const solidMax = channelMax(await readTarget())
-  if (solidMax === 0) {
-    throw new Error(
-      'this device produced no pixels at all: a constant colour reads back black ' +
-      `(max ${solidMax}) and so does the video frame (top ${top}, bottom ${bottom})`
-    )
-  }
-
+  // Both flat, with no refusal thrown. The controls decide which of two very
+  // different machines this is -- measured on this run, not remembered from an
+  // investigation, and paid only on this path where the frame is already known
+  // to be flat.
+  const measured = await runControls()
   return {
     kind: 'unavailable',
     detail:
       `the WebGPU adapter here reports vendor "${adapter.info.vendor}" architecture ` +
       `"${adapter.info.architecture}". The fixture decodes with a top/bottom contrast of ` +
-      `${decodedContrast.toFixed(1)} and the device renders a constant colour readably ` +
-      `(max ${solidMax}), but a video frame reads back flat through both upload paths ` +
-      `(top ${top}, bottom ${bottom}). Nothing this probe can do yields a video-backed ` +
-      'texture on this adapter, so the comparison has no subject here; a hardware adapter ' +
-      'runs it.'
+      `${measured.decodedContrast.toFixed(1)} and the device renders a constant colour ` +
+      `readably (max ${measured.solidMax}), but a video frame reads back flat through both ` +
+      `upload paths (top ${top}, bottom ${bottom}). Nothing this probe can do yields a ` +
+      'video-backed texture on this adapter, so the comparison has no subject here; a ' +
+      'hardware adapter runs it.'
+  }
+}
+
+/*
+ * Per-file cache for the skip helper below: browser mode gives every test file
+ * its own iframe, so one probe run answers every gated test in a file and the
+ * next file re-probes in its own world.
+ */
+let uploadProbed: Promise<VideoPathComparison> | undefined
+
+/**
+ * Skips the current test when this browser cannot upload a video frame to a
+ * WebGPU texture at all -- because the upload API refuses the element, or
+ * because both readbacks come back flat.
+ *
+ * The verdict is earned the same way `renderVideoBothPaths` earns every
+ * `unavailable`: the fixture has decoded with contrast of its own and the
+ * device has rendered a constant colour, both measured on this run, and a
+ * probe whose own controls fail throws instead of skipping. A browser with no
+ * WebGPU adapter (the no-webgpu project) is not gated: these tests run there
+ * on WebGL2, where the upload path this measures does not exist.
+ */
+export async function skipIfVideoUploadUnavailable (ctx: TestContext): Promise<void> {
+  if (navigator.gpu === undefined) return
+  const adapter = await navigator.gpu.requestAdapter()
+  if (adapter === null) return
+  uploadProbed ??= renderVideoBothPaths('/fixtures/clip.mp4')
+  const verdict = await uploadProbed
+  if (verdict.kind === 'unavailable') {
+    // Printed as well as skipped, for the same reason as the
+    // presented-canvas guard: a reporter may show one and not the other.
+    console.warn(`video-upload: ${verdict.detail}`)
+    ctx.skip(verdict.detail)
   }
 }
