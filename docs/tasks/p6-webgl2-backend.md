@@ -84,4 +84,11 @@ P6 全部六个 Task 完成，终末全分支审查 APPROVED（2026-09-23）。�
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+按「审查 SOP」固定四步全审（审查面 `master...feature/p6-webgl2-backend`，18 提交 = 终审面 15 + 交卷期 3，2026-09-23）：
+
+1. **结构化 review**：执行者按 SDD 双审体系逐 Task 走 spec 审 + 质量审（fresh agent、质量审 opus、授权突变），六任务后另有终末全分支 fresh 审查（`f73e2a9...e194b26`）——手段与轮数在自审记录在案，CRITICAL（Task 6 伪恢复）清零且有两个独立来源的突变证明。协调者亲读全部 src diff：GLSL 与 WGSL 四投影逐式比对一致（linear 的 atan+双 fixup、cylindrical `z*TWO_PI - lng`、planet 的 `-(s.z*zoom)` 负号与 q 判 fixup、pannini 的加倍后 fixup，三非线性 `phi` 均带 `- lat`；`lng = /4.0`、`lat = *PI/180`、`invClip * vec4(ndc,1,1)`、`(0,0)` 兜底同构；`mod(x,1.0)` ≡ `fract`）；context.ts 大声失败协议、backend.ts 的 `minus-one-to-one` / 按源 kind 的 wrap / dispose 先摘监听再 `loseContext()`（L5）、spies 双原型共用闭包计数器（红线原文满足，JSDoc 如实记 prophylaxis）、probe() FIX 2 只在无适配器分支读 `MAX_TEXTURE_SIZE`——与卡面及偏离台账逐条对应，无表外偏离。
+2. **plan 红线核对**：`git diff --name-only` 亲验——`demo/`、`src/core/`、`src/interaction/`、`src/renderer/shaders/generated.ts` 零触碰（转写目标为 P3 Task 8 Step 3 之后的最终 WGSL，逐行核过 `- lat` 在场）；18/18 提交前缀合规；worktree 树 pristine。**终审后才落地、未经任何 fresh 审的 87dd2bb（coverage exclude）单独亲审**：仅 vitest.config.ts 一条 exclude + 注释附前后实测数据，`thresholds` 四值原样未删——符合卡面「首选补单测，确实测不到才 exclude 写明理由，不删 thresholds」的纪律，处置正当。
+3. **门禁证据复核**：verify 六连在分支尖端（321cfd1）本人当面全绿——shaders up to date / typecheck 三程序 / lint 零告警 / **coverage 四维 99.4 / 98.68 / 98.95 / 99.78（与卡面数字逐位一致，context.ts 96.87%）** / **integration 28 文件 166/166 = 卡面 130（21 文件，真 WebGPU）+ 36（7 文件，--disable-gpu）** / build 成功且 `#version 300 es` 在 ESM+CJS 各 2 处可 grep（`?raw`/esbuild 真门）。门禁 C 容差 ≤2/≤3/<64 未放宽，裁判用例换 cylindrical@state1 的「按构造无法建模非零姿态 linear」理由亲读源码确认成立。
+4. **最重发现亲验（含突变复跑）**：/tmp git-archive 沙箱（sentinel sha `492301d5…` 落刀前后与 `git show HEAD:` 双向相符）亲手复跑终审突变——删 GLSL `to_uv` 的 v-flip → **门禁 C 18/18 具名红**（16 态矩阵 + 裁判 + 极点，JSON 报告逐名核过），还原后 sha 复核相符。登记一处口径差异：本人复跑的 sed 同时触及 24 行头注释与 98 行代码（终审只动代码行）——行为突变同为 98 行一处，结论不受影响，如实记录。NPOT+REPEAT 无直接网（spec 保证 + fixture 全 POT）等三条遗留均为终审 ACCEPT-AS-RECORDED 在案，不阻塞。
+
+**结论：approve。** 按轮询授权（审过即合）即行 task-merge。
