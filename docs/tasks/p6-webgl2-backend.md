@@ -43,6 +43,7 @@ P6 全部六个 Task 完成，终末全分支审查 APPROVED（2026-09-23）。�
 - Task 4：plan 的 STATES fov 度数改弧度（5 处，P2 `Projection.fov` 文档为弧度）；四个 harness bug 修复（GL wrap REPEAT、裁判采样 1−v、REPEAT 双线性模型、裁判用例换 cylindrical@state1——裁判按构造无法建模非零姿态 linear）；整改轮 `WEBGL_lose_context` 释放离屏上下文。
 - Task 5：故事经 `captureRenderInputs` 到后端（plan 原文猜错 spy）；no-webgpu provider 补 `deviceScaleFactor: 2`（photo 硬断言 DPR 2）；photo 后端标签改为按浏览器实际状态推导；US5 `create()` 需带 `src`（plan fence 缺）；`SelectedCapabilities` 'none' 收窄。
 - Task 6：两处 `create({ container })` fence 缺 `src`（validateImageOptions 先于后端选择）；Step 3 计数勘误 8 = 3 + 5；质量审 CRITICAL-1 整改——afterEach 伪恢复（`defineProperty({get:()=>undefined})` 是降级不是恢复）改为 import 时捕获原 descriptor 恢复，突变证明整改后掩码行重新 load-bearing（M1 红 `expected 'webgpu' to be 'webgl2'`）。
+- 交卷闸暴露（task-finish 闸6 首跑，终审之后）：`src/renderer/webgl2/backend.ts` 不在 coverage exclude，`test:coverage` 四维全崩（81.22/84.01/86.36/81.97）——P6 各轮验证跑的都是套件而非 coverage，该缺口自 Task 3 起潜伏。按任务卡纪律（首选补单测，确实测不到才 exclude 并写明理由）处置：该类为 DOM+真 GL 绑定（取上下文/编译 GLSL/发 GL 调用），node project 一条路径不可达，假 GL mock 即作者假设回放；其委托的编译/链接协议在 `context.ts` 已单测（96.87%，留在 coverage 内）；本体由 integration project 盖（smoke 4 条 + gate C + 降级测试，不报覆盖率）。补 exclude（`viewer.ts`/`backend-factory.ts`/两个 viewer 类同构先例，注释附前后实测数据），复跑 99.4/98.68/98.95/99.78 全过。
 
 **风险/遗留**（终审裁 ACCEPT-AS-RECORDED，均可搭 P7 cleanup，不阻塞）：
 
