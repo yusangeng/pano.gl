@@ -8,6 +8,7 @@
 
 import type { Backend } from '../renderer/backend'
 import { describeCapabilities, type ProbeInput, type SelectedCapabilities } from '../renderer/capabilities'
+import { WebGL2Backend } from '../renderer/webgl2/backend'
 import { WebGPUBackend } from '../renderer/webgpu/backend'
 
 /**
@@ -60,9 +61,14 @@ export async function createBackend (canvas: HTMLCanvasElement): Promise<Backend
   const webgpu = await WebGPUBackend.create(canvas)
   if (webgpu) return webgpu
 
-  // The WebGL2 backend arrives in P6. Until then, a page without WebGPU cannot
-  // be served, and saying so is better than a black rectangle.
+  // WebGPU first, always: it is the primary path and the one every feature is
+  // developed against. WebGL2 is reached only when `acquireDevice()` came back
+  // empty -- which is the case for a browser without `navigator.gpu` and for
+  // one whose adapter request returned null (spec §6.5, §9.5).
+  const webgl2 = WebGL2Backend.create(canvas)
+  if (webgl2) return webgl2
+
   throw new Error(
-    'no usable rendering backend: WebGPU is unavailable and the WebGL2 fallback is not implemented yet'
+    'no usable rendering backend: neither WebGPU nor WebGL2 is available in this browser'
   )
 }

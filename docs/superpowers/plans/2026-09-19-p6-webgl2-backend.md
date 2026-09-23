@@ -981,7 +981,7 @@ later task sees a cleared buffer."
 - Modify: `src/viewer/backend-factory.ts`
 - Test: `test/integration/webgl2-smoke.test.ts`
 
-- [ ] **Step 1: 实现**
+- [x] **Step 1: 实现**
 
 `src/renderer/webgl2/backend.ts`：
 
@@ -1348,7 +1348,7 @@ export class WebGL2Backend implements Backend {
 }
 ```
 
-- [ ] **Step 2: 接进 `backend-factory.ts`**
+- [x] **Step 2: 接进 `backend-factory.ts`**
 
 把 P5 里那段「WebGL2 还没实现」的 `throw` 换掉：
 
@@ -1371,7 +1371,7 @@ export async function createBackend (canvas: HTMLCanvasElement): Promise<Backend
 ```
 
 > **`probe()` 不用改。** 它已经在用 `describeCapabilities`，而 WebGL2 分支的 `maxTextureDimension` 钳位就在那个函数里（P3 Task 1）。`createBackend` 与 `probe` 因此对同一台机器给出同一个 `backend` —— 这正是「降级是可编程状态」的意思：应用可以在构造之前先问，且问到的就是将要发生的。
-- [ ] **Step 3: 冒烟测试**
+- [x] **Step 3: 冒烟测试**
 
 `test/integration/webgl2-smoke.test.ts`：
 
@@ -1504,6 +1504,16 @@ describe('WebGL2Backend', () => {
     const lost: DeviceLost[] = []
     const unsubscribe = backend!.onDeviceLost(l => lost.push(l))
 
+    backend!.resize(32, 32, 1)
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
+    backend!.setSource(await checkerSource())
+    backend!.render()
+    const before = nonBlackFraction(readGl(canvas))
+
+    // A synthetic loss, dispatched by hand so preventDefault() and the report
+    // can be asked about directly. It has to come after `before`: render() is a
+    // deliberate no-op while the backend is lost, so a draw after this point
+    // would read black regardless of the restore path.
     const synthetic = new Event('webglcontextlost', { cancelable: true })
     canvas.dispatchEvent(synthetic)
 
@@ -1511,21 +1521,19 @@ describe('WebGL2Backend', () => {
       canvas.addEventListener('webglcontextrestored', () => resolve(), { once: true })
     })
 
-    backend!.resize(32, 32, 1)
-    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
-    backend!.setSource(await checkerSource())
-    backend!.render()
-    const before = nonBlackFraction(readGl(canvas))
-
     const gl = canvas.getContext('webgl2')!
-    gl.getExtension('WEBGL_lose_context')!.loseContext()
+    // Taken while the context is alive and kept: a lost context returns null
+    // from getExtension(), so restoreContext() later has to go through the
+    // object taken before the loss.
+    const lose = gl.getExtension('WEBGL_lose_context')!
+    lose.loseContext()
     // One macrotask: the browser fires webglcontextlost asynchronously after
     // loseContext(), so reading `lost` synchronously would read an empty array
     // that looks like "the event never fired".
     await new Promise<void>(resolve => { setTimeout(resolve, 0) })
     const lostCount = lost.length
 
-    gl.getExtension('WEBGL_lose_context')!.restoreContext()
+    lose.restoreContext()
     await restored
 
     // A second source object, because the first one's element was released --
@@ -1555,12 +1563,12 @@ describe('WebGL2Backend', () => {
 
 > **`WebGL2Backend.create` 是同步的，`WebGPUBackend.create` 是 `async` 的。** 不是笔误：WebGPU 的 `requestAdapter()` / `requestDevice()` 是异步 API，WebGL2 的 `getContext('webgl2')` 不是。两个 `Backend` 实现都不因此在接口上多一个 `await` —— `createBackend()` 是 `async` 的，它在里面 `await` 那个异步的、直接调那个同步的。测试写起来是 `const backend = WebGL2Backend.create(canvas)`，不要加 `await`（加了也不会错，但会让人以为它是异步的）。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `npx vitest run --project integration webgl2-smoke`
 Expected: 4 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/webgl2/ test/integration/webgl2-smoke.test.ts src/viewer/backend-factory.ts
