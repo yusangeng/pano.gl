@@ -118,9 +118,17 @@ export function acquireContext (canvas: HTMLCanvasElement): WebGL2RenderingConte
     // is one triangle and nothing to occlude.
     depth: false,
     stencil: false,
-    // The shader outputs exactly what the source contains. Letting the browser
-    // post-multiply introduces a difference against the WebGPU backend that
-    // gate C would then have to tolerate.
+    // Stated, not a silent default. The buffer keeps the source's own alpha
+    // channel: opaque sources (every JPEG, every video) composite identically
+    // either way, a transparent-PNG panorama would blend over the page here
+    // where WebGPU's 'opaque' alphaMode would not, and a real channel is
+    // closer to what a WebGPU read-back returns.
+    alpha: true,
+    // The shader writes source RGBA verbatim, so the buffer is straight alpha
+    // and has to be handed to the compositor that way. The consumers are the
+    // live canvas compositing over the page and P5's readCanvas -> toDataURL
+    // read-back; gate C sees neither, its WebGL2 half builds its own bare
+    // context.
     premultipliedAlpha: false,
     /*
      * TRUE, and it is not a default worth taking. Without it the drawing buffer
