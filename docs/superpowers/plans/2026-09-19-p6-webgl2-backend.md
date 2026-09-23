@@ -649,7 +649,7 @@ dist grep pins that the shader source really lands in the bundle."
 
 **背景**：WebGL 的错误模型和 WebGPU 相反 —— **同步、不抛、只设一个标志位**。`getShaderParameter(COMPILE_STATUS)` 返回 `false`，你必须主动去问。旧代码在这里 `log` 了一行然后 `return null`（缺陷 F7）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/unit/webgl2-errors.test.ts`：
 
@@ -750,12 +750,12 @@ describe('describeShaderError', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- webgl2-errors`
 Expected: FAIL —— 无法解析 `../../src/renderer/webgl2/context`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/renderer/webgl2/context.ts`：
 
@@ -902,12 +902,12 @@ export function acquireContext (canvas: HTMLCanvasElement): WebGL2RenderingConte
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- webgl2-errors`
 Expected: 10 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/webgl2/context.ts test/unit/webgl2-errors.test.ts
