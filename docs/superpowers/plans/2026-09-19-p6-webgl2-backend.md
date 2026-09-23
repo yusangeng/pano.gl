@@ -46,7 +46,7 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 | 浏览器模式的测试写法 | P3 / P4 / P5 | 测试文件本身就在页面里，直接 `import` 被测代码。**没有页面侧出口、没有 hook、没有 `window.__panoTest`** —— 本计划的 Task 3/4/6 全部照此办理 |
 | `renderOffscreen` / `maxChannelDiff` / `RenderRequest` / `RenderResult` | P3 Task 3，`test/integration/support/gpu.ts` | 门禁 C 的 WebGPU 半边、请求/响应类型与差值计算都用它们。**门禁 C 的主张是关于出厂着色器的，所以 WebGPU 侧必须走出厂路径**，而不是一个为了对上这个测试而写的 harness |
 | `support/canvas.ts` | P1 Task 8 | `readCanvas` / `nextFrames` / `countNonBlack` / `maxChannelDiff`。**P6 不重写它们**，`support/gpu.ts` 已经把 `maxChannelDiff` 转口自这里 |
-| P5 的四个用户故事文件 | P5 Task 5 | Task 5 让它们在 WebGL2 下原样重跑。**一个字都不改**，改的是 project 的 `include` |
+| P5 的四个用户故事文件 | P5 Task 5 | Task 5 让它们在 WebGL2 下重跑。四个文件**除 photo 的后端标签断言外一字不改**——那一条的期望值改为从浏览器实际状态推导（推导不是分叉：两个 project 跑同一段代码，各自算出各自的真值），其余改的是 project 的 `include` |
 | P5 的 `test/integration/fallback/user-story-no-webgpu.test.ts` | P5 Task 5 | Task 5/6 把它翻成 WebGL2 的正面断言，并补两种更极端的环境 |
 
 **关于依赖顺序：`support/canvas.ts` 是 P1 建的，`support/gpu.ts` 是 P3 建的，`support/spies.ts` 与 `support/viewer.ts` 是 P5 建的。** P6 只新建 `support/cross-backend.ts`，其余四个是**扩**，不是重写。
@@ -2195,9 +2195,10 @@ the presentation path."
 ### Task 5: 用户故事在 WebGL2 下重跑
 
 **Files:**
-- Modify: `vitest.config.ts`（`no-webgpu` project 的 `include`）
-- Modify: `test/integration/support/spies.ts`（`countDraws` 覆盖两个后端）
+- Modify: `vitest.config.ts`（`no-webgpu` project 的 `include`，与它的 provider 补 `deviceScaleFactor`）
+- Modify: `test/integration/support/spies.ts`（`countDraws` 与 `captureRenderInputs` 覆盖两个后端）
 - Modify: `test/integration/fallback/user-story-no-webgpu.test.ts`（翻成正面断言）
+- Modify: `test/integration/user-story-photo.test.ts`（probe 断言的期望值从固定标签改为按浏览器实际状态推导）
 
 **这是后端替换的验收方式** —— 同一批用户故事，换个后端。
 
@@ -2244,16 +2245,31 @@ P1 已经把两个 project 建好了，`no-webgpu` 的注释里写着它将来�
       'test/integration/fallback/**/*.test.ts',
       'test/integration/user-story-(photo|video|camera-switch|media-failure).test.ts'
     ],
-    // ...provider（--disable-gpu）与 instances 原样保留...
+    // provider 原本只剩 --disable-gpu 一行；Task 5 给它补了 DPR 对齐，这是
+    // include 之外该 project 唯一的改动：
+    provider: playwright({
+      launchOptions: { channel: 'chromium', args: ['--disable-gpu'] },
+      // DPR parity with the integration project: a user story
+      // (user-story-photo, "renders sharply on a high-DPI display")
+      // hard-asserts devicePixelRatio === 2 precisely so it cannot
+      // silently pass at DPR 1, which is what this project would hand
+      // it without this line -- Playwright's default is 1. The only
+      // intended difference between the two projects is the GPU; the
+      // pixel density must not be a hidden variable that re-runs the
+      // same text against a differently-shaped canvas.
+      contextOptions: { deviceScaleFactor: 2 }
+    }),
+    headless: true,
+    instances: [{ browser: 'chromium' }]
   }
 }
 ```
 
-> **四个文件因此跑两次，文本一字不差。** 这是这个做法相对「把测试体抽成 helper、再写一个 spec 文件」的全部价值：不是**劝阻**重复，而是让重复不可能发生。
+> **四个文件因此跑两次，同一段代码。** 这是这个做法相对「把测试体抽成 helper、再写一个 spec 文件」的全部价值：不是**劝阻**重复，而是让重复不可能发生。唯一的例外是 photo 的 probe 断言：期望值从固定标签改为按浏览器实际状态推导——推导不是分叉，两个 project 跑的是同一段代码，各自算出各自的真值。
 
-- [ ] **Step 1: 让 `countDraws` 覆盖两个后端**
+- [ ] **Step 1: 让 `countDraws` 与 `captureRenderInputs` 覆盖两个后端**
 
-`test/integration/support/spies.ts` 现在只包 `WebGPUBackend.prototype.render`。在 `no-webgpu` project 里那个方法永远不会被调用，于是 `draws()` 恒为 0 —— 一条 `expect(frames).toBe(0)` 会**空过**，一条 `expect(drew).toBeGreaterThan(0)` 会**误红**。两种都不是在测它想测的东西。
+`test/integration/support/spies.ts` 的两个入口现在都只包 `WebGPUBackend.prototype`。开工核实时发现（实现方 preflight STOP，协调者已在源里复核）：四个用户故事到达后端走的是 **`captureRenderInputs`**（photo 3 处 / video 3 处 / media-failure 1 处），不是 `countDraws`（它只有 dispose-order / viewer-events / viewer-render-input 用，那三个不进 `no-webgpu`）。所以两个都要扩，缺一个都会让 `no-webgpu` 里的绘制断言要么**空过**（`frames === 0` 对着没人调用的方法成立），要么**误红**（`sourceCalls() - before > 0` 恒假）。camera-switch 完全不用 spy；`captureTeardown` 包的是 ResizeObserver/EventEmitter 原型，本来就与后端无关。
 
 ```ts
 import { vi } from 'vitest'
@@ -2285,9 +2301,69 @@ export function countDraws (): () => number {
 >
 > **`afterEach(() => { vi.restoreAllMocks() })` 是必须的**，P5 的 US2 与 US4 已经写了。恢复之后 `render` 回到真实现，下一个测试才画得出东西 —— 少了它，一个文件里后面的每个测试都会拿到被掏空的 `render`。
 
+`captureRenderInputs` 同样扩到两个原型，但它是**纯 spy**（`vi.spyOn` 不带 `mockImplementation`，记录并放行）：用户故事在它之后做像素断言，一个被掏空的 `setSource` 会让那些断言变成「对着没人渲染过的帧」。
+
+```ts
+/**
+ * Records what the viewer hands the backend on each frame.
+ *
+ * `countDraws` above answers "did the loop run"; this answers "with what",
+ * which is a different question and one no pixel comparison can reach. A
+ * viewer that called `setSource(null)` for ever, or pinned the camera to the
+ * origin, would still draw the right NUMBER of frames -- so a suite built only
+ * on `countDraws` stays green through both, as the quality review measured.
+ *
+ * Both spies call through. These tests assert on the arguments, not on a
+ * stubbed-out backend: replacing `setSource` with a recorder would leave the
+ * real backend never told about the source, and every pixel assertion made
+ * afterwards would be about a frame nobody rendered.
+ *
+ * BOTH prototypes, for the same reason `countDraws` wraps both: the same
+ * user-story file runs in two projects and only one backend exists in each.
+ * At most one of the two accounts is ever non-empty -- "the last call" is the
+ * last call of whichever one is, and `sourceCalls` is their sum for the same
+ * reason the draw counter is one number.
+ */
+export function captureRenderInputs (): {
+  readonly lastSource: () => RenderableSource | null | undefined
+  readonly lastCamera: () => { state: CameraState, projection: Projection } | undefined
+  readonly sourceCalls: () => number
+} {
+  const sources = [
+    vi.spyOn(WebGPUBackend.prototype, 'setSource'),
+    vi.spyOn(WebGL2Backend.prototype, 'setSource')
+  ]
+  const cameras = [
+    vi.spyOn(WebGPUBackend.prototype, 'setCamera'),
+    vi.spyOn(WebGL2Backend.prototype, 'setCamera')
+  ]
+  for (const spy of [...sources, ...cameras]) spy.mockClear()
+
+  return {
+    // `undefined` means "never called", `null` means "called with no source".
+    // Collapsing the two would make the not-yet-loaded case indistinguishable
+    // from a backend the viewer never spoke to at all.
+    lastSource: () => {
+      for (const spy of sources) {
+        if (spy.mock.calls.length > 0) return spy.mock.calls.at(-1)?.[0]
+      }
+      return undefined
+    },
+    lastCamera: () => {
+      for (const spy of cameras) {
+        const call = spy.mock.calls.at(-1)
+        if (call !== undefined) return { state: call[0], projection: call[1] }
+      }
+      return undefined
+    },
+    sourceCalls: () => sources.reduce((total, spy) => total + spy.mock.calls.length, 0)
+  }
+}
+```
+
 - [ ] **Step 2: 把 US5 翻成正面断言**
 
-`test/integration/fallback/user-story-no-webgpu.test.ts` 现在断言 `probe()` 是 `'none'`、`create()` 抛异常 —— 那是 P6 还没落地时的诚实结果。**现在它要翻过来**，这正是那个文件存在的意义（P5 的交接表里点名了这件事）：
+`test/integration/fallback/user-story-no-webgpu.test.ts` 现在断言 `probe()` 是 `'none'`、`create()` 抛异常 —— 那是 P6 还没落地时的诚实结果。**现在它要翻过来**，这正是那个文件存在的意义（P5 的交接表里点名了这件事）。落地版相对本计划初稿有三处修正：`create()` 必须带 `src`（`ImageViewerOptions.src` 是必填，缺了在 `assertSrc` 就抛）；两处对 probe 结果的字段读取前要先收窄掉 `SelectedCapabilities` 的 `'none'` 分支（否则过不了 typecheck）；外加协调者裁定的 probe-vs-constructed `maxTextureDimension` 相等断言（钉住 Task 3 的 probe 修正）：
 
 ```ts
 import { describe, expect, it, vi } from 'vitest'
@@ -2316,6 +2392,10 @@ describe('US5: running where WebGPU is unavailable', () => {
     // about a machine with no usable backend.
     const caps = await FramelessImageViewer.probe()
     expect(caps.backend).toBe('webgl2')
+    // `SelectedCapabilities` has a 'none' arm that carries nothing else, so the
+    // reads below need the union narrowed. The throw is for the compiler: the
+    // line above has already made it unreachable.
+    if (caps.backend === 'none') throw new Error('probe() reported no backend')
     // The WebGPU-only capability is dropped along with the label. A backend
     // reporting webgl2 with externalTextures: true sends callers down a path
     // this backend cannot serve.
@@ -2326,7 +2406,12 @@ describe('US5: running where WebGPU is unavailable', () => {
     // The end-to-end form of the same claim: not "the label says webgl2", but
     // "a 360 photo appears". Before P6 this threw.
     const container = makeContainer()
-    const viewer = await FramelessImageViewer.create({ container })
+    // `src` is required at construction (the frozen surface has no src-less
+    // viewer), and re-assigning the same URL once the listeners are on is what
+    // keeps the load observable: the construction-time load may land before a
+    // listener could attach, and the swap through the public setter is a real
+    // load either way.
+    const viewer = await FramelessImageViewer.create({ container, src: '/fixtures/panorama.png' })
     const losses: unknown[] = []
     viewer.on('device-lost', e => losses.push(e))
     const loaded: string[] = []
@@ -2337,9 +2422,20 @@ describe('US5: running where WebGPU is unavailable', () => {
     await nextFrames(2)
     const image = await readCanvas(canvasOf(container))
     const backend = viewer.capabilities.backend
+    // Pins Task 3's probe fix end to end: probe() (which reads MAX_TEXTURE_SIZE
+    // when there is no adapter) and a constructed viewer must report the SAME
+    // clamped maxTextureDimension, not just the same backend label. A probe
+    // that under-reports would make apps pre-downscale sources the viewer can
+    // actually take.
+    const probed = await FramelessImageViewer.probe()
+    const constructed = viewer.capabilities.maxTextureDimension
     viewer.dispose()
 
     expect(backend).toBe('webgl2')
+    // Same narrowing as test 1: 'none' is the arm with no maxTextureDimension,
+    // and probe() answering it here is itself the failure.
+    if (probed.backend === 'none') throw new Error('probe() reported no backend')
+    expect(constructed).toBe(probed.maxTextureDimension)
     expect(countNonBlack(image)).toBeGreaterThan(0.2 * image.width * image.height)
     // A downgrade is not a device loss, and reporting it as one would make every
     // consumer's error path fire on a page that is working perfectly.
@@ -2348,7 +2444,31 @@ describe('US5: running where WebGPU is unavailable', () => {
 })
 ```
 
-- [ ] **Step 3: 跑全部**
+- [ ] **Step 3: photo 的 probe 断言改为按环境推导**
+
+include 扩容后（Step 1 的 config 块），同一份 photo 文本要在两个 project 里跑，而它有一条断言钉死了 `probe() === 'webgpu'` —— 那是 `integration` 一方的真值，在 `--disable-gpu` 下就是谎言（US5 的第一条测试断言的恰恰是 `'webgl2'`）。这条测试自称「US5 的另一半」，它的真值本来就随环境而变，所以期望值改为从浏览器实际状态推导，且推导放在 probe 调用**之前**：地面真值先行，被测物其次。这是四个文件里唯一的环境钉死字面量（开工时逐文件扫过：'webgpu'/'adapter'/`navigator.gpu`/`externalTextures`/`devicePixelRatio` 全查）。落地文本：
+
+```ts
+  it('an application can ask about the backend before it creates anything', async () => {
+    /*
+     * The other half of US5, and the one environment-pinned literal this file
+     * carries: the same text runs in two projects, and a FIXED backend label
+     * would be true in one and a lie in the other. The expectation is derived
+     * from the browser's actual state instead -- independently of probe(),
+     * which is the thing under test -- so the assertion stays "probe() reports
+     * the truth of whichever environment it runs in", in both projects. A
+     * probe that misreported in either direction is the legacy silent
+     * downgrade back again: "ask first, then decide" was the whole reason
+     * probe exists, and an answer that cannot be trusted in the good case is
+     * worse than none.
+     */
+    const adapter = navigator.gpu ? await navigator.gpu.requestAdapter() : null
+    const caps = await FramelessImageViewer.probe()
+    expect(caps.backend).toBe(adapter !== null ? 'webgpu' : 'webgl2')
+  })
+```
+
+- [ ] **Step 4: 跑全部**
 
 Run: `npm test`
 Expected: 全 PASS。**四个用户故事要在两个 project 里各出现一次** —— 只出现一次是 `include` 没生效，不是测试通过：
@@ -2360,13 +2480,16 @@ npx vitest list --project integration 2>/dev/null | grep -c "user-story-"
 
 Expected: 两条都大于 0。
 
-**如果 `no-webgpu` 里红的是绘制计数**：`countDraws` 没覆盖到 `WebGL2Backend`（Step 1）。**如果红的是画面**：`preserveDrawingBuffer` 没开，于是 `readCanvas` 的 `toDataURL` 拿到的是清屏后的黑 —— 见「明确的非目标」里那一条。
+**如果 `no-webgpu` 里红的是绘制计数**：`countDraws` / `captureRenderInputs` 没覆盖到 `WebGL2Backend`（Step 1）。**如果红的是画面**：`preserveDrawingBuffer` 没开，于是 `readCanvas` 的 `toDataURL` 拿到的是清屏后的黑 —— 见「明确的非目标」里那一条。
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add vitest.config.ts test/integration/support/spies.ts test/integration/fallback/user-story-no-webgpu.test.ts
-git commit -m "test(viewer): run every user story against the WebGL2 backend
+git add vitest.config.ts test/integration/support/spies.ts \
+  test/integration/fallback/user-story-no-webgpu.test.ts \
+  test/integration/user-story-photo.test.ts \
+  docs/superpowers/plans/2026-09-19-p6-webgl2-backend.md
+git commit -m "task-p6-webgl2-backend: test(viewer): run every user story against the WebGL2 backend
 
 Widening the no-webgpu project's include, not writing a second spec file. The
 user-story tests are the same text run twice, so there is no second copy to
@@ -2374,8 +2497,28 @@ drift -- a stronger guarantee than extracting shared helpers gives. The project
 is a whitelist: the gates all assert a real adapter and would fail there for a
 reason unrelated to their subject.
 
-countDraws now wraps both backends. It wrapped only the WebGPU one, which made
-'frames === 0' pass vacuously under the fallback and 'drew > 0' fail wrongly."
+The user stories reach the backend through captureRenderInputs, not
+countDraws -- the plan's Task 5 premised the wrong spy. Both are widened to
+wrap BOTH prototypes: countDraws with one shared counter (its assertions only
+ever read counts), captureRenderInputs with call-through spies on two
+accounts, at most one of which is non-empty in any project.
+
+The no-webgpu provider also gains the integration project's
+deviceScaleFactor: 2 -- photo's high-DPI story hard-asserts DPR 2 so it cannot
+silently pass at 1, and the only difference between the projects is meant to
+be the GPU.
+
+One photo assertion moves from a fixed label to a derived one: its probe test
+pinned backend === 'webgpu', which is the integration project's truth and a
+lie under --disable-gpu. The expectation now comes from the browser's actual
+adapter state, measured independently of probe(), so the same text asserts
+\"probe() tells the truth\" in both projects instead of in one.
+
+US5 flips to the post-P6 truth: probe() reports webgl2 and create() renders,
+with probe's and the constructed viewer's clamped maxTextureDimension pinned
+equal.
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
 
 ---
@@ -2605,11 +2748,11 @@ is the one easiest to miss, and it is exactly what --disable-gpu produces."
 ## 完成标准
 
 - [ ] 门禁 C 的 18 条全绿，容差未被放宽
-- [ ] P5 的四个用户故事文件 **untouched**，在两个 project 下各跑一遍且都绿
+- [ ] P5 的四个用户故事文件**除 photo 的后端标签断言外一字不改**（该断言的期望值改为从浏览器实际状态推导，推导不是分叉：两个 project 跑同一段代码，各自算出各自的真值），在两个 project 下各跑一遍且都绿
 - [ ] `fallback/user-story-no-webgpu.test.ts` 已从「`probe()` 是 `none`、`create()` 抛」翻成「`probe()` 是 `webgl2`、`create()` 成功并画出画面」
 - [ ] 三种降级环境各有一条测试，且**每一种在自己的 project 里都是真的状态改变**（环境一里有真适配器可以拿掉，环境二靠启动参数，环境三在环境二之上）
 - [ ] `capabilities.backend === 'webgl2'` 且 `externalTextures === false`，且这个值来自 `describeCapabilities`
-- [ ] `countDraws` 覆盖两个后端，`no-webgpu` project 下的绘制计数不空过
+- [ ] `countDraws` 与 `captureRenderInputs` 覆盖两个后端，`no-webgpu` project 下的绘制计数不空过
 - [ ] 着色器编译失败会抛异常，不返回死后端
 - [ ] 连续创建/销毁 20 个后端不耗尽上下文额度
 - [ ] `webglcontextlost` 被 `preventDefault()` 并上报 `{ reason: 'context-lost' }`；`webglcontextrestored` 后能重新画出画面
