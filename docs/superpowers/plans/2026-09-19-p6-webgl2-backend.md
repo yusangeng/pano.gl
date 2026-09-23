@@ -755,6 +755,22 @@ describe('linkProgram', () => {
   })
 })
 
+describe('the (no log) fallback', () => {
+  it('names the silence when either info log returns null', () => {
+    // getShaderInfoLog and getProgramInfoLog may return null, and
+    // stringifying that would print "null" where the diagnostic belongs.
+    // Both throws name the silence with the same literal, so one mock
+    // covering both logs pins both paths.
+    const gl = {
+      ...fakeGl(false),
+      getShaderInfoLog: vi.fn(() => null),
+      getProgramInfoLog: vi.fn(() => null)
+    } as unknown as WebGL2RenderingContext
+    expect(() => compileShader(gl, 0x8b31, 'x', 'vertex')).toThrow('(no log)')
+    expect(() => linkProgram(gl, 0x8b31 as never, 0x8b30 as never)).toThrow('(no log)')
+  })
+})
+
 describe('describeShaderError', () => {
   it('annotates a line number with the offending source line', () => {
     // The driver reports "0:12"; without the source line, finding it means
@@ -775,7 +791,6 @@ describe('describeShaderError', () => {
     expect(() => describeShaderError('ERROR: 0:9999: boom', 'short')).not.toThrow()
   })
 })
-```
 
 - [x] **Step 2: 跑测试确认失败**
 
@@ -940,7 +955,7 @@ export function acquireContext (canvas: HTMLCanvasElement): WebGL2RenderingConte
 - [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- webgl2-errors`
-Expected: 10 个测试 PASS
+Expected: 13 个测试 PASS
 
 - [x] **Step 5: Commit**
 
