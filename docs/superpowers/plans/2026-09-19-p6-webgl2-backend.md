@@ -137,7 +137,7 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 - Create: `src/renderer/webgl2/shaders/index.ts`
 - Test: `test/unit/webgl2-shaders.test.ts`
 
-- [ ] **Step 1: 转写**
+- [x] **Step 1: 转写**
 
 `src/renderer/webgl2/shaders/panorama.glsl`：
 
@@ -438,13 +438,13 @@ export const PANORAMA_GLSL_VERTEX = VERTEX_SOURCE
 export const PANORAMA_GLSL_FRAGMENT = FRAGMENT_SOURCE
 ```
 
-- [ ] **Step 2: （已随 tsup → vite 裁撤——读一遍本注即可，无代码要写）**
+- [x] **Step 2: （已随 tsup → vite 裁撤——读一遍本注即可，无代码要写）**
 
 > **（2026-09-20 勘误，P1 终末复审补遗 S1）** 本步原为「在 `tsup.config.ts` 里加 esbuild 的 `?raw` resolve 插件」（原注的理由：esbuild 会把 `./panorama.glsl?raw` 当真实文件名去解析，造出 `npm run test:unit` 全绿而 `npm run build` 失败的失败顺序）。P1 已把库打包器裁决换为 **vite lib mode**（`build` = `vite build`，仓库无 tsup / tsup.config.ts），本步整体作废：`?raw` 是 Vite 的原生约定，vitest、demo 与 `vite build` 全部直接支持，**构建侧零配置**——不存在要写的插件，也不存在要建的 `tsup.config.ts`（更不要把 tsup 装回来）。防配置回归的构建侧验证保留在 Step 5。
 >
 > 仍然成立的那条告诫：**不要退回到把着色器内联进 TS**——那会牺牲着色器文件的语法高亮，而这是长期维护里最值钱的东西。
 
-- [ ] **Step 3: 写结构与一致性测试**
+- [x] **Step 3: 写结构与一致性测试**
 
 `test/unit/webgl2-shaders.test.ts`：
 
@@ -600,12 +600,12 @@ describe('WebGL2 shader source', () => {
 })
 ```
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `npm run test:unit -- webgl2-shaders`
 Expected: 11 个测试 PASS
 
-- [ ] **Step 5: 证明构建也认这份着色器**
+- [x] **Step 5: 证明构建也认这份着色器**
 
 `?raw` 的接线是否成立，单元测试证明不了 —— vitest 走 Vite，它当然认；`vite build`（lib mode）走的是同一个 Vite，但这一步把「着色器源码真的进了产物」钉成断言，防的是 lib mode 资源处理的配置回归：
 
@@ -616,7 +616,7 @@ grep -c "#version 300 es" dist/index.js
 
 Expected: 构建成功，`grep` 输出 ≥ 1（着色器源码真的进了产物，而不是被解析成外部资源引用）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/renderer/webgl2/shaders/ test/unit/webgl2-shaders.test.ts
