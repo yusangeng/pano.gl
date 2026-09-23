@@ -3,7 +3,7 @@ plan: docs/superpowers/plans/2026-09-19-p6-webgl2-backend.md
 scope: [src/renderer/**, src/viewer/backend-factory.ts, vitest.config.ts, test/**]
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: foundation
-deps: [p5-viewer]
+deps: [p5-viewer, camera-freeze-fix]
 state: open
 createdAt: 2026-09-19T08:51:52.902Z
 ---
