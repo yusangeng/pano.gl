@@ -86,7 +86,10 @@ describe('US1: view a 360 photo and look around', () => {
      * latitude half is new intended behaviour -- v0.2.2's shader never
      * read u_CamPOVLatitude, v1's WGSL does -- so the expected value here
      * is v1's own semantics (the pixels move), never the v0.2.2 capture.
-     * Turn sizes are large on purpose: the sample window has to shift by
+     * The redraw count below watches the loop layer only: setSource fires
+     * for every frame the loop selects, upstream of the backend's dirty
+     * gate, so the pixel assertion is the half that catches a backend
+     * freeze. Turn sizes are large on purpose: the sample window has to shift by
      * more than rounding for the diff to clear the bound. If a half ever
      * reads <= 2 WITH the redraw confirmed below, report it -- do not
      * loosen the bound or shrink the turn silently.

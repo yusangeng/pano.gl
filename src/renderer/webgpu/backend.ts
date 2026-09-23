@@ -66,7 +66,13 @@ export class WebGPUBackend implements Backend {
   // and fail both the packer's ArrayBuffer parameter and writeBuffer's view
   // type. This array is always over a plain ArrayBuffer we allocated.
   #cameraValues: Float32Array<ArrayBuffer>
-  /** The clip matrix as last uploaded, for detecting an unchanged camera. */
+  /**
+   * The clip matrix as last handed in. Write-only: no reader remains (the
+   * equality early-out that read it is gone -- deliberately, see setCamera),
+   * and the copy stays as a minimal-diff record of the last camera
+   * transform. The matrix the fragment stage consumes is the inverse kept
+   * in `#invClip`.
+   */
   #clip: mat4 = mat4.create()
   #invClip: mat4 = mat4.create()
   #sampler: GPUSampler

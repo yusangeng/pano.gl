@@ -418,25 +418,29 @@ describe('setCamera', () => {
   it('uploads the camera uniforms on every call, even when the matrix cannot see the change', async () => {
     const h = await makeBackend()
     h.backend.setCamera(CAMERA, CYLINDRICAL)
-    h.backend.setCamera({ ...CAMERA }, { ...CYLINDRICAL })
+    const MOVED = { povLatitude: 30, povLongitude: 40 }
+    h.backend.setCamera(MOVED, { ...CYLINDRICAL })
     /*
-     * Identical arguments, and the upload must happen anyway. On the
-     * non-linear kinds the clip matrix is constant BY DESIGN (matrix.ts
-     * builds their views from LEGACY_QUAD_VIEW), so a matrix-equality
-     * early-out cannot tell "nothing changed" from "the camera moved in
-     * the uniforms" -- the version this test replaced skipped both the
-     * upload and the dirty flag on every camera change, freezing pan and
-     * zoom on three of the four kinds. There is no skip left to get
-     * wrong; the render loop already limits setCamera to frames that are
-     * being drawn, so the unconditional write costs one small upload per
-     * drawn frame.
+     * Same projection kind, moved pose -- and the upload must happen
+     * anyway. On the non-linear kinds the clip matrix is constant BY
+     * DESIGN (matrix.ts builds their views from LEGACY_QUAD_VIEW), so a
+     * matrix-equality early-out cannot tell "nothing changed" from "the
+     * camera moved in the uniforms" -- the version this test replaced
+     * skipped both the upload and the dirty flag on every camera change,
+     * freezing pan and zoom on three of the four kinds. There is no skip
+     * left to get wrong; the render loop already limits setCamera to
+     * frames that are being drawn, so the unconditional write costs one
+     * small upload per drawn frame. The second call moves the pose (the
+     * projection kind alone stays put, which is what keeps the matrix
+     * blind) so the content assertions below can tell a fresh pack from
+     * a stale one.
      */
     expect(h.mocks.writeBuffer).toHaveBeenCalledTimes(2)
-    // The second upload carries the camera too -- two writes that both
+    // The second upload carries the moved camera -- two writes that both
     // dropped the pose would satisfy the count above and freeze anyway.
     const view = uniformUpload(h, 1)
-    expect(view.getFloat32(72, true)).toBe(CAMERA.povLatitude)
-    expect(view.getFloat32(76, true)).toBe(CAMERA.povLongitude)
+    expect(view.getFloat32(72, true)).toBe(MOVED.povLatitude)
+    expect(view.getFloat32(76, true)).toBe(MOVED.povLongitude)
   })
 
   it('uploads again when the camera changes', async () => {
