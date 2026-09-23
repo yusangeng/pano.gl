@@ -1683,10 +1683,11 @@ import { ndcToSurface, project } from '../../../src/core/reference'
 import type { CameraState, Projection } from '../../../src/core/types'
 
 /**
- * Gate C renders at 128x128 and that number is not free: WebGPU's
- * copyTextureToBuffer requires bytesPerRow to be a multiple of 256, and
- * 128 * 4 = 512. Change the size and the WebGPU half fails with a validation
- * error that says nothing about the projection formulas.
+ * Gate C renders at 128x128. The number is convention, not a constraint:
+ * WebGPU's copyTextureToBuffer wants bytesPerRow to be a multiple of 256 and
+ * gpu.ts's readTexture pads it when a width does not divide evenly (its own
+ * comment says so), so other sizes work. 128 * 4 = 512 divides evenly, which
+ * keeps the readback unpadded.
  */
 export const GATE_C_SIZE = 128
 
@@ -1731,10 +1732,12 @@ export async function gateSource (): Promise<{ bitmap: ImageBitmap, size: number
   }
 
   ctx.putImageData(image, 0, 0)
-  // imageOrientation: 'none' -- the v flip lives in the shader. `createImageBitmap`
-  // defaults to 'from-image', which would apply the EXIF orientation and, for a
-  // canvas source, land on the opposite convention from the one the GLSL half
-  // sets with UNPACK_FLIP_Y_WEBGL = false.
+  // imageOrientation: 'none' pins the orientation by the call rather than
+  // leaving it to the 'from-image' default, whose meaning varies by source
+  // type. A canvas carries no EXIF to apply -- measured in this suite's
+  // Chromium, the default and 'none' produce byte-identical bitmaps -- so
+  // this is determinism, not a flip workaround. The v flip lives in the
+  // shader, and the GLSL half uploads with UNPACK_FLIP_Y_WEBGL = false.
   return { bitmap: await createImageBitmap(canvas, { imageOrientation: 'none' }), size: GATE_C_SIZE }
 }
 
@@ -1818,6 +1821,13 @@ export async function renderOffscreenGLSL (request: RenderRequest): Promise<Rend
 
   gl.deleteTexture(texture)
   gl.deleteProgram(program)
+
+  // Release the context now rather than at GC time: one is created per call
+  // and the suite runs ~21 of them, past Chrome's ~16-active-context LRU
+  // threshold -- exactly the accumulation defect L5's dispose fix exists to
+  // prevent (see WebGL2Backend.dispose). The WebGPU half already disposes
+  // its backend per call.
+  gl.getExtension('WEBGL_lose_context')?.loseContext()
 
   return { width, height, rgba: topDown }
 }
