@@ -5,6 +5,7 @@ import { wheel } from './support/gestures'
 import { captureRenderInputs } from './support/spies'
 import { imageViewer, videoViewer } from './support/viewer'
 import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
+import { skipIfVideoUploadUnavailable } from './support/upload-paths'
 
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -30,9 +31,17 @@ describe('US2: play a 360 video and zoom', () => {
    * default and the disposed-play rejection, whose assertions hold before any
    * frame lands -- probe first and skip on a device that cannot keep a
    * presented-canvas WebGPU device alive (support/presented-canvas.ts).
+   *
+   * The two tests whose assertions need real video PIXELS additionally gate on
+   * the video upload itself (skipIfVideoUploadUnavailable): a machine can keep
+   * presented-canvas devices alive and still be unable to turn a video element
+   * into a texture -- measured on a macOS SwiftShader launch, where exactly
+   * these two fail while every image test passes. The teardown, muted-default
+   * and zoom tests assert DOM state or image pixels and hold either way.
    */
   it('plays and advances frames', async (ctx) => {
     await skipIfPresentedCanvasBroken(ctx)
+    await skipIfVideoUploadUnavailable(ctx)
     const { viewer, container } = await videoViewer({ loop: true })
     const events: string[] = []
     // Both listeners before playback starts, so neither event can be missed --
@@ -71,6 +80,7 @@ describe('US2: play a 360 video and zoom', () => {
 
   it('a paused video stops drawing', async (ctx) => {
     await skipIfPresentedCanvasBroken(ctx)
+    await skipIfVideoUploadUnavailable(ctx)
     // The loop draws when the source's version changes, and a video advances its
     // version only while it is playing. Without that guard, this is the test
     // that catches "a paused video still burns a full-screen shader at 60Hz".
