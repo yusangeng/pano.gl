@@ -1,6 +1,6 @@
 ---
 plan: docs/superpowers/plans/2026-09-23-pan-zoom-semantics.md
-scope: [[src/core/reference.ts, src/renderer/webgpu/shaders/panorama.wgsl, src/renderer/webgl2/shaders/panorama.glsl, src/viewer/camera-controller.ts, src/viewer/viewer.ts, test/**, CLAUDE.md]]
+scope: [src/core/reference.ts, src/renderer/webgpu/shaders/panorama.wgsl, src/renderer/webgl2/shaders/panorama.glsl, src/viewer/camera-controller.ts, src/viewer/viewer.ts, test/**, CLAUDE.md]
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: foundation
 deps: [p6-webgl2-backend]
