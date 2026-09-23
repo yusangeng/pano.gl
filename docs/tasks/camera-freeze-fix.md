@@ -13,6 +13,8 @@ createdAt: 2026-09-23T03:11:50.274Z
 
 ## 完成报告
 
+四要素分节如下：做了什么 / 红网证据与自测结果 / 偏离 plan 的点 / 遗留风险。
+
 ### 做了什么
 
 - **Task 1（只写测试）**：① `test/unit/webgpu-backend.test.ts` — 整体删除 `'skips the upload when the clip matrix is unchanged'`，原位插入 always-upload 红测（2 次上传 + 第 2 次内容带 pose，偏移 72/76）；② `test/integration/user-story-video.test.ts` — 整用例替换 `'a wheel zoom-out reaches the camera state of a non-linear projection'`，恢复像素断言（redraw 差分 + `maxChannelDiff > 2`，读回移到 dispose 之前）；③ `test/integration/user-story-photo.test.ts` — 拖拽用例之后插入 `it.each` 两半（latitude/longitude）非线性平移像素用例。三条均在带缺陷树上先跑出具名红（证据见下）。
