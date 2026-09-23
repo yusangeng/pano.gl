@@ -185,9 +185,9 @@ export default defineConfig({
              * (the adapter still appears), and adding
              * --disable-software-rasterizer would kill WebGL2 too.
              *
-             * This project is what P6 grows into: P6 widens its `include` to
-             * the whole integration suite (excluding the gate tests) so that
-             * every user story from P5 is proven to pass on the WebGL2 path.
+             * P6 widened this project's `include` to the four P5 user-story
+             * files -- a whitelist, for the reasons on the include itself --
+             * so every user story is proven to pass on the WebGL2 path.
              */
             provider: playwright({
               launchOptions: { channel: 'chromium', args: ['--disable-gpu'] },
