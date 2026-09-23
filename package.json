@@ -1,6 +1,6 @@
 {
   "name": "pano.gl",
-  "version": "1.0.0-alpha.0",
+  "version": "1.0.0",
   "description": "Dependency-light WebGPU/WebGL2 viewer for equirectangular 360 images and video",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -36,9 +36,6 @@
     "name": "yusangeng",
     "email": "yusangeng@outlook.com"
   },
-  "publishConfig": {
-    "tag": "alpha"
-  },
   "scripts": {
     "build": "vite build",
     "prepublishOnly": "npm run build",
@@ -72,5 +69,8 @@
     "vite": "^7",
     "vite-plugin-dts": "^5.1.1",
     "vitest": "^5"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

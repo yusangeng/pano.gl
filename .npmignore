@@ -1,4 +1,12 @@
+# "files": ["dist"] in package.json is what actually decides the tarball: npm
+# publishes exactly that list, and at the package root .npmignore does not
+# override it. This file is belt-and-braces -- it does apply inside
+# subdirectories, and it still holds if "files" is ever widened.
 node_modules
 coverage
 demo
-wasm
+test
+docs
+.package
+.vitest
+__traces__
