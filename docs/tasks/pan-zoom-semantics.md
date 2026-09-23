@@ -20,6 +20,7 @@ createdAt: 2026-09-23T09:00:57.224Z
 - **Task 1+2（eb56504，测试与修复同一提交）**：红网先行——unit `camera-controller` 翻转四条新增两条、unit `reference` pins 六条按 `lng = povLongitude * PI / 180` 重算、US2 两条翻转、photo 新增 quarter-shift 红 网（`a 90° pose turns the picture by exactly a quarter of its width`）与 360° 往返绿钉；修复同提交落齐——C1 三处同步（`panorama.wgsl` / `panorama.glsl` / `reference.ts`，注释互指 pan-zoom-semantics spec）、C2 `zoom()` 统一为 `param / max(1 + delta, EPSILON)` 两路 clamp、C3 linear 以 fov 落地（`MIN_FOV`/`MAX_FOV` = [15°, 110°]）；`viewer.ts` TSDoc 与 CLAUDE.md 仲裁节同步改述。具名红记录见 plan Task 1 Step 5（已在带缺陷树上逐条跑出）。
 - **d25549c（评审整改，纯注释提交）**：glsl 幅度量级 29 → 45/PI ≈ 14.3；`gestures.ts` `wheel()` TSDoc 方向改正（滚下才是 ceiling no-op）；photo 测试两处注释精确化。无行为行改动。
 - **Task 3（本步，验证+登记，零行为改动）**：门 A 亲跑全绿并在 `comparableStates` 注释块登记 lng≠0 有意分歧；基线族零 diff 核验；verify 六连当面跑全绿；三体变异抽查具名击杀、还原 sha 双向核对；卡面登记 + plan 勾选。
+- **3742d6d（第 2 关测试质量整改，纯测试增补）**：quarter-shift 网加 1:1 读回内容守卫（`countNonBlack(home) > 0`，堵「两条空白读回使 worst=0 空洞地绿」）；clamp 测试加 planet 臂钉统一 clamp [0.01, 1] 两端点（堵「恢复 per-kind 旧 clamp 不红任何测试」——复审机械验证：恢复 planet 旧域 [0.1, 2] 会使两条断言双红）。两处编辑出自实现 agent（pz-impl-task1），其限额中断后验证与提交由协调者完成（photo 12/12 双 project、camera-controller 35/35、typecheck、lint 全绿），复审确认 RESOLVED。
 
 ### 红网证据与自测结果
 
@@ -83,7 +84,9 @@ sha 轨迹：M1 wgsl 656a97fa→3c06bc15→656a97fa（sentinel glsl cdae5445 恒
 
 ### 测试质量结论
 
-本轮未单独跑 effective-testing 技能评估；测试质量按以下实测证据登记：①红网先行纪律全程执行（Task 1 具名红记录在 plan Step 5，修复同提交落地）；②Task 3 三体变异抽查全部具名击杀，且 M1 的负对照（unit reference pins、photo 360° 往返）实测不红——证明网挂在其声称的位置而非顺带红；③coverage 四门槛 98.7% branch / 99.4% statements（门槛 90%）；④门 A 可比集断言（`has a non-empty comparable set…`）在位，防「集合静默清空导致零比对假绿」。
+第 2 关按收工纪律以 effective-testing 审查清单评估本分支改动的测试（fresh 评审 agent，2026-09-24，评估范围 4243e01..a07164a + 卡面登记提交 6598271）：**0 CRITICAL、2 WARNING、3 NOTE**（NOTE 均为查验后接受项，无需整改）；两条 WARNING 以 3742d6d 一轮整改后复审确认 **RESOLVED**，共 1 轮整改循环。此前实测证据延续有效：红网先行（Task 1 具名红记录在 plan Step 5，修复同提交落地）；三体变异抽查全部具名击杀，M1 负对照（reference pins 25/25、photo 360° 往返）实测不红；门 A 可比集断言在位（防「集合静默清空导致零比对假绿」）。
+
+**覆盖陈述**（评审员实测，两处 gap 已由 3742d6d 闭合）：本分支触及的路径全部有测试网。`camera-controller.ts`（zoom() 重写）与 `reference.ts`（lngOffset 诚实换算）在 6598271 实测全指标 100%（camera-controller 58/58 语句、24/24 分支、14/14 函数；reference 53/53、24/24、10/10），且覆盖有断言背书而非仅到达：除法钳两方向、linear fov 路径、两个同值守卫、clamp 两端各有精确值/脏标志断言，zoom 族负面/边界占比约 70%（非有限值、零 delta、epsilon delta、ceiling 钉住、负分母、写穿不污染）。两处 shader lng 行双重有网——两个 shader 测试文件的双向字符串 pin（正向新拼写 + 负向 /4 正则）＋门 C 四相机×四态矩阵（双 project 绿）＋quarter-shift 像素 pin＋评审员从 WGSL 文本独立手算复现的六个 float64 reference pin（v 约定差异经 cross-backend 采样处一次 `1 - v` 补偿调和，非分歧）。`viewer.ts` 仅注释改动，Viewer.zoom 经 US2 public-zoom() 测试端到端有网（后端边界精确 `toEqual({zoom: 0.5})` ＋ pre-zoom 负对照）；gestures 支撑文件仅 TSDoc 改动，所述滚轮方向由 US2 两条 wheel 测试以像素断言背书。无网例外及理由：`viewer.ts`/`backend-factory.ts` 在 unit 覆盖闸外，属已登记的 DOM-bound 豁免；全仓仅剩 3 条未覆盖分支（events.ts:136、uniforms.ts:77、webgpu/backend.ts:427）均在本分支射程之外。评审指出的两处网缺口已由 3742d6d 闭合：①planet 此前无任何 zoom() 实例化（统一 clamp 只钉在一种非线性 kind 上，门 C 直接构造 Projection 绕过 controller 兜不住）→ 已加 planet 臂钉住 [0.01, 1] 两端点；②quarter-shift 测试的 1:1 读回路径此前无内容断言（两条空白读回会空洞地绿，worst=0 恰过 ≤2）→ 已加 `countNonBlack(home) > 0` 守卫（复审验证两种空白场景均红）。
 
 ## 审查意见
 
