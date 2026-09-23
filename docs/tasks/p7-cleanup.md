@@ -3,7 +3,7 @@ plan: docs/superpowers/plans/2026-09-19-p7-cleanup.md
 scope: [legacy/**, webpack/**, vendor/**, demo/**, test/**, scripts/**, docs/**, README.md, CLAUDE.md, package.json, package-lock.json, .gitignore, .npmignore, .github/workflows/**, tsconfig.legacy.json, .babelrc, vitest.config.ts]
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build && npm publish --dry-run
 layer: tool
-deps: [p6-webgl2-backend]
+deps: [p6-webgl2-backend, pan-zoom-semantics]
 state: open
 createdAt: 2026-09-19T08:51:53.032Z
 ---
@@ -14,6 +14,7 @@ createdAt: 2026-09-19T08:51:53.032Z
 **本卡是本轮唯一会读到「描述未来状态的文件」的任务**，所以两条顺序要求：
 - Step 6 要逐条核对 `CLAUDE.md`，并把开头那段「v1 迁移尚未完成」的声明删掉 —— 那是本卡存在的意义之一。superloop 的执行者拿到的是主分支 HEAD，在 P7 之前它读到的是一个描述未来状态的文件。
 - Task 2 的悬空引用检查里有一条 `git grep "__panoTest\|PanoTestApi\|test-entry"`，在 `docs/` 之外必须为空。浏览器模式带来的那份简化，这一期不能把它改回去。
+- deps 里的 `pan-zoom-semantics`（2026-09-23 追加）会改写 `CLAUDE.md`「arbiter」节的 lngOffset 段落与多个交互行为——Step 6 逐条核对 CLAUDE.md 时读到的必须是它合并后的版本，所以本卡排在它后面。
 
 **表里没有 `demo/test-entry.ts`，也没有 `demo/test-entry-hooks/`** —— 它们从来不曾存在。看到 `test/integration/` 里残留 `import type {} from ../../demo/test-entry-hooks/...` 这种 type-only import，**删掉它，不要去建那个目录**。
 
