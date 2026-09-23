@@ -1,17 +1,4 @@
 import { beforeAll, expect } from 'vitest'
-import { enableChannels } from '../../../src/diagnostics'
-
-/*
- * DIAGNOSTIC ROUND (2026-09-24, temporary): the CI runner's integration
- * failures all sit downstream of signals this library already emits on its
- * trace channels -- `pano:gpu` carries "device lost" and "render validation
- * error", `pano:viewer` carries "frame failed" -- but nothing opts in by
- * default (rule 1 in src/diagnostics.ts), so the CI log holds the failures
- * and none of their causes. Enabled here, once per file, until the
- * runner-only mechanisms are root-caused. The volume is bounded: four call
- * sites in src/, three of which fire at most once per device lifetime.
- */
-enableChannels('pano:gpu,pano:viewer')
 
 /*
  * Every test in the `integration` project runs against a real WebGPU adapter,
