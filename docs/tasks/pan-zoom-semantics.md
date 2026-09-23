@@ -90,4 +90,11 @@ sha 轨迹：M1 wgsl 656a97fa→3c06bc15→656a97fa（sentinel glsl cdae5445 恒
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+按「审查 SOP」固定四步全审（审查面 `master...feature/pan-zoom-semantics`，8 提交，2026-09-24）：
+
+1. **结构化 review**：执行者按 SDD 双审体系走 spec 审（COMPLIANT）+ 质量审（2 IMPORTANT 注释级 → d25549c 一轮整改 APPROVED），第 2 关 effective-testing fresh 评（0 CRITICAL / 2 WARNING / 3 NOTE，WARNING → 3742d6d 一轮 RESOLVED，含机械验证「恢复 planet 旧 clamp 域双红」与「两条空白读回场景双红」）。协调者亲读 eb56504 全部 src diff：C1 三处公式行同一提交改齐（wgsl `:248` / glsl `:217` / `reference.ts` `lngOffset`，均为 `* PI / 180`），三处注释互指 pan-zoom-semantics spec §1 且考古全保留（14.3×、`% 25` 补丁、GLSL 文件域初始化隐患）；C2/C3 的 `zoom()` 与 plan 代码逐行相符（`Math.max(1 + delta, Number.EPSILON)` 分母钳、linear [15°, 110°] 弧度 / 非线性 [0.01, 1] 两路 clamp、同值早退不置脏、`aspect` 经 spread 存活），viewer.ts 纯转发仅 TSDoc 改述；d25549c 纯注释、3742d6d 纯测试增补，与卡面描述一致。
+2. **plan 红线逐条核对**：`git diff --name-only` 亲验——16 文件全部落在 scope 白名单；边界零 diff 亲测 **0 行**（`src/index.ts`、`src/interaction/**`、`generated.ts`、`demo/`、基线族五文件、US5/no-webgpu、`vitest.config.ts`、`projection-kinds.json`、`package.json`）；8/8 提交前缀合规；worktree 树 pristine @8a72d8a；分支 plan 复选框 26/26 全勾。
+3. **门禁证据复核**：verify 六连在分支尖端（8a72d8a）本人当面全绿，六组数字与卡面**逐位一致**——unit 22 文件 301/301；coverage 99.4(504/507) / 98.7(228/231) / 98.95(95/96) / 99.78(466/467)；integration 28 文件 170/170（双 project）；build 127.61 / 127.84 kB；`gen:shaders --check` up to date；typecheck 三程序；lint 零告警。门 A 收窄清单（LNG_INERT=false、非线性可比集 = origin 不因 C1 变化、comparableStates 有意分歧登记）与基线族零改动在案。
+4. **最重发现亲验（含变异复跑）**：/tmp git-archive 沙箱 @8a72d8a 亲手复跑 M1（lng 加回 `/4`，仅 wgsl 一处）——sha 轨迹与卡面逐段一致（wgsl 656a97fa→3c06bc15→656a97fa，sentinel glsl cdae5445 恒定，与 `git show` 双向核对相符）：**门 C 10/18 具名红**（cylindrical/planet/pannini × state 1–3 + CPU 裁判，与卡面逐条一致；state 4 即 lng=0 态绿，wrap 机理自证）；photo 12 条唯一红 = quarter-shift；双负对照实测不红（360° 往返、reference 25/25）；还原后门 C 18/18 复绿，沙箱清理。**偏离 #2（Concern B，即修正协调者本人 plan 预测错误那条）亲验成立**：`wrapLongitude(360) = ((360 % 360) + 360) % 360 = 精确 0`，往返终点姿态归 0、新旧公式同读 0——往返是结构性绿钉，quarter-shift（90° 姿态下旧公式偏 22.5°=1/16 圈 ≠ 1/4 圈）才是 C1 的行为级红网；spec §5.4 过时属实，已登记为遗留、修订归用户。其余 7 项偏离核实：#1/#3–#6 登记性出入，#7/#8 已由 d25549c 整改。
+
+**结论：approve。** 按轮询授权（审过即合）即行 task-merge。
