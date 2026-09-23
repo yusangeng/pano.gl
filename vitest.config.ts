@@ -126,6 +126,29 @@ export default defineConfig({
           setupFiles: ['./test/integration/support/require-webgpu.ts'],
           include: ['test/integration/**/*.test.ts'],
           exclude: ['test/integration/fallback/**'],
+          /*
+           * Files in this project run one at a time.
+           *
+           * Browser mode gives every test file its own iframe in one browser,
+           * and most files here hold a live WebGPU device while they run. With
+           * files in parallel, the Linux SwiftShader CI adapter (google/
+           * swiftshader) starts killing devices under that concurrency: in the
+           * 2026-09-24 diagnostic run (35917328609) 101 devices were acquired
+           * and 85 lost, and every single loss happened with >= 8 devices
+           * concurrently live (measured from the run log: 8:9, 9:18, 10:4,
+           * 11:12, 12:2, 13:1, 14:16, 15:11, 16:10 -- none lower), including
+           * one Dawn instance death ("A valid external Instance reference no
+           * longer exists"). A lost device self-disposes the viewer, which
+           * fails the test in ways that look like anything but a lost device
+           * (a detached canvas, a swallowed dispose call). Real-GPU machines
+           * never hit this; serial files keep concurrent devices at ~1, far
+           * below the measured death floor.
+           *
+           * Not on `no-webgpu`: its browser holds no WebGPU devices at all
+           * (the setup file asserts the adapter is null), so it cannot
+           * contribute to this ceiling.
+           */
+          fileParallelism: false,
           browser: {
             enabled: true,
             /*
