@@ -2550,7 +2550,7 @@ spec §9.7 的「后端降级」一行要求：**屏蔽 `navigator.gpu`，断言
 
 > **`--disable-features=WebGPU` 是无效的**（实测：适配器照样出现），要造这条环境只能用 `--disable-gpu`。而 `--disable-gpu` 会同时**保住 WebGL2**（走 SwiftShader），正好是这里要的那个形状。**不要**再加 `--disable-software-rasterizer`：那会把 WebGL2 一起干掉，于是测的是「两个都没有」，而不是「一个都没有」。
 
-- [ ] **Step 1: 环境一 —— 没有 `navigator.gpu`**
+- [x] **Step 1: 环境一 —— 没有 `navigator.gpu`**
 
 `test/integration/backend-downgrade.test.ts`（`integration` project）：
 
@@ -2580,8 +2580,8 @@ import { countNonBlack, nextFrames, readCanvas } from './support/canvas'
  * renderer" reads it from exactly these two places.
  *
  * There is deliberately no `downgraded` event. The public event surface is
- * frozen (P5, src/index.ts) and a downgrade is a state, not an occurrence: it is
- * true from before the viewer exists, so there is no moment at which it could
+ * frozen (P5, src/index.ts) and a downgrade is a state, not an occurrence: it
+ * is true from before the viewer exists, so there is no moment at which it could
  * fire. `device-lost` is the event for a backend that died, which is a different
  * thing and is tested in webgl2-smoke.
  */
@@ -2620,6 +2620,10 @@ describe('WebGPU absent, WebGL2 present', () => {
 
     const caps = await FramelessImageViewer.probe()
     expect(caps.backend).toBe('webgl2')
+    // The 'none' arm carries no externalTextures, so the read below needs the
+    // union narrowed; the throw is for the compiler, the line above already
+    // made it unreachable.
+    if (caps.backend === 'none') throw new Error('probe() reported no backend')
     expect(caps.externalTextures).toBe(false)
   })
 
@@ -2627,7 +2631,12 @@ describe('WebGPU absent, WebGL2 present', () => {
     delete (Navigator.prototype as { gpu?: unknown }).gpu
 
     const container = makeContainer()
-    const viewer = await FramelessImageViewer.create({ container })
+    // `src` is required at construction (the frozen surface has no src-less
+    // viewer), and re-assigning the same URL once the listeners are on is what
+    // keeps the load observable: the construction-time load may land before a
+    // listener could attach, and the swap through the public setter is a real
+    // load either way.
+    const viewer = await FramelessImageViewer.create({ container, src: '/fixtures/panorama.png' })
     const losses: unknown[] = []
     viewer.on('device-lost', e => losses.push(e))
     const loaded: string[] = []
@@ -2649,7 +2658,7 @@ describe('WebGPU absent, WebGL2 present', () => {
 
 > **`afterEach` 里重新 `defineProperty` 而不是 `delete`。** `Navigator.prototype.gpu` 在 Chromium 上是一个继承来的访问器，`delete` 掉之后没有「原来的值」可以放回去 —— 只有测试开头记下的 `HAD_GPU` 这一个事实。把它定义成一个返回 `undefined` 的 getter 让 `'gpu' in navigator` 重新为真，这对 `integration` project 里**后面的其他文件**没有影响（每个文件一个新页面），但能让这个文件里后面的测试拿到一致的状态。
 
-- [ ] **Step 2: 环境三 —— 两个后端都没有**
+- [x] **Step 2: 环境三 —— 两个后端都没有**
 
 `test/integration/fallback/backend-unavailable.test.ts`（`no-webgpu` project）：
 
@@ -2701,7 +2710,11 @@ describe('neither backend available', () => {
 
     const attempt = async (): Promise<string> => {
       try {
-        await FramelessImageViewer.create({ container })
+        // `src` is required and validated BEFORE the backend is chosen, so it
+        // must be a real URL here: without it the throw would be 'src must be
+        // a string' and the assertion below would never see the backend's own
+        // message.
+        await FramelessImageViewer.create({ container, src: '/fixtures/panorama.png' })
         return ''
       } catch (error) {
         return String(error)
@@ -2730,14 +2743,14 @@ describe('neither backend available', () => {
 })
 ```
 
-- [ ] **Step 3: 跑**
+- [x] **Step 3: 跑**
 
 Run: `npx vitest run --project integration backend-downgrade && npx vitest run --project no-webgpu fallback`
-Expected: 5 个测试 PASS（3 + 2）
+Expected: 8 个测试 PASS（3 + 5）。第二条命令的 `fallback` 过滤器按路径选中 `fallback/` 下全部三个文件：backend-unavailable 2 + US5 搭车 2 + smoke 搭车 1（原稿「3 + 2」漏算了 US5，而 US5 之外 smoke 同样住在 `fallback/` 下、同样被过滤器选中，如实数字是 5）
 
 **如果「the premise holds」就红**：这个 project 本来就没有适配器，说明 `require-webgpu.ts` 或 `channel: 'chromium'` 没生效 —— 那比这条测试红严重得多。**如果 `create()` 没有抛**：查 `getContext` 的补丁是不是被后加载的别的库换掉了（本文件的 `beforeEach` 每次重装，所以只有同一个测试体内才可能）。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/backend-downgrade.test.ts test/integration/fallback/backend-unavailable.test.ts
