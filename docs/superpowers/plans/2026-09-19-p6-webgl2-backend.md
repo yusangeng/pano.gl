@@ -46,7 +46,7 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 | 浏览器模式的测试写法 | P3 / P4 / P5 | 测试文件本身就在页面里，直接 `import` 被测代码。**没有页面侧出口、没有 hook、没有 `window.__panoTest`** —— 本计划的 Task 3/4/6 全部照此办理 |
 | `renderOffscreen` / `maxChannelDiff` / `RenderRequest` / `RenderResult` | P3 Task 3，`test/integration/support/gpu.ts` | 门禁 C 的 WebGPU 半边、请求/响应类型与差值计算都用它们。**门禁 C 的主张是关于出厂着色器的，所以 WebGPU 侧必须走出厂路径**，而不是一个为了对上这个测试而写的 harness |
 | `support/canvas.ts` | P1 Task 8 | `readCanvas` / `nextFrames` / `countNonBlack` / `maxChannelDiff`。**P6 不重写它们**，`support/gpu.ts` 已经把 `maxChannelDiff` 转口自这里 |
-| P5 的四个用户故事文件 | P5 Task 5 | Task 5 让它们在 WebGL2 下原样重跑。**一个字都不改**，改的是 project 的 `include` |
+| P5 的四个用户故事文件 | P5 Task 5 | Task 5 让它们在 WebGL2 下重跑。四个文件**除 photo 的后端标签断言外一字不改**——那一条的期望值改为从浏览器实际状态推导（推导不是分叉：两个 project 跑同一段代码，各自算出各自的真值），其余改的是 project 的 `include` |
 | P5 的 `test/integration/fallback/user-story-no-webgpu.test.ts` | P5 Task 5 | Task 5/6 把它翻成 WebGL2 的正面断言，并补两种更极端的环境 |
 
 **关于依赖顺序：`support/canvas.ts` 是 P1 建的，`support/gpu.ts` 是 P3 建的，`support/spies.ts` 与 `support/viewer.ts` 是 P5 建的。** P6 只新建 `support/cross-backend.ts`，其余四个是**扩**，不是重写。
@@ -119,7 +119,7 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 
 | 文件 | 改动 | 归属 |
 |---|---|---|
-| `src/viewer/backend-factory.ts` | `createBackend` 加 WebGL2 分支（Task 3） | P5 |
+| `src/viewer/backend-factory.ts` | `createBackend` 加 WebGL2 分支；`probe()` 在无适配器分支读 `MAX_TEXTURE_SIZE`（Task 3，FIX 2） | P5 |
 | `test/integration/support/spies.ts` | `countDraws` 同时包住两个后端的 `render`（Task 5） | P5 |
 | `vitest.config.ts` | `no-webgpu` project 的 `include` 扩到四个用户故事（Task 5） | P1 |
 | `test/integration/fallback/user-story-no-webgpu.test.ts` | 翻成 WebGL2 的正面断言（Task 5） | P5 |
@@ -137,7 +137,7 @@ WebGL2 后端是**永久的第二份实现**：第二个着色器、第二套资
 - Create: `src/renderer/webgl2/shaders/index.ts`
 - Test: `test/unit/webgl2-shaders.test.ts`
 
-- [ ] **Step 1: 转写**
+- [x] **Step 1: 转写**
 
 `src/renderer/webgl2/shaders/panorama.glsl`：
 
@@ -213,11 +213,18 @@ const float TWO_PI = 6.283185307179586;
 
 // Equirectangular coordinate from an angle pair.
 //
-// Wrapping happens here rather than in the sampler. The legacy shader did none
-// at all: it handed texture2D a raw ratio and the texture object's default
-// REPEAT wrap did the work. The WebGPU backend's external-texture entry point
-// has no wrap-capable sampler at all (textureSampleBaseClampToEdge clamps), so
-// both backends wrap in the shader to stay identical.
+// `mod` here does the same job as the WGSL's `fract` -- it folds u into
+// [0, 1) -- and no more. The legacy shader did none of even that: it handed
+// texture2D a raw ratio and the texture object's default REPEAT wrap did the
+// work. The cross-seam and cross-pole LINEAR blend is likewise the sampler's,
+// not this function's, and clamp-to-edge cannot express it. On WebGPU the
+// still sampler is REPEAT on both axes for exactly that blend (see
+// src/renderer/webgpu/shaders/sampler.ts; gate A measured the seam blend at
+// up to 124 LSB), while WebGPU video is edge-clamped by
+// textureSampleBaseClampToEdge whatever the sampler's modes say -- an API
+// limit of its entry point, not a decision to treat video differently. The
+// WebGL2 sampler modes are Task 3's to set, and they must match WebGPU per
+// source kind: still textures REPEAT on both axes, video clamp-to-edge.
 //
 // `mod` is x - y * floor(x / y), the same function as WGSL's `fract` for a
 // divisor of 1.0. WGSL's `%` is NOT the same (it truncates toward zero) and
@@ -438,13 +445,13 @@ export const PANORAMA_GLSL_VERTEX = VERTEX_SOURCE
 export const PANORAMA_GLSL_FRAGMENT = FRAGMENT_SOURCE
 ```
 
-- [ ] **Step 2: （已随 tsup → vite 裁撤——读一遍本注即可，无代码要写）**
+- [x] **Step 2: （已随 tsup → vite 裁撤——读一遍本注即可，无代码要写）**
 
 > **（2026-09-20 勘误，P1 终末复审补遗 S1）** 本步原为「在 `tsup.config.ts` 里加 esbuild 的 `?raw` resolve 插件」（原注的理由：esbuild 会把 `./panorama.glsl?raw` 当真实文件名去解析，造出 `npm run test:unit` 全绿而 `npm run build` 失败的失败顺序）。P1 已把库打包器裁决换为 **vite lib mode**（`build` = `vite build`，仓库无 tsup / tsup.config.ts），本步整体作废：`?raw` 是 Vite 的原生约定，vitest、demo 与 `vite build` 全部直接支持，**构建侧零配置**——不存在要写的插件，也不存在要建的 `tsup.config.ts`（更不要把 tsup 装回来）。防配置回归的构建侧验证保留在 Step 5。
 >
 > 仍然成立的那条告诫：**不要退回到把着色器内联进 TS**——那会牺牲着色器文件的语法高亮，而这是长期维护里最值钱的东西。
 
-- [ ] **Step 3: 写结构与一致性测试**
+- [x] **Step 3: 写结构与一致性测试**
 
 `test/unit/webgl2-shaders.test.ts`：
 
@@ -600,12 +607,12 @@ describe('WebGL2 shader source', () => {
 })
 ```
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `npm run test:unit -- webgl2-shaders`
 Expected: 11 个测试 PASS
 
-- [ ] **Step 5: 证明构建也认这份着色器**
+- [x] **Step 5: 证明构建也认这份着色器**
 
 `?raw` 的接线是否成立，单元测试证明不了 —— vitest 走 Vite，它当然认；`vite build`（lib mode）走的是同一个 Vite，但这一步把「着色器源码真的进了产物」钉成断言，防的是 lib mode 资源处理的配置回归：
 
@@ -616,7 +623,7 @@ grep -c "#version 300 es" dist/index.js
 
 Expected: 构建成功，`grep` 输出 ≥ 1（着色器源码真的进了产物，而不是被解析成外部资源引用）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/renderer/webgl2/shaders/ test/unit/webgl2-shaders.test.ts
@@ -642,7 +649,7 @@ dist grep pins that the shader source really lands in the bundle."
 
 **背景**：WebGL 的错误模型和 WebGPU 相反 —— **同步、不抛、只设一个标志位**。`getShaderParameter(COMPILE_STATUS)` 返回 `false`，你必须主动去问。旧代码在这里 `log` 了一行然后 `return null`（缺陷 F7）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/unit/webgl2-errors.test.ts`：
 
@@ -650,6 +657,10 @@ dist grep pins that the shader source really lands in the bundle."
 import { describe, it, expect, vi } from 'vitest'
 import { compileShader, linkProgram, describeShaderError } from '../../src/renderer/webgl2/context'
 
+// Both get*Parameter mocks ignore their pname, so a COMPILE_STATUS ->
+// LINK_STATUS swap inside the implementation would still pass at unit level.
+// That class of mistake is Task 3's real-GPU integration to catch; these
+// tests pin the error protocol, not the enum choice.
 function fakeGl (ok: boolean, log = '') {
   return {
     createShader: vi.fn(() => ({})),
@@ -695,6 +706,15 @@ describe('compileShader', () => {
     try { compileShader(gl, 0x8b31, 'x', 'vertex') } catch { /* expected */ }
     expect(gl.deleteShader).toHaveBeenCalled()
   })
+
+  it('throws when the driver cannot allocate a shader object', () => {
+    // createShader is allowed to return null, and handing that null onward
+    // would only set the error flag nobody reads -- the exact failure mode
+    // this file exists to close.
+    const gl = { ...fakeGl(true), createShader: vi.fn(() => null) } as unknown as WebGL2RenderingContext
+    expect(() => compileShader(gl, 0x8b31, 'void main(){}', 'vertex'))
+      .toThrow('could not allocate a vertex shader object')
+  })
 })
 
 describe('linkProgram', () => {
@@ -708,16 +728,46 @@ describe('linkProgram', () => {
       .toThrow(/link.*varying mismatch/s)
   })
 
-  it('detaches and deletes both shaders on success', () => {
-    // Once linked, the shader objects are no longer needed. Keeping them is a
-    // small leak per backend construction, which matters when a viewer is
-    // recreated on every camera swap.
+  it('deletes both shaders after a successful link', () => {
+    // deleteShader on an attached shader only flags it for deletion; the spec
+    // frees it once nothing attaches it. The flags are what lets Task 3's
+    // dispose -> deleteProgram actually release the pair, instead of leaking
+    // two objects per backend teardown and rebuild.
     const gl = fakeGl(true)
     const vs = gl.createShader(0)!
     const fs = gl.createShader(0)!
     linkProgram(gl, vs, fs)
     expect(gl.deleteShader).toHaveBeenCalledWith(vs)
     expect(gl.deleteShader).toHaveBeenCalledWith(fs)
+  })
+
+  it('deletes both shaders and throws when the driver cannot allocate a program', () => {
+    // The two shaders already exist by the time the program fails to
+    // allocate, so cleaning them up is this function's job: the caller only
+    // ever sees the throw. lib.dom types createProgram as never returning
+    // null -- the spec disagrees, which is what the guard under test is for.
+    const gl = { ...fakeGl(true), createProgram: vi.fn(() => null) } as unknown as WebGL2RenderingContext
+    const vs = gl.createShader(0)!
+    const fs = gl.createShader(0)!
+    expect(() => linkProgram(gl, vs, fs)).toThrow('could not allocate a program object')
+    expect(gl.deleteShader).toHaveBeenCalledWith(vs)
+    expect(gl.deleteShader).toHaveBeenCalledWith(fs)
+  })
+})
+
+describe('the (no log) fallback', () => {
+  it('names the silence when either info log returns null', () => {
+    // getShaderInfoLog and getProgramInfoLog may return null, and
+    // stringifying that would print "null" where the diagnostic belongs.
+    // Both throws name the silence with the same literal, so one mock
+    // covering both logs pins both paths.
+    const gl = {
+      ...fakeGl(false),
+      getShaderInfoLog: vi.fn(() => null),
+      getProgramInfoLog: vi.fn(() => null)
+    } as unknown as WebGL2RenderingContext
+    expect(() => compileShader(gl, 0x8b31, 'x', 'vertex')).toThrow('(no log)')
+    expect(() => linkProgram(gl, 0x8b31 as never, 0x8b30 as never)).toThrow('(no log)')
   })
 })
 
@@ -743,12 +793,12 @@ describe('describeShaderError', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:unit -- webgl2-errors`
 Expected: FAIL —— 无法解析 `../../src/renderer/webgl2/context`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/renderer/webgl2/context.ts`：
 
@@ -873,9 +923,17 @@ export function acquireContext (canvas: HTMLCanvasElement): WebGL2RenderingConte
     // is one triangle and nothing to occlude.
     depth: false,
     stencil: false,
-    // The shader outputs exactly what the source contains. Letting the browser
-    // post-multiply introduces a difference against the WebGPU backend that
-    // gate C would then have to tolerate.
+    // Stated, not a silent default. The buffer keeps the source's own alpha
+    // channel: opaque sources (every JPEG, every video) composite identically
+    // either way, a transparent-PNG panorama would blend over the page here
+    // where WebGPU's 'opaque' alphaMode would not, and a real channel is
+    // closer to what a WebGPU read-back returns.
+    alpha: true,
+    // The shader writes source RGBA verbatim, so the buffer is straight alpha
+    // and has to be handed to the compositor that way. The consumers are the
+    // live canvas compositing over the page and P5's readCanvas -> toDataURL
+    // read-back; gate C sees neither, its WebGL2 half builds its own bare
+    // context.
     premultipliedAlpha: false,
     /*
      * TRUE, and it is not a default worth taking. Without it the drawing buffer
@@ -895,12 +953,12 @@ export function acquireContext (canvas: HTMLCanvasElement): WebGL2RenderingConte
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:unit -- webgl2-errors`
-Expected: 10 个测试 PASS
+Expected: 13 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/webgl2/context.ts test/unit/webgl2-errors.test.ts
@@ -923,7 +981,7 @@ later task sees a cleared buffer."
 - Modify: `src/viewer/backend-factory.ts`
 - Test: `test/integration/webgl2-smoke.test.ts`
 
-- [ ] **Step 1: 实现**
+- [x] **Step 1: 实现**
 
 `src/renderer/webgl2/backend.ts`：
 
@@ -1058,7 +1116,7 @@ export class WebGL2Backend implements Backend {
   readonly #invClip = mat4.create()
 
   // Not readonly: a lost-and-restored context invalidates the program and every
-  // uniform location with it, and both are rebuilt in #restore().
+  // uniform location with it, and both are rebuilt in #onContextRestored().
   #program: WebGLProgram
   #uniforms: Record<UniformName, WebGLUniformLocation | null>
 
@@ -1172,6 +1230,16 @@ export class WebGL2Backend implements Backend {
   }
 
   setSource (source: RenderableSource | null): void {
+    // During the loss window there is nothing to upload into. The spec allows
+    // createTexture() to return null on a lost context (this Chromium instead
+    // hands back a live object, which only turns the upload into a silent
+    // no-op), and the pixels would not survive the restore regardless:
+    // #onContextRestored drops the texture and the next setSource re-uploads.
+    // Returning before any GL call is what keeps a spec-conforming browser's
+    // null from reading as an allocation failure, thrown on every frame of
+    // the window.
+    if (this.#lost) return
+
     const gl = this.#gl
 
     if (!source) {
@@ -1205,12 +1273,19 @@ export class WebGL2Backend implements Backend {
     // their pixels agreed -- which is the one kind of drift gate C cannot see.
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source.element)
-    // No power-of-two requirement in WebGL2, so a plain clamp + linear is
-    // correct at any size. The legacy path could not use these because WebGL1
-    // restricts NPOT textures to NEAREST + CLAMP_TO_EDGE. These are also the
-    // modes the WebGPU sampler uses, which is what keeps the two comparable.
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    // No power-of-two requirement in WebGL2, so REPEAT + linear is available
+    // at any size. The legacy path could not have asked for REPEAT because
+    // WebGL1 restricts NPOT textures to NEAREST + CLAMP_TO_EDGE. The wrap
+    // modes must match WebGPU PER SOURCE KIND, not blanket: the WebGPU still
+    // sampler is repeat on BOTH axes (src/renderer/webgpu/shaders/sampler.ts)
+    // because the cross-seam/pole LINEAR blend lives in the sampler and
+    // clamp-to-edge cannot express it (gate A measured the seam blend at up
+    // to 124 LSB), while WebGPU video is edge-clamped by
+    // textureSampleBaseClampToEdge whatever the sampler says -- an API limit
+    // of its entry point, which a clamp-to-edge wrap mirrors exactly.
+    const wrap = source.kind === 'video' ? gl.CLAMP_TO_EDGE : gl.REPEAT
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 
@@ -1283,7 +1358,7 @@ export class WebGL2Backend implements Backend {
 }
 ```
 
-- [ ] **Step 2: 接进 `backend-factory.ts`**
+- [x] **Step 2: 接进 `backend-factory.ts`**
 
 把 P5 里那段「WebGL2 还没实现」的 `throw` 换掉：
 
@@ -1305,8 +1380,8 @@ export async function createBackend (canvas: HTMLCanvasElement): Promise<Backend
 }
 ```
 
-> **`probe()` 不用改。** 它已经在用 `describeCapabilities`，而 WebGL2 分支的 `maxTextureDimension` 钳位就在那个函数里（P3 Task 1）。`createBackend` 与 `probe` 因此对同一台机器给出同一个 `backend` —— 这正是「降级是可编程状态」的意思：应用可以在构造之前先问，且问到的就是将要发生的。
-- [ ] **Step 3: 冒烟测试**
+> **`probe()` 也要改（2026-09-23 复审 FIX 2，取代本文原来那句「`probe()` 不用改」）。** 原来的 `probe()` 只问 `getContext('webgl2') !== null`，把 `maxTextureDimension` 留在 0 —— `describeCapabilities` 会把它钳到 2048 的下限，而构造出来的 `WebGL2Backend` 上报的是真实钳位后的 `MAX_TEXTURE_SIZE`（通常 16384）。于是在一台没有适配器的机器上，「问」和「构造」对同一个问题给出两个答案。现在 `probe()` 在**没有适配器且 WebGL2 可用**这个分支上多问一句 `gl.getParameter(gl.MAX_TEXTURE_SIZE)`；有适配器的机器一个字节都不变。配套改动：`test/unit/probe.test.ts` 的 stub 相应携带 `getParameter`（这是本任务额外触碰的文件）。**注意：probe 与构造后端的一致性目前没有钉死测试**，钉它的断言在 Task 5 重写 US5 时补。
+- [x] **Step 3: 冒烟测试**
 
 `test/integration/webgl2-smoke.test.ts`：
 
@@ -1337,16 +1412,21 @@ import type { CameraState } from '../../src/core/types'
 /** The pose every case uses. Its values are irrelevant; its presence is not. */
 const ORIGIN: CameraState = { povLatitude: 0, povLongitude: 0 }
 
-/** A 2x2 checkerboard as an image element: pixels known without a fixture file. */
-async function checkerSource (): Promise<RenderableSource> {
+/** A 2x2 canvas in two horizontal color bands, as an image element: pixels known without a fixture file. */
+async function twoToneSource (): Promise<RenderableSource> {
   const canvas = document.createElement('canvas')
   canvas.width = 2
   canvas.height = 2
   const ctx = canvas.getContext('2d')!
+  // Horizontal bands, not a quadrant checkerboard: each column of a
+  // 2-pixel-wide equirectangular texture spans 180 degrees of longitude, so a
+  // 75-degree view from any longitude sees one column only and a quadrant
+  // board renders solid. The row boundary sits on the equator -- where a
+  // latitude-zero camera looks -- so both colors land in every frame it draws.
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, 2, 2)
   ctx.fillStyle = '#ff0000'
-  ctx.fillRect(0, 0, 1, 1)
+  ctx.fillRect(0, 0, 2, 1)
 
   // A real <img>, not a bitmap: RenderableSource.element is typed
   // HTMLImageElement | HTMLVideoElement, and a backend uploads it through
@@ -1389,8 +1469,13 @@ describe('WebGL2Backend', () => {
     expect(backend, 'WebGL2Backend.create returned null in a browser that has WebGL2').not.toBeNull()
 
     backend!.resize(64, 64, 1)
-    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
-    backend!.setSource(await checkerSource())
+    // Radians, not degrees: `Projection.fov` is documented in radians (P2's
+    // legacyFovFrom; see src/viewer/camera-controller.ts), and the plan's
+    // literal `fov: 75` handed the matrix 75 radians -- a deterministic but
+    // nonsensical camera whose vertical span was +-11 degrees and vertically
+    // mirrored, too narrow for the both-colors assertion below to ever fire.
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 })
+    backend!.setSource(await twoToneSource())
     backend!.render()
 
     const pixels = readGl(canvas)
@@ -1403,6 +1488,18 @@ describe('WebGL2Backend', () => {
     expect(capabilities.maxTextureDimension).toBeGreaterThanOrEqual(2048)
     expect(capabilities.externalTextures).toBe(false)
     expect(nonBlackFraction(pixels)).toBeGreaterThan(0.5)
+
+    // Both colors have to appear, not merely any non-black pixel: a
+    // constant-UV fallback painting one texel over the whole frame would score
+    // 1.0 on the fraction too. White carries green; red does not.
+    let sawWhite = false
+    let sawRed = false
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 1]! > 200) sawWhite = true
+      if (pixels[i]! > 200 && pixels[i + 1]! < 64) sawRed = true
+    }
+    expect(sawWhite).toBe(true)
+    expect(sawRed).toBe(true)
   })
 
   it('throws rather than yielding a dead backend when the shader will not compile', () => {
@@ -1439,35 +1536,72 @@ describe('WebGL2Backend', () => {
     const lost: DeviceLost[] = []
     const unsubscribe = backend!.onDeviceLost(l => lost.push(l))
 
+    backend!.resize(32, 32, 1)
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 })
+    backend!.setSource(await twoToneSource())
+    backend!.render()
+    const before = nonBlackFraction(readGl(canvas))
+
+    // A synthetic loss, dispatched by hand so preventDefault() and the report
+    // can be asked about directly. It has to come after `before`: render() is a
+    // deliberate no-op while the backend is lost, so a draw after this point
+    // would read black regardless of the restore path.
     const synthetic = new Event('webglcontextlost', { cancelable: true })
     canvas.dispatchEvent(synthetic)
+    // Asserted here, not after the restore: the handler runs synchronously
+    // under dispatchEvent, and a deleted preventDefault would otherwise die by
+    // the restore await timing out rather than by these assertions naming it.
+    expect(synthetic.defaultPrevented).toBe(true)
+    expect(lost[0]?.reason).toBe('context-lost')
 
     const restored = new Promise<void>(resolve => {
       canvas.addEventListener('webglcontextrestored', () => resolve(), { once: true })
     })
 
-    backend!.resize(32, 32, 1)
-    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
-    backend!.setSource(await checkerSource())
-    backend!.render()
-    const before = nonBlackFraction(readGl(canvas))
-
     const gl = canvas.getContext('webgl2')!
-    gl.getExtension('WEBGL_lose_context')!.loseContext()
-    // One macrotask: the browser fires webglcontextlost asynchronously after
-    // loseContext(), so reading `lost` synchronously would read an empty array
-    // that looks like "the event never fired".
-    await new Promise<void>(resolve => { setTimeout(resolve, 0) })
+    // Taken while the context is alive and kept: a lost context returns null
+    // from getExtension(), so restoreContext() later has to go through the
+    // object taken before the loss.
+    const lose = gl.getExtension('WEBGL_lose_context')!
+    // Waiting for the loss event itself, not for a timer: a timer only proves
+    // that time passed. The once listener is registered after the synthetic
+    // dispatch, so only the real loss can settle it.
+    const realLoss = new Promise<void>(resolve => {
+      canvas.addEventListener('webglcontextlost', () => resolve(), { once: true })
+    })
+    lose.loseContext()
+    await realLoss
+    // The synthetic dispatch, then the real loss: two reports, not one.
     const lostCount = lost.length
 
-    gl.getExtension('WEBGL_lose_context')!.restoreContext()
+    // setSource inside the loss window must be a silent no-op, not an error.
+    // The null first, as the viewer clearing its source mid-loss: that is what
+    // makes the second call reach the allocation line, which it otherwise
+    // never would (the first upload left a texture behind, and only
+    // #onContextRestored drops it).
+    //
+    // Honest about what this can pin: the WebGL spec allows createTexture()
+    // to return null on a lost context, and the backend's guard is what keeps
+    // that from being an allocation error thrown on every frame of the window.
+    // THIS Chromium returns a live object instead (measured: both with the
+    // loss preventDefaulted and without), so here the unguarded path is a
+    // silent no-op chain and this assertion passes either way -- it pins the
+    // contract for spec-conforming browsers, not a difference observable on
+    // this one. The upload belongs to the frame after the restore, where
+    // #onContextRestored has dropped the texture and the next setSource
+    // re-uploads whatever source the viewer hands over.
+    backend!.setSource(null)
+    const duringLoss = await twoToneSource()
+    expect(() => backend!.setSource(duringLoss)).not.toThrow()
+
+    lose.restoreContext()
     await restored
 
     // A second source object, because the first one's element was released --
     // which is the documented setSource contract, and the reason a restore
     // cannot redraw on its own. See the non-goals.
-    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
-    backend!.setSource(await checkerSource())
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 })
+    backend!.setSource(await twoToneSource())
     backend!.render()
     const after = nonBlackFraction(readGl(canvas))
 
@@ -1475,11 +1609,6 @@ describe('WebGL2Backend', () => {
     backend!.dispose()
     canvas.remove()
 
-    // preventDefault() is what makes restoration possible at all. Without it the
-    // browser never fires webglcontextrestored and the canvas is dead with
-    // nothing reported.
-    expect(synthetic.defaultPrevented).toBe(true)
-    expect(lost[0]?.reason).toBe('context-lost')
     // The synthetic dispatch, then the real loss: two reports, not one.
     expect(lostCount).toBe(2)
     expect(before).toBeGreaterThan(0.5)
@@ -1490,12 +1619,12 @@ describe('WebGL2Backend', () => {
 
 > **`WebGL2Backend.create` 是同步的，`WebGPUBackend.create` 是 `async` 的。** 不是笔误：WebGPU 的 `requestAdapter()` / `requestDevice()` 是异步 API，WebGL2 的 `getContext('webgl2')` 不是。两个 `Backend` 实现都不因此在接口上多一个 `await` —— `createBackend()` 是 `async` 的，它在里面 `await` 那个异步的、直接调那个同步的。测试写起来是 `const backend = WebGL2Backend.create(canvas)`，不要加 `await`（加了也不会错，但会让人以为它是异步的）。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `npx vitest run --project integration webgl2-smoke`
 Expected: 4 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/webgl2/ test/integration/webgl2-smoke.test.ts src/viewer/backend-factory.ts
@@ -1523,7 +1652,7 @@ did."
 **门禁 C 的问题**：两份手写的着色器，四个投影，**它们会不会悄悄漂开？**
 
 **怎么比：两个离屏渲染器，同一张源图，同一批相机状态。** 不走两个真实的 `Backend`（那个在 Task 5 的用户故事里验），因为门禁 C 要证的是**两份着色器源码**一致，而经画布走一遍会引入 present 与读回的时序，还会让两边的输入路径不同（WebGPU 的 canvas 纹理没有 `readPixels` 等价物）。
-- [ ] **Step 1: 门禁 C 的工具**
+- [x] **Step 1: 门禁 C 的工具**
 
 `test/integration/support/cross-backend.ts`。**一个文件装三样东西**：共用的源图、GLSL 离屏渲染、CPU 裁判。浏览器模式让它们可以放在一起 —— 都在页面里跑，`import` 一次就够了，不需要分成「页面侧出口」和「测试侧工具」两半。
 
@@ -1554,10 +1683,11 @@ import { ndcToSurface, project } from '../../../src/core/reference'
 import type { CameraState, Projection } from '../../../src/core/types'
 
 /**
- * Gate C renders at 128x128 and that number is not free: WebGPU's
- * copyTextureToBuffer requires bytesPerRow to be a multiple of 256, and
- * 128 * 4 = 512. Change the size and the WebGPU half fails with a validation
- * error that says nothing about the projection formulas.
+ * Gate C renders at 128x128. The number is convention, not a constraint:
+ * WebGPU's copyTextureToBuffer wants bytesPerRow to be a multiple of 256 and
+ * gpu.ts's readTexture pads it when a width does not divide evenly (its own
+ * comment says so), so other sizes work. 128 * 4 = 512 divides evenly, which
+ * keeps the readback unpadded.
  */
 export const GATE_C_SIZE = 128
 
@@ -1584,6 +1714,7 @@ export async function gateSource (): Promise<{ bitmap: ImageBitmap, size: number
   canvas.width = GATE_C_SIZE
   canvas.height = GATE_C_SIZE
   const ctx = canvas.getContext('2d')!
+
   const image = ctx.createImageData(GATE_C_SIZE, GATE_C_SIZE)
 
   for (let y = 0; y < GATE_C_SIZE; y++) {
@@ -1601,10 +1732,12 @@ export async function gateSource (): Promise<{ bitmap: ImageBitmap, size: number
   }
 
   ctx.putImageData(image, 0, 0)
-  // imageOrientation: 'none' -- the v flip lives in the shader. `createImageBitmap`
-  // defaults to 'from-image', which would apply the EXIF orientation and, for a
-  // canvas source, land on the opposite convention from the one the GLSL half
-  // sets with UNPACK_FLIP_Y_WEBGL = false.
+  // imageOrientation: 'none' pins the orientation by the call rather than
+  // leaving it to the 'from-image' default, whose meaning varies by source
+  // type. A canvas carries no EXIF to apply -- measured in this suite's
+  // Chromium, the default and 'none' produce byte-identical bitmaps -- so
+  // this is determinism, not a flip workaround. The v flip lives in the
+  // shader, and the GLSL half uploads with UNPACK_FLIP_Y_WEBGL = false.
   return { bitmap: await createImageBitmap(canvas, { imageOrientation: 'none' }), size: GATE_C_SIZE }
 }
 
@@ -1658,8 +1791,14 @@ export async function renderOffscreenGLSL (request: RenderRequest): Promise<Rend
   // False: the v flip lives in the shader. Doing it here too would cancel it.
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+  // REPEAT on both axes, exactly as both shipped image paths wrap: the WebGPU
+  // still sampler (webgpu/shaders/sampler.ts) and this backend's own image
+  // branch (webgl2/backend.ts). CLAMP_TO_EDGE here would make the two halves
+  // sample different rows wherever v leaves [0, 1] -- which the non-linear
+  // projections' `- lat` term makes happen at any non-zero latitude -- and the
+  // comparison would fail for a reason with nothing to do with the formulas.
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 
@@ -1683,26 +1822,45 @@ export async function renderOffscreenGLSL (request: RenderRequest): Promise<Rend
   gl.deleteTexture(texture)
   gl.deleteProgram(program)
 
+  // Release the context now rather than at GC time: one is created per call
+  // and the suite runs ~21 of them, past Chrome's ~16-active-context LRU
+  // threshold -- exactly the accumulation defect L5's dispose fix exists to
+  // prevent (see WebGL2Backend.dispose). The WebGPU half already disposes
+  // its backend per call.
+  gl.getExtension('WEBGL_lose_context')?.loseContext()
+
   return { width, height, rgba: topDown }
 }
 
-/** Bilinear sample model matching the GPU's: LINEAR with CLAMP_TO_EDGE. */
+/** Bilinear sample model matching the GPU's: LINEAR with REPEAT on both axes. */
 function sample (
   data: Uint8ClampedArray,
   size: number,
   u: number,
   v: number
 ): [number, number, number] {
-  const x = Math.min(1, Math.max(0, u)) * size - 0.5
-  const y = Math.min(1, Math.max(0, v)) * size - 0.5
+  // x - floor(x), which is what a REPEAT sampler does to a coordinate before
+  // it interpolates. Clamp-to-edge here would disagree with both GPU halves
+  // wherever a projection's v leaves [0, 1] -- at any non-zero latitude the
+  // non-linear `- lat` term pushes phi past PI, and the GPUs wrap while a
+  // clamping model would pin the edge row.
+  const wrap = (x: number): number => {
+    const w = x % 1
+    return w < 0 ? w + 1 : w
+  }
+  const x = wrap(u) * size - 0.5
+  const y = wrap(v) * size - 0.5
   const x0 = Math.floor(x)
   const y0 = Math.floor(y)
   const fx = x - x0
   const fy = y - y0
 
   const texel = (ix: number, iy: number, channel: number): number => {
-    const cx = Math.min(size - 1, Math.max(0, ix))
-    const cy = Math.min(size - 1, Math.max(0, iy))
+    // Modular, not clamped: REPEAT blends the last source column into the
+    // first at the seam, which is exactly the boundary behaviour both shipped
+    // image paths have (webgpu/shaders/sampler.ts, webgl2/backend.ts).
+    const cx = ((ix % size) + size) % size
+    const cy = ((iy % size) + size) % size
     return data[(cy * size + cx) * 4 + channel]!
   }
 
@@ -1752,8 +1910,13 @@ export async function referenceImage (request: RenderRequest): Promise<RenderRes
       const ndcY = 1 - ((y + 0.5) / height) * 2
 
       const [sx, sy, sz] = ndcToSurface(ndcX, ndcY, extent)
+      // project() returns the UNFLIPPED equirect v (phi / PI -- see toUV in
+      // src/core/reference.ts), while both shaders' to_uv sample 1 - phi / PI.
+      // The flip is compensated here, once, so the arbiter reads the same
+      // texture rows both GPUs read; sampling v raw would mirror the image
+      // vertically and disagree on the wrap-antisymmetric channel.
       const { u, v } = project(sx, sy, sz, camera, projection)
-      const [r, g, b] = sample(sourceData, GATE_C_SIZE, u, v)
+      const [r, g, b] = sample(sourceData, GATE_C_SIZE, u, 1 - v)
 
       const i = (y * width + x) * 4
       rgba[i] = Math.round(r)
@@ -1865,7 +2028,7 @@ export async function compareWithReference (
 
 > **`request.source.close()` 在每个用例末尾。** `ImageBitmap` 持有的显存不会被 GC 及时回收，20 个用例各漏一张 128×128 的位图不致命，但门禁 C 是要长期增长的（每加一个相机状态就多一张），所以关掉它是纪律而不是优化。
 
-- [ ] **Step 2: 写测试**
+- [x] **Step 2: 写测试**
 
 `test/integration/gate-c-cross-backend.test.ts`：
 
@@ -1925,11 +2088,14 @@ const projectionFor = (kind: Kind, s: State): Projection =>
 
 const CAMERAS: readonly Kind[] = ['linear', 'cylindrical', 'planet', 'pannini']
 
+// fov is in RADIANS (Projection.fov; see src/viewer/camera-controller.ts). The
+// plan originally wrote 75/60/90 here as degrees, which built a mirrored ~22
+// degree camera; the values below are the intended angles converted.
 const STATES: readonly State[] = [
-  { povLatitude: 0, povLongitude: 0, fov: 75, zoom: 1 },
-  { povLatitude: 30, povLongitude: 45, fov: 75, zoom: 1 },
-  { povLatitude: -60, povLongitude: 180, fov: 60, zoom: 1 },
-  { povLatitude: 10, povLongitude: 300, fov: 90, zoom: 0.5 }
+  { povLatitude: 0, povLongitude: 0, fov: (75 * Math.PI) / 180, zoom: 1 },
+  { povLatitude: 30, povLongitude: 45, fov: (75 * Math.PI) / 180, zoom: 1 },
+  { povLatitude: -60, povLongitude: 180, fov: (60 * Math.PI) / 180, zoom: 1 },
+  { povLatitude: 10, povLongitude: 300, fov: (90 * Math.PI) / 180, zoom: 0.5 }
 ]
 
 describe('gate C: WebGPU vs WebGL2', () => {
@@ -1957,8 +2123,16 @@ describe('gate C: WebGPU vs WebGL2', () => {
     // The CPU path is float64 with its own bilinear fetch and the shaders are
     // float32 with the hardware's; hardware bilinear weights are quantized to a
     // handful of sub-texel bits, which is most of the headroom here.
+    // Cylindrical, not linear, and not by taste: the reference's ndcToSurface
+    // inverts the FIXED quad view, while a linear camera's pose is baked into
+    // buildViewMatrix -- which this arbiter deliberately does not use (see
+    // project()'s docs in src/core/reference.ts). A non-zero-pose linear
+    // camera is beyond what the arbiter can model by construction. The
+    // non-linear projections carry their pose as explicit formula terms, so
+    // cylindrical at state 1 keeps the third opinion honest exactly where the
+    // formulas can disagree: at a non-zero pose.
     const s = STATES[1]!
-    const r = await compareWithReference(state(s), projectionFor('linear', s))
+    const r = await compareWithReference(state(s), projectionFor('cylindrical', s))
 
     expect(r.webgpu).toBeLessThanOrEqual(3)
     expect(r.webgl2).toBeLessThanOrEqual(3)
@@ -1970,7 +2144,7 @@ describe('gate C: WebGPU vs WebGL2', () => {
     // of atan lands many texels apart. The tolerance is relaxed there on
     // purpose; this test pins that it is still bounded rather than unbounded.
     for (const kind of CAMERAS) {
-      const s: State = { povLatitude: 89.5, povLongitude: 0, fov: 75, zoom: 1 }
+      const s: State = { povLatitude: 89.5, povLongitude: 0, fov: (75 * Math.PI) / 180, zoom: 1 }
       const diff = await renderBothBackends(state(s), projectionFor(kind, s))
 
       // Not equal, but not garbage: a broken implementation gives a uniform
@@ -1983,7 +2157,7 @@ describe('gate C: WebGPU vs WebGL2', () => {
 
 > **这个文件跑在 `integration` project 里，那里有真适配器** —— `require-webgpu.ts` 守着。它**不在** `no-webgpu` 的白名单里（P1 的 `include` 只盖 `fallback/**` 与四个用户故事），因为「两份着色器一致」这件事在只有一个后端可用时无法提问。
 
-- [ ] **Step 3: 跑门禁 C**
+- [x] **Step 3: 跑门禁 C**
 
 Run: `npx vitest run --project integration gate-c`
 Expected: 18 条全 PASS（16 条状态 + 裁判 + 极点）
@@ -2001,7 +2175,7 @@ Expected: 18 条全 PASS（16 条状态 + 裁判 + 极点）
 
 **不要为了让门禁 C 变绿而放宽容差。** 如果 ±2 不够，先搞清楚为什么 —— 放宽到 ±8 只是把一个真实的转写错误变成一条永远绿不了又没人管的测试。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/gate-c-cross-backend.test.ts test/integration/support/cross-backend.ts
@@ -2021,9 +2195,10 @@ the presentation path."
 ### Task 5: 用户故事在 WebGL2 下重跑
 
 **Files:**
-- Modify: `vitest.config.ts`（`no-webgpu` project 的 `include`）
-- Modify: `test/integration/support/spies.ts`（`countDraws` 覆盖两个后端）
+- Modify: `vitest.config.ts`（`no-webgpu` project 的 `include`，与它的 provider 补 `deviceScaleFactor`）
+- Modify: `test/integration/support/spies.ts`（`countDraws` 与 `captureRenderInputs` 覆盖两个后端）
 - Modify: `test/integration/fallback/user-story-no-webgpu.test.ts`（翻成正面断言）
+- Modify: `test/integration/user-story-photo.test.ts`（probe 断言的期望值从固定标签改为按浏览器实际状态推导）
 
 **这是后端替换的验收方式** —— 同一批用户故事，换个后端。
 
@@ -2070,16 +2245,32 @@ P1 已经把两个 project 建好了，`no-webgpu` 的注释里写着它将来�
       'test/integration/fallback/**/*.test.ts',
       'test/integration/user-story-(photo|video|camera-switch|media-failure).test.ts'
     ],
-    // ...provider（--disable-gpu）与 instances 原样保留...
+    // provider 原本只剩 --disable-gpu 一行；Task 5 给它补了 DPR 对齐，这是
+    // include 之外该 project 唯一的功能性改动（整改轮另修了上方 --disable-gpu
+    // 注释里一句过时的预言，见质量审 F3）：
+    provider: playwright({
+      launchOptions: { channel: 'chromium', args: ['--disable-gpu'] },
+      // DPR parity with the integration project: a user story
+      // (user-story-photo, "renders sharply on a high-DPI display")
+      // hard-asserts devicePixelRatio === 2 precisely so it cannot
+      // silently pass at DPR 1, which is what this project would hand
+      // it without this line -- Playwright's default is 1. The only
+      // intended difference between the two projects is the GPU; the
+      // pixel density must not be a hidden variable that re-runs the
+      // same text against a differently-shaped canvas.
+      contextOptions: { deviceScaleFactor: 2 }
+    }),
+    headless: true,
+    instances: [{ browser: 'chromium' }]
   }
 }
 ```
 
-> **四个文件因此跑两次，文本一字不差。** 这是这个做法相对「把测试体抽成 helper、再写一个 spec 文件」的全部价值：不是**劝阻**重复，而是让重复不可能发生。
+> **四个文件因此跑两次，同一段代码。** 这是这个做法相对「把测试体抽成 helper、再写一个 spec 文件」的全部价值：不是**劝阻**重复，而是让重复不可能发生。唯一的例外是 photo 的 probe 断言：期望值从固定标签改为按浏览器实际状态推导——推导不是分叉，两个 project 跑的是同一段代码，各自算出各自的真值。
 
-- [ ] **Step 1: 让 `countDraws` 覆盖两个后端**
+- [x] **Step 1: 让 `countDraws` 与 `captureRenderInputs` 覆盖两个后端**
 
-`test/integration/support/spies.ts` 现在只包 `WebGPUBackend.prototype.render`。在 `no-webgpu` project 里那个方法永远不会被调用，于是 `draws()` 恒为 0 —— 一条 `expect(frames).toBe(0)` 会**空过**，一条 `expect(drew).toBeGreaterThan(0)` 会**误红**。两种都不是在测它想测的东西。
+`test/integration/support/spies.ts` 的两个入口现在都只包 `WebGPUBackend.prototype`。开工核实时发现（实现方 preflight STOP，协调者已在源里复核）：四个用户故事到达后端走的是 **`captureRenderInputs`**（photo 3 处 / video 3 处 / media-failure 1 处），不是 `countDraws`（它只有 dispose-order / viewer-events / viewer-render-input 用，那三个不进 `no-webgpu`）。所以两个都要扩，缺一个都会让 `no-webgpu` 里的绘制断言要么**空过**（`frames === 0` 对着没人调用的方法成立），要么**误红**（`sourceCalls() - before > 0` 恒假）。camera-switch 完全不用 spy；`captureTeardown` 包的是 ResizeObserver/EventEmitter 原型，本来就与后端无关。
 
 ```ts
 import { vi } from 'vitest'
@@ -2089,31 +2280,99 @@ import { WebGL2Backend } from '../../../src/renderer/webgl2/backend'
 /**
  * Counts every frame drawn by whichever backend the viewer selected.
  *
- * Both prototypes, because the same user-story file runs in two projects and
- * only one backend exists in each. Wrapping just the WebGPU one would make the
- * draw-count assertions in the fallback project silently vacuous -- `toBe(0)`
- * passes against a method nobody calls -- which is worse than a red test,
- * because it survives review.
+ * Both prototypes as prophylaxis, not as coverage: no current caller of this
+ * helper runs in the fallback project (its users -- dispose-order,
+ * viewer-events, viewer-render-input -- are all outside that project's
+ * include). Wrapping just the WebGPU one would let the first draw-counting
+ * test that DOES run there arrive silently vacuous -- `toBe(0)` passing
+ * against a method nobody calls -- which is worse than a red test, because
+ * it survives review.
+ *
+ * The spies call through, and the reader sums the two accounts -- the same
+ * shape `captureRenderInputs` gives `sourceCalls`. Calling through is the
+ * point: a helper that stubs `render` hands a guaranteed-blank canvas to any
+ * test that counts draws and then reads pixels.
  *
  * Returns a reader rather than a count: the callers snapshot it before and after
  * an action, and two reads of one number is what lets them.
  */
 export function countDraws (): () => number {
-  let count = 0
-  for (const backend of [WebGPUBackend, WebGL2Backend]) {
-    vi.spyOn(backend.prototype, 'render').mockImplementation(() => { count++ })
-  }
-  return () => count
+  const spies = [
+    vi.spyOn(WebGPUBackend.prototype, 'render'),
+    vi.spyOn(WebGL2Backend.prototype, 'render')
+  ]
+  for (const spy of spies) spy.mockClear()
+  return () => spies.reduce((total, spy) => total + spy.mock.calls.length, 0)
 }
 ```
 
-> **`mockImplementation(() => { count++ })` 而不是 `vi.fn()` 再读 `mock.calls.length`。** 两个 spy 各有一本账，读的人要把两个数加起来；一个闭包里的计数器只有一个数，而「一帧画了几次」本来就只有一个答案。
+> **两个 spy 都是纯 spy（call-through），读数是两本账之和——与 `captureRenderInputs` 的 `sourceCalls` 同式。** 保持调用放行是刻意的：一个 stub 掉 `render` 的 helper 会把保证全黑的画布递给任何「数完帧再读像素」的测试；本轮整改把首落地时的 stub 改回了调用放行（质量审 F2：stub 并非双后端目标所需，对只读计数的调用方，两种写法可观察行为完全一致）。
 >
 > **`afterEach(() => { vi.restoreAllMocks() })` 是必须的**，P5 的 US2 与 US4 已经写了。恢复之后 `render` 回到真实现，下一个测试才画得出东西 —— 少了它，一个文件里后面的每个测试都会拿到被掏空的 `render`。
 
-- [ ] **Step 2: 把 US5 翻成正面断言**
+`captureRenderInputs` 以同样的方式扩到两个原型（整改后两个 helper 都是纯 spy）：用户故事在它之后做像素断言，一个被掏空的 `setSource` 会让那些断言变成「对着没人渲染过的帧」。
 
-`test/integration/fallback/user-story-no-webgpu.test.ts` 现在断言 `probe()` 是 `'none'`、`create()` 抛异常 —— 那是 P6 还没落地时的诚实结果。**现在它要翻过来**，这正是那个文件存在的意义（P5 的交接表里点名了这件事）：
+```ts
+/**
+ * Records what the viewer hands the backend on each frame.
+ *
+ * `countDraws` above answers "did the loop run"; this answers "with what",
+ * which is a different question and one no pixel comparison can reach. A
+ * viewer that called `setSource(null)` for ever, or pinned the camera to the
+ * origin, would still draw the right NUMBER of frames -- so a suite built only
+ * on `countDraws` stays green through both, as the quality review measured.
+ *
+ * Both spies call through. These tests assert on the arguments, not on a
+ * stubbed-out backend: replacing `setSource` with a recorder would leave the
+ * real backend never told about the source, and every pixel assertion made
+ * afterwards would be about a frame nobody rendered.
+ *
+ * BOTH prototypes, for the same reason `countDraws` wraps both: the same
+ * user-story file runs in two projects and only one backend exists in each.
+ * At most one of the two accounts is ever non-empty -- "the last call" is the
+ * last call of whichever one is, and `sourceCalls` is their sum for the same
+ * reason the draw counter is one number.
+ */
+export function captureRenderInputs (): {
+  readonly lastSource: () => RenderableSource | null | undefined
+  readonly lastCamera: () => { state: CameraState, projection: Projection } | undefined
+  readonly sourceCalls: () => number
+} {
+  const sources = [
+    vi.spyOn(WebGPUBackend.prototype, 'setSource'),
+    vi.spyOn(WebGL2Backend.prototype, 'setSource')
+  ]
+  const cameras = [
+    vi.spyOn(WebGPUBackend.prototype, 'setCamera'),
+    vi.spyOn(WebGL2Backend.prototype, 'setCamera')
+  ]
+  for (const spy of [...sources, ...cameras]) spy.mockClear()
+
+  return {
+    // `undefined` means "never called", `null` means "called with no source".
+    // Collapsing the two would make the not-yet-loaded case indistinguishable
+    // from a backend the viewer never spoke to at all.
+    lastSource: () => {
+      for (const spy of sources) {
+        if (spy.mock.calls.length > 0) return spy.mock.calls.at(-1)?.[0]
+      }
+      return undefined
+    },
+    lastCamera: () => {
+      for (const spy of cameras) {
+        const call = spy.mock.calls.at(-1)
+        if (call !== undefined) return { state: call[0], projection: call[1] }
+      }
+      return undefined
+    },
+    sourceCalls: () => sources.reduce((total, spy) => total + spy.mock.calls.length, 0)
+  }
+}
+```
+
+- [x] **Step 2: 把 US5 翻成正面断言**
+
+`test/integration/fallback/user-story-no-webgpu.test.ts` 现在断言 `probe()` 是 `'none'`、`create()` 抛异常 —— 那是 P6 还没落地时的诚实结果。**现在它要翻过来**，这正是那个文件存在的意义（P5 的交接表里点名了这件事）。落地版相对本计划初稿有三处修正：`create()` 必须带 `src`（`ImageViewerOptions.src` 是必填，缺了在 `assertSrc` 就抛）；两处对 probe 结果的字段读取前要先收窄掉 `SelectedCapabilities` 的 `'none'` 分支（否则过不了 typecheck）；外加协调者裁定的 probe-vs-constructed `maxTextureDimension` 相等断言（钉住 Task 3 的 probe 修正）：
 
 ```ts
 import { describe, expect, it, vi } from 'vitest'
@@ -2142,6 +2401,10 @@ describe('US5: running where WebGPU is unavailable', () => {
     // about a machine with no usable backend.
     const caps = await FramelessImageViewer.probe()
     expect(caps.backend).toBe('webgl2')
+    // `SelectedCapabilities` has a 'none' arm that carries nothing else, so the
+    // reads below need the union narrowed. The throw is for the compiler: the
+    // line above has already made it unreachable.
+    if (caps.backend === 'none') throw new Error('probe() reported no backend')
     // The WebGPU-only capability is dropped along with the label. A backend
     // reporting webgl2 with externalTextures: true sends callers down a path
     // this backend cannot serve.
@@ -2152,7 +2415,12 @@ describe('US5: running where WebGPU is unavailable', () => {
     // The end-to-end form of the same claim: not "the label says webgl2", but
     // "a 360 photo appears". Before P6 this threw.
     const container = makeContainer()
-    const viewer = await FramelessImageViewer.create({ container })
+    // `src` is required at construction (the frozen surface has no src-less
+    // viewer), and re-assigning the same URL once the listeners are on is what
+    // keeps the load observable: the construction-time load may land before a
+    // listener could attach, and the swap through the public setter is a real
+    // load either way.
+    const viewer = await FramelessImageViewer.create({ container, src: '/fixtures/panorama.png' })
     const losses: unknown[] = []
     viewer.on('device-lost', e => losses.push(e))
     const loaded: string[] = []
@@ -2163,9 +2431,20 @@ describe('US5: running where WebGPU is unavailable', () => {
     await nextFrames(2)
     const image = await readCanvas(canvasOf(container))
     const backend = viewer.capabilities.backend
+    // Pins Task 3's probe fix end to end: probe() (which reads MAX_TEXTURE_SIZE
+    // when there is no adapter) and a constructed viewer must report the SAME
+    // clamped maxTextureDimension, not just the same backend label. A probe
+    // that under-reports would make apps pre-downscale sources the viewer can
+    // actually take.
+    const probed = await FramelessImageViewer.probe()
+    const constructed = viewer.capabilities.maxTextureDimension
     viewer.dispose()
 
     expect(backend).toBe('webgl2')
+    // Same narrowing as test 1: 'none' is the arm with no maxTextureDimension,
+    // and probe() answering it here is itself the failure.
+    if (probed.backend === 'none') throw new Error('probe() reported no backend')
+    expect(constructed).toBe(probed.maxTextureDimension)
     expect(countNonBlack(image)).toBeGreaterThan(0.2 * image.width * image.height)
     // A downgrade is not a device loss, and reporting it as one would make every
     // consumer's error path fire on a page that is working perfectly.
@@ -2174,7 +2453,31 @@ describe('US5: running where WebGPU is unavailable', () => {
 })
 ```
 
-- [ ] **Step 3: 跑全部**
+- [x] **Step 3: photo 的 probe 断言改为按环境推导**
+
+include 扩容后（Step 1 的 config 块），同一份 photo 文本要在两个 project 里跑，而它有一条断言钉死了 `probe() === 'webgpu'` —— 那是 `integration` 一方的真值，在 `--disable-gpu` 下就是谎言（US5 的第一条测试断言的恰恰是 `'webgl2'`）。这条测试自称「US5 的另一半」，它的真值本来就随环境而变，所以期望值改为从浏览器实际状态推导，且推导放在 probe 调用**之前**：地面真值先行，被测物其次。这是四个文件里唯一的环境钉死字面量（开工时逐文件扫过：'webgpu'/'adapter'/`navigator.gpu`/`externalTextures`/`devicePixelRatio` 全查）。落地文本：
+
+```ts
+  it('an application can ask about the backend before it creates anything', async () => {
+    /*
+     * The other half of US5, and the one environment-pinned literal this file
+     * carries: the same text runs in two projects, and a FIXED backend label
+     * would be true in one and a lie in the other. The expectation is derived
+     * from the browser's actual state instead -- independently of probe(),
+     * which is the thing under test -- so the assertion stays "probe() reports
+     * the truth of whichever environment it runs in", in both projects. A
+     * probe that misreported in either direction is the legacy silent
+     * downgrade back again: "ask first, then decide" was the whole reason
+     * probe exists, and an answer that cannot be trusted in the good case is
+     * worse than none.
+     */
+    const adapter = navigator.gpu ? await navigator.gpu.requestAdapter() : null
+    const caps = await FramelessImageViewer.probe()
+    expect(caps.backend).toBe(adapter !== null ? 'webgpu' : 'webgl2')
+  })
+```
+
+- [x] **Step 4: 跑全部**
 
 Run: `npm test`
 Expected: 全 PASS。**四个用户故事要在两个 project 里各出现一次** —— 只出现一次是 `include` 没生效，不是测试通过：
@@ -2186,13 +2489,16 @@ npx vitest list --project integration 2>/dev/null | grep -c "user-story-"
 
 Expected: 两条都大于 0。
 
-**如果 `no-webgpu` 里红的是绘制计数**：`countDraws` 没覆盖到 `WebGL2Backend`（Step 1）。**如果红的是画面**：`preserveDrawingBuffer` 没开，于是 `readCanvas` 的 `toDataURL` 拿到的是清屏后的黑 —— 见「明确的非目标」里那一条。
+**如果 `no-webgpu` 里红的是绘制计数**：`countDraws` / `captureRenderInputs` 没覆盖到 `WebGL2Backend`（Step 1）。**如果红的是画面**：`preserveDrawingBuffer` 没开，于是 `readCanvas` 的 `toDataURL` 拿到的是清屏后的黑 —— 见「明确的非目标」里那一条。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add vitest.config.ts test/integration/support/spies.ts test/integration/fallback/user-story-no-webgpu.test.ts
-git commit -m "test(viewer): run every user story against the WebGL2 backend
+git add vitest.config.ts test/integration/support/spies.ts \
+  test/integration/fallback/user-story-no-webgpu.test.ts \
+  test/integration/user-story-photo.test.ts \
+  docs/superpowers/plans/2026-09-19-p6-webgl2-backend.md
+git commit -m "task-p6-webgl2-backend: test(viewer): run every user story against the WebGL2 backend
 
 Widening the no-webgpu project's include, not writing a second spec file. The
 user-story tests are the same text run twice, so there is no second copy to
@@ -2200,8 +2506,28 @@ drift -- a stronger guarantee than extracting shared helpers gives. The project
 is a whitelist: the gates all assert a real adapter and would fail there for a
 reason unrelated to their subject.
 
-countDraws now wraps both backends. It wrapped only the WebGPU one, which made
-'frames === 0' pass vacuously under the fallback and 'drew > 0' fail wrongly."
+The user stories reach the backend through captureRenderInputs, not
+countDraws -- the plan's Task 5 premised the wrong spy. Both are widened to
+wrap BOTH prototypes: countDraws with one shared counter (its assertions only
+ever read counts), captureRenderInputs with call-through spies on two
+accounts, at most one of which is non-empty in any project.
+
+The no-webgpu provider also gains the integration project's
+deviceScaleFactor: 2 -- photo's high-DPI story hard-asserts DPR 2 so it cannot
+silently pass at 1, and the only difference between the projects is meant to
+be the GPU.
+
+One photo assertion moves from a fixed label to a derived one: its probe test
+pinned backend === 'webgpu', which is the integration project's truth and a
+lie under --disable-gpu. The expectation now comes from the browser's actual
+adapter state, measured independently of probe(), so the same text asserts
+\"probe() tells the truth\" in both projects instead of in one.
+
+US5 flips to the post-P6 truth: probe() reports webgl2 and create() renders,
+with probe's and the constructed viewer's clamped maxTextureDimension pinned
+equal.
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
 
 ---
@@ -2224,7 +2550,7 @@ spec §9.7 的「后端降级」一行要求：**屏蔽 `navigator.gpu`，断言
 
 > **`--disable-features=WebGPU` 是无效的**（实测：适配器照样出现），要造这条环境只能用 `--disable-gpu`。而 `--disable-gpu` 会同时**保住 WebGL2**（走 SwiftShader），正好是这里要的那个形状。**不要**再加 `--disable-software-rasterizer`：那会把 WebGL2 一起干掉，于是测的是「两个都没有」，而不是「一个都没有」。
 
-- [ ] **Step 1: 环境一 —— 没有 `navigator.gpu`**
+- [x] **Step 1: 环境一 —— 没有 `navigator.gpu`**
 
 `test/integration/backend-downgrade.test.ts`（`integration` project）：
 
@@ -2243,7 +2569,8 @@ import { countNonBlack, nextFrames, readCanvas } from './support/canvas'
  * gets its own file and its own project, instead of being folded into the
  * fallback one.
  *
- * The mask is a plain assignment in the test body, not an init script. There is
+ * The mask is a plain `delete` on the prototype in the test body, not an init
+ * script. There is
  * no process boundary in browser mode, so there is no ordering question: the
  * probe reads `navigator.gpu` when it is called, and it is called after this.
  *
@@ -2254,23 +2581,34 @@ import { countNonBlack, nextFrames, readCanvas } from './support/canvas'
  * renderer" reads it from exactly these two places.
  *
  * There is deliberately no `downgraded` event. The public event surface is
- * frozen (P5, src/index.ts) and a downgrade is a state, not an occurrence: it is
- * true from before the viewer exists, so there is no moment at which it could
+ * frozen (P5, src/index.ts) and a downgrade is a state, not an occurrence: it
+ * is true from before the viewer exists, so there is no moment at which it could
  * fire. `device-lost` is the event for a backend that died, which is a different
  * thing and is tested in webgl2-smoke.
  */
 
-const HAD_GPU = 'gpu' in Navigator.prototype
+// Captured at import, before any test in this file can touch it. `gpu` is an
+// own accessor of Navigator.prototype on every engine that has WebGPU at all,
+// so this descriptor is the complete original state -- and `HAD_GPU` derived
+// from it (rather than from `'gpu' in Navigator.prototype`) means an engine
+// that exposed `gpu` some other way fails the premise test below loudly,
+// instead of every mask in this file silently masking nothing.
+const GPU_DESCRIPTOR = Object.getOwnPropertyDescriptor(Navigator.prototype, 'gpu')
+const HAD_GPU = GPU_DESCRIPTOR !== undefined
 
 afterEach(() => {
   // Restored explicitly, not left to the next test file's fresh page: tests in
   // one file share a page, so a mask that outlives its test would make every
   // later test in this file run in the wrong environment -- and green.
-  if (HAD_GPU) {
-    Object.defineProperty(Navigator.prototype, 'gpu', {
-      configurable: true,
-      get: () => undefined
-    })
+  //
+  // The original descriptor, NOT a fresh stub getter: `probe()` reads
+  // `'gpu' in navigator` and then calls `navigator.gpu.requestAdapter()`, so
+  // a page left with `gpu` present-but-undefined is a page where the
+  // library's own probe crashes -- a worse inheritance than no restoration at
+  // all. The sibling fallback file patches `getContext` with the same
+  // save/restore idiom.
+  if (GPU_DESCRIPTOR) {
+    Object.defineProperty(Navigator.prototype, 'gpu', GPU_DESCRIPTOR)
   }
 })
 
@@ -2294,6 +2632,10 @@ describe('WebGPU absent, WebGL2 present', () => {
 
     const caps = await FramelessImageViewer.probe()
     expect(caps.backend).toBe('webgl2')
+    // The 'none' arm carries no externalTextures, so the read below needs the
+    // union narrowed; the throw is for the compiler, the line above already
+    // made it unreachable.
+    if (caps.backend === 'none') throw new Error('probe() reported no backend')
     expect(caps.externalTextures).toBe(false)
   })
 
@@ -2301,7 +2643,12 @@ describe('WebGPU absent, WebGL2 present', () => {
     delete (Navigator.prototype as { gpu?: unknown }).gpu
 
     const container = makeContainer()
-    const viewer = await FramelessImageViewer.create({ container })
+    // `src` is required at construction (the frozen surface has no src-less
+    // viewer), and re-assigning the same URL once the listeners are on is what
+    // keeps the load observable: the construction-time load may land before a
+    // listener could attach, and the swap through the public setter is a real
+    // load either way.
+    const viewer = await FramelessImageViewer.create({ container, src: '/fixtures/panorama.png' })
     const losses: unknown[] = []
     viewer.on('device-lost', e => losses.push(e))
     const loaded: string[] = []
@@ -2321,9 +2668,9 @@ describe('WebGPU absent, WebGL2 present', () => {
 })
 ```
 
-> **`afterEach` 里重新 `defineProperty` 而不是 `delete`。** `Navigator.prototype.gpu` 在 Chromium 上是一个继承来的访问器，`delete` 掉之后没有「原来的值」可以放回去 —— 只有测试开头记下的 `HAD_GPU` 这一个事实。把它定义成一个返回 `undefined` 的 getter 让 `'gpu' in navigator` 重新为真，这对 `integration` project 里**后面的其他文件**没有影响（每个文件一个新页面），但能让这个文件里后面的测试拿到一致的状态。
+> **`afterEach` 恢复的是 import 时捕获的原 descriptor，不是重新定义一个返回 `undefined` 的 getter。** 初稿的 `defineProperty({ get: () => undefined })` 是降级不是恢复：它让 `'gpu' in navigator` 为真而 `navigator.gpu` 为 `undefined`，而 `probe()`（backend-factory.ts）只查前者就去调 `requestAdapter()`——在这个状态上直接 TypeError。质量审的突变证明了泄漏：删掉 render 测试自己的 `delete` 行后套件仍全绿，因为前一个测试的「恢复」已经替它掩掉了 WebGPU。恢复成真 descriptor 后该突变按预期转红（`WebGPUBackend.create` 先于 WebGL2 被选中，backend 标签断言失败）。这与同目录 backend-unavailable 对 `getContext` 的 save/restore 是同一惯用法。
 
-- [ ] **Step 2: 环境三 —— 两个后端都没有**
+- [x] **Step 2: 环境三 —— 两个后端都没有**
 
 `test/integration/fallback/backend-unavailable.test.ts`（`no-webgpu` project）：
 
@@ -2342,9 +2689,12 @@ import { makeContainer } from '../support/dom'
  * this file only has to take WebGL2 away. Masking both here would mean the
  * project's own guard could stop working and nothing would notice.
  *
- * `getContext` is patched on the prototype and only for 'webgl2'. Blanking every
- * context type would also break the 2D canvas that P1's readCanvas uses, and the
- * test would then fail while constructing its own tools.
+ * `getContext` is patched on the prototype and only for 'webgl2'. The mask
+ * covers exactly the assumption under test -- WebGL2 absent -- and nothing
+ * else: blanking every context type would quietly turn "neither backend" into
+ * "a page with almost no canvas capability at all", a stronger premise than
+ * the one spec 9.7 asks this file to hold, and one whose extra restrictions
+ * no assertion here is watching.
  */
 
 const original = HTMLCanvasElement.prototype.getContext
@@ -2375,7 +2725,11 @@ describe('neither backend available', () => {
 
     const attempt = async (): Promise<string> => {
       try {
-        await FramelessImageViewer.create({ container })
+        // `src` is required and validated BEFORE the backend is chosen, so it
+        // must be a real URL here: without it the throw would be 'src must be
+        // a string' and the assertion below would never see the backend's own
+        // message.
+        await FramelessImageViewer.create({ container, src: '/fixtures/panorama.png' })
         return ''
       } catch (error) {
         return String(error)
@@ -2404,14 +2758,14 @@ describe('neither backend available', () => {
 })
 ```
 
-- [ ] **Step 3: 跑**
+- [x] **Step 3: 跑**
 
 Run: `npx vitest run --project integration backend-downgrade && npx vitest run --project no-webgpu fallback`
-Expected: 5 个测试 PASS（3 + 2）
+Expected: 8 个测试 PASS（3 + 5）。第二条命令的 `fallback` 过滤器按路径选中 `fallback/` 下全部三个文件：backend-unavailable 2 + US5 搭车 2 + smoke 搭车 1（原稿「3 + 2」漏算了 US5，而 US5 之外 smoke 同样住在 `fallback/` 下、同样被过滤器选中，如实数字是 5）
 
 **如果「the premise holds」就红**：这个 project 本来就没有适配器，说明 `require-webgpu.ts` 或 `channel: 'chromium'` 没生效 —— 那比这条测试红严重得多。**如果 `create()` 没有抛**：查 `getContext` 的补丁是不是被后加载的别的库换掉了（本文件的 `beforeEach` 每次重装，所以只有同一个测试体内才可能）。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/backend-downgrade.test.ts test/integration/fallback/backend-unavailable.test.ts
@@ -2430,19 +2784,19 @@ is the one easiest to miss, and it is exactly what --disable-gpu produces."
 
 ## 完成标准
 
-- [ ] 门禁 C 的 18 条全绿，容差未被放宽
-- [ ] P5 的四个用户故事文件 **untouched**，在两个 project 下各跑一遍且都绿
-- [ ] `fallback/user-story-no-webgpu.test.ts` 已从「`probe()` 是 `none`、`create()` 抛」翻成「`probe()` 是 `webgl2`、`create()` 成功并画出画面」
-- [ ] 三种降级环境各有一条测试，且**每一种在自己的 project 里都是真的状态改变**（环境一里有真适配器可以拿掉，环境二靠启动参数，环境三在环境二之上）
-- [ ] `capabilities.backend === 'webgl2'` 且 `externalTextures === false`，且这个值来自 `describeCapabilities`
-- [ ] `countDraws` 覆盖两个后端，`no-webgpu` project 下的绘制计数不空过
-- [ ] 着色器编译失败会抛异常，不返回死后端
-- [ ] 连续创建/销毁 20 个后端不耗尽上下文额度
-- [ ] `webglcontextlost` 被 `preventDefault()` 并上报 `{ reason: 'context-lost' }`；`webglcontextrestored` 后能重新画出画面
-- [ ] `npm run build` 成功，且 `dist/index.js` 里能找到 `#version 300 es`（`?raw` 通道两端都通）
-- [ ] `npm run typecheck` 干净（两条 program）
-- [ ] **`src/index.ts` 的导出面与 P5 一致**（后端替换不改变公开 API）
-- [ ] **`demo/` 一个字节都没改**
+- [x] 门禁 C 的 18 条全绿，容差未被放宽
+- [x] P5 的四个用户故事文件**除 photo 的后端标签断言外一字不改**（该断言的期望值改为从浏览器实际状态推导，推导不是分叉：两个 project 跑同一段代码，各自算出各自的真值），在两个 project 下各跑一遍且都绿
+- [x] `fallback/user-story-no-webgpu.test.ts` 已从「`probe()` 是 `none`、`create()` 抛」翻成「`probe()` 是 `webgl2`、`create()` 成功并画出画面」
+- [x] 三种降级环境各有一条测试，且**每一种在自己的 project 里都是真的状态改变**（环境一里有真适配器可以拿掉，环境二靠启动参数，环境三在环境二之上）
+- [x] `capabilities.backend === 'webgl2'` 且 `externalTextures === false`，且这个值来自 `describeCapabilities`
+- [x] `countDraws` 与 `captureRenderInputs` 覆盖两个后端，`no-webgpu` project 下的绘制计数不空过
+- [x] 着色器编译失败会抛异常，不返回死后端
+- [x] 连续创建/销毁 20 个后端不耗尽上下文额度
+- [x] `webglcontextlost` 被 `preventDefault()` 并上报 `{ reason: 'context-lost' }`；`webglcontextrestored` 后能重新画出画面
+- [x] `npm run build` 成功，且 `dist/index.js` 里能找到 `#version 300 es`（`?raw` 通道两端都通）
+- [x] `npm run typecheck` 干净（两条 program）
+- [x] **`src/index.ts` 的导出面与 P5 一致**（后端替换不改变公开 API）
+- [x] **`demo/` 一个字节都没改**
 
 ## 明确的非目标
 
