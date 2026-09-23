@@ -70,6 +70,8 @@ sha 轨迹：M1 wgsl 656a97fa→3c06bc15→656a97fa（sentinel glsl cdae5445 恒
 
 - CLAUDE.md Commands 节注释漂移：写着 `npm run test:integration # playwright test`，实际 package.json 跑的是 vitest browser projects——先前已存在、与 C1–C3 无关，明确推迟到 p7-cleanup 文档轮（届时重写 CLAUDE.md）。
 - 上述两条非阻塞语法瑕疵：已记录、接受，不再动注释。
+- **spec §5.4 已知过时（终审 Finding 1，IMPORTANT，以登记处置）**：本卡 spec（`docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md:136`，§5.4）仍把 360° 往返定为「C1 的行为级红网」——本分支已证伪：`wrapLongitude` 把 360 回卷成精确 0，`lngOffset(0)` 新旧公式同值，M1 沙箱里往返保持绿、只有 quarter-shift 网 red。plan 与完成报告偏离 #2 已记录改判（往返=伴随绿钉，真红网=quarter-shift）。spec 属分支前用户裁决文档、在 scope 白名单之外，修订与否由用户定夺；维护者若按 §5.4 复核 C1 会写出一张回归下不可能红的网并误信其绿。
+- **v1-design §11.4 B1 的「差约 29 倍」参照系含混（终审 Finding 2，MINOR，随行登记）**：净 /4 偏移对诚实换算是 45/π ≈ 14.3（本分支注释口径，wgsl/glsl/reference.ts/CLAUDE.md 四处一致）；/2.0 中间步对换算是 90/π ≈ 28.6 ≈ 29（v1-design 原文口径）。两数各自算术上都对，但调和说明目前只存在于 d25549c 提交消息里，读者从任一文档看不到。留待 p7-cleanup 文档轮加一个词的括注即可，不阻塞任何事。
 
 ## 自审记录
 
