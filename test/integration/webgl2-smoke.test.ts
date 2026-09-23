@@ -24,16 +24,21 @@ import type { CameraState } from '../../src/core/types'
 /** The pose every case uses. Its values are irrelevant; its presence is not. */
 const ORIGIN: CameraState = { povLatitude: 0, povLongitude: 0 }
 
-/** A 2x2 checkerboard as an image element: pixels known without a fixture file. */
-async function checkerSource (): Promise<RenderableSource> {
+/** A 2x2 canvas in two horizontal color bands, as an image element: pixels known without a fixture file. */
+async function twoToneSource (): Promise<RenderableSource> {
   const canvas = document.createElement('canvas')
   canvas.width = 2
   canvas.height = 2
   const ctx = canvas.getContext('2d')!
+  // Horizontal bands, not a quadrant checkerboard: each column of a
+  // 2-pixel-wide equirectangular texture spans 180 degrees of longitude, so a
+  // 75-degree view from any longitude sees one column only and a quadrant
+  // board renders solid. The row boundary sits on the equator -- where a
+  // latitude-zero camera looks -- so both colors land in every frame it draws.
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, 2, 2)
   ctx.fillStyle = '#ff0000'
-  ctx.fillRect(0, 0, 1, 1)
+  ctx.fillRect(0, 0, 2, 1)
 
   // A real <img>, not a bitmap: RenderableSource.element is typed
   // HTMLImageElement | HTMLVideoElement, and a backend uploads it through
@@ -76,8 +81,13 @@ describe('WebGL2Backend', () => {
     expect(backend, 'WebGL2Backend.create returned null in a browser that has WebGL2').not.toBeNull()
 
     backend!.resize(64, 64, 1)
-    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
-    backend!.setSource(await checkerSource())
+    // Radians, not degrees: `Projection.fov` is documented in radians (P2's
+    // legacyFovFrom; see src/viewer/camera-controller.ts), and the plan's
+    // literal `fov: 75` handed the matrix 75 radians -- a deterministic but
+    // nonsensical camera whose vertical span was +-11 degrees and vertically
+    // mirrored, too narrow for the both-colors assertion below to ever fire.
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 })
+    backend!.setSource(await twoToneSource())
     backend!.render()
 
     const pixels = readGl(canvas)
@@ -90,6 +100,18 @@ describe('WebGL2Backend', () => {
     expect(capabilities.maxTextureDimension).toBeGreaterThanOrEqual(2048)
     expect(capabilities.externalTextures).toBe(false)
     expect(nonBlackFraction(pixels)).toBeGreaterThan(0.5)
+
+    // Both colors have to appear, not merely any non-black pixel: a
+    // constant-UV fallback painting one texel over the whole frame would score
+    // 1.0 on the fraction too. White carries green; red does not.
+    let sawWhite = false
+    let sawRed = false
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 1]! > 200) sawWhite = true
+      if (pixels[i]! > 200 && pixels[i + 1]! < 64) sawRed = true
+    }
+    expect(sawWhite).toBe(true)
+    expect(sawRed).toBe(true)
   })
 
   it('throws rather than yielding a dead backend when the shader will not compile', () => {
@@ -127,8 +149,8 @@ describe('WebGL2Backend', () => {
     const unsubscribe = backend!.onDeviceLost(l => lost.push(l))
 
     backend!.resize(32, 32, 1)
-    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
-    backend!.setSource(await checkerSource())
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 })
+    backend!.setSource(await twoToneSource())
     backend!.render()
     const before = nonBlackFraction(readGl(canvas))
 
@@ -138,6 +160,11 @@ describe('WebGL2Backend', () => {
     // would read black regardless of the restore path.
     const synthetic = new Event('webglcontextlost', { cancelable: true })
     canvas.dispatchEvent(synthetic)
+    // Asserted here, not after the restore: the handler runs synchronously
+    // under dispatchEvent, and a deleted preventDefault would otherwise die by
+    // the restore await timing out rather than by these assertions naming it.
+    expect(synthetic.defaultPrevented).toBe(true)
+    expect(lost[0]?.reason).toBe('context-lost')
 
     const restored = new Promise<void>(resolve => {
       canvas.addEventListener('webglcontextrestored', () => resolve(), { once: true })
@@ -148,12 +175,36 @@ describe('WebGL2Backend', () => {
     // from getExtension(), so restoreContext() later has to go through the
     // object taken before the loss.
     const lose = gl.getExtension('WEBGL_lose_context')!
+    // Waiting for the loss event itself, not for a timer: a timer only proves
+    // that time passed. The once listener is registered after the synthetic
+    // dispatch, so only the real loss can settle it.
+    const realLoss = new Promise<void>(resolve => {
+      canvas.addEventListener('webglcontextlost', () => resolve(), { once: true })
+    })
     lose.loseContext()
-    // One macrotask: the browser fires webglcontextlost asynchronously after
-    // loseContext(), so reading `lost` synchronously would read an empty array
-    // that looks like "the event never fired".
-    await new Promise<void>(resolve => { setTimeout(resolve, 0) })
+    await realLoss
+    // The synthetic dispatch, then the real loss: two reports, not one.
     const lostCount = lost.length
+
+    // setSource inside the loss window must be a silent no-op, not an error.
+    // The null first, as the viewer clearing its source mid-loss: that is what
+    // makes the second call reach the allocation line, which it otherwise
+    // never would (the first upload left a texture behind, and only
+    // #onContextRestored drops it).
+    //
+    // Honest about what this can pin: the WebGL spec allows createTexture()
+    // to return null on a lost context, and the backend's guard is what keeps
+    // that from being an allocation error thrown on every frame of the window.
+    // THIS Chromium returns a live object instead (measured: both with the
+    // loss preventDefaulted and without), so here the unguarded path is a
+    // silent no-op chain and this assertion passes either way -- it pins the
+    // contract for spec-conforming browsers, not a difference observable on
+    // this one. The upload belongs to the frame after the restore, where
+    // #onContextRestored has dropped the texture and the next setSource
+    // re-uploads whatever source the viewer hands over.
+    backend!.setSource(null)
+    const duringLoss = await twoToneSource()
+    expect(() => backend!.setSource(duringLoss)).not.toThrow()
 
     lose.restoreContext()
     await restored
@@ -161,8 +212,8 @@ describe('WebGL2Backend', () => {
     // A second source object, because the first one's element was released --
     // which is the documented setSource contract, and the reason a restore
     // cannot redraw on its own. See the non-goals.
-    backend!.setCamera(ORIGIN, { kind: 'linear', fov: 75, aspect: 1 })
-    backend!.setSource(await checkerSource())
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 })
+    backend!.setSource(await twoToneSource())
     backend!.render()
     const after = nonBlackFraction(readGl(canvas))
 
@@ -170,11 +221,6 @@ describe('WebGL2Backend', () => {
     backend!.dispose()
     canvas.remove()
 
-    // preventDefault() is what makes restoration possible at all. Without it the
-    // browser never fires webglcontextrestored and the canvas is dead with
-    // nothing reported.
-    expect(synthetic.defaultPrevented).toBe(true)
-    expect(lost[0]?.reason).toBe('context-lost')
     // The synthetic dispatch, then the real loss: two reports, not one.
     expect(lostCount).toBe(2)
     expect(before).toBeGreaterThan(0.5)
