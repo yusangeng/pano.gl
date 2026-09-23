@@ -22,15 +22,3 @@ export function canvasOf (container: HTMLElement): HTMLCanvasElement {
   if (canvas === null) throw new Error('the container has no .pano-canvas in it')
   return canvas
 }
-
-/**
- * The viewer's video element inside `container`, if it has one.
- *
- * Returns null rather than throwing: "there is no video element" is the answer
- * several tests want -- after a source swap away from video, and after dispose
- * -- so making its absence an error would force every one of them to wrap this
- * in a try.
- */
-export function videoOf (container: HTMLElement): HTMLVideoElement | null {
-  return container.querySelector('video')
-}
