@@ -26,7 +26,7 @@ npm run gen:shaders        # regenerate src/renderer/shaders/generated.ts
 npm run doc                # typedoc -> docs/api (generated, gitignored)
 ```
 
-Run a single unit test: `npx vitest run test/unit/clamp.test.ts`. Run a single integration test: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`. The gates have no fallback twin — the `no-webgpu` project collects only `test/integration/fallback/` and the four user-story files, per its `include` in `vitest.config.ts`.
+Run a single unit test: `npx vitest run test/unit/events.test.ts`. Run a single integration test: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`. The gates have no fallback twin — the `no-webgpu` project collects only `test/integration/fallback/` and the four user-story files, per its `include` in `vitest.config.ts`.
 
 Integration tests need a real GPU to be meaningful. The `integration` project launches Chromium with `channel: 'chromium'` from `launchOptions` in `vitest.config.ts` — launch flags cannot come from an environment variable — and its setup file asserts a non-null adapter precisely so that a machine without WebGPU fails loudly instead of silently re-testing nothing. Under `CI=1` the same project adds the SwiftShader flags so software WebGPU exists; the `no-webgpu` project's setup file asserts the adapter **is** null, which is what proves `--disable-gpu` actually took effect.
 
