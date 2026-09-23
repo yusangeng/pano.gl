@@ -4,7 +4,7 @@ scope: [src/renderer/**, src/viewer/backend-factory.ts, vitest.config.ts, test/*
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: foundation
 deps: [p5-viewer, camera-freeze-fix]
-state: open
+state: reported
 createdAt: 2026-09-19T08:51:52.902Z
 ---
 # 任务：P6 — WebGL2 backend 与门禁 C
