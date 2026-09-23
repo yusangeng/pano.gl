@@ -72,6 +72,42 @@ describe('US1: view a 360 photo and look around', () => {
     expect(maxChannelDiff(before.data, after.data)).toBeGreaterThan(2)
   })
 
+  it.each([
+    { lat: 30, lng: 0, half: 'latitude' },
+    { lat: 0, lng: 90, half: 'longitude' }
+  ])('rotate() moves the picture on a non-linear camera: the $half half', async ({ lat, lng }) => {
+    /*
+     * The drag test above is the linear camera, where pose lives in the
+     * clip matrix and always reached the canvas. On the non-linear kinds
+     * the matrix is constant by design and the pose travels through the
+     * uniforms -- the path the P2/P3 setCamera early-out froze. The two
+     * halves are asserted separately because they fail separately: the
+     * longitude half was a working feature in v0.2.2 (a regression), the
+     * latitude half is new intended behaviour -- v0.2.2's shader never
+     * read u_CamPOVLatitude, v1's WGSL does -- so the expected value here
+     * is v1's own semantics (the pixels move), never the v0.2.2 capture.
+     * Turn sizes are large on purpose: the sample window has to shift by
+     * more than rounding for the diff to clear the bound. If a half ever
+     * reads <= 2 WITH the redraw confirmed below, report it -- do not
+     * loosen the bound or shrink the turn silently.
+     */
+    const inputs = captureRenderInputs()
+    const { viewer, container } = await imageViewer({ camera: 'cylindrical' })
+    const canvas = canvasOf(container)
+    viewer.src = '/fixtures/panorama.png'
+    await nextFrames(3)
+
+    const before = await readCanvas(canvas)
+    const drawsBefore = inputs.sourceCalls()
+    viewer.rotate(lat, lng)
+    await nextFrames(2)
+    const after = await readCanvas(canvas)
+    viewer.dispose()
+
+    expect(inputs.sourceCalls() - drawsBefore, `rotate(${lat}, ${lng}) did not redraw`).toBeGreaterThan(0)
+    expect(maxChannelDiff(before.data, after.data), `rotate(${lat}, ${lng}) did not move the picture`).toBeGreaterThan(2)
+  })
+
   it('a press and release without movement reports nothing', async () => {
     /*
      * The pan wiring has an early return for a zero displacement, and this is

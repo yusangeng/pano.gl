@@ -415,13 +415,28 @@ describe('setCamera', () => {
     expect(view.getFloat32(80, true)).toBe(2) // zoom: the projection's own
   })
 
-  it('skips the upload when the clip matrix is unchanged', async () => {
+  it('uploads the camera uniforms on every call, even when the matrix cannot see the change', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
-    h.backend.setCamera({ povLatitude: 10, povLongitude: 20 }, { ...LINEAR })
-    // Same pose, same projection: one upload, not two. The render loop calls
-    // this every frame, so the equality check is what stops 60 uploads a second.
-    expect(h.mocks.writeBuffer).toHaveBeenCalledTimes(1)
+    h.backend.setCamera(CAMERA, CYLINDRICAL)
+    h.backend.setCamera({ ...CAMERA }, { ...CYLINDRICAL })
+    /*
+     * Identical arguments, and the upload must happen anyway. On the
+     * non-linear kinds the clip matrix is constant BY DESIGN (matrix.ts
+     * builds their views from LEGACY_QUAD_VIEW), so a matrix-equality
+     * early-out cannot tell "nothing changed" from "the camera moved in
+     * the uniforms" -- the version this test replaced skipped both the
+     * upload and the dirty flag on every camera change, freezing pan and
+     * zoom on three of the four kinds. There is no skip left to get
+     * wrong; the render loop already limits setCamera to frames that are
+     * being drawn, so the unconditional write costs one small upload per
+     * drawn frame.
+     */
+    expect(h.mocks.writeBuffer).toHaveBeenCalledTimes(2)
+    // The second upload carries the camera too -- two writes that both
+    // dropped the pose would satisfy the count above and freeze anyway.
+    const view = uniformUpload(h, 1)
+    expect(view.getFloat32(72, true)).toBe(CAMERA.povLatitude)
+    expect(view.getFloat32(76, true)).toBe(CAMERA.povLongitude)
   })
 
   it('uploads again when the camera changes', async () => {
