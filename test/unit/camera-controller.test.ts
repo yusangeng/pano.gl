@@ -208,6 +208,25 @@ describe('CameraController', () => {
     expect(zoomOf()).toBe(0.01)
     c.zoom(-100)  // shrink far past the ceiling -- and past the negative divisor
     expect(zoomOf()).toBe(1)
+
+    // Planet pins the same endpoints through a second non-linear kind. It
+    // shares the else-branch with cylindrical, so under the unified contract
+    // this arm is green because the branch is green -- the edit it exists for
+    // is a future "restore the legacy per-kind clamps" one: planet's legacy
+    // range was [0.1, 2], and with no test instantiating planet through
+    // zoom() that edit would redden nothing while changing what every planet
+    // user gets. Pannini is deliberately left without an arm: it shares the
+    // same branch, and a third instantiation of one line pins nothing the two
+    // here have not.
+    const planet = new CameraController(undefined, { kind: 'planet', zoom: 1, extent: [4, 4] })
+    const zoomOfPlanet = (): number => {
+      const p = planet.projection
+      return p.kind === 'planet' ? p.zoom : NaN
+    }
+    planet.zoom(100)
+    expect(zoomOfPlanet()).toBe(0.01)
+    planet.zoom(-100)
+    expect(zoomOfPlanet()).toBe(1)
   })
 
   it('linear zoom clamps to [15°, 110°] and pins at both ends', () => {
