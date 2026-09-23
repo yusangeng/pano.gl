@@ -2784,19 +2784,19 @@ is the one easiest to miss, and it is exactly what --disable-gpu produces."
 
 ## 完成标准
 
-- [ ] 门禁 C 的 18 条全绿，容差未被放宽
-- [ ] P5 的四个用户故事文件**除 photo 的后端标签断言外一字不改**（该断言的期望值改为从浏览器实际状态推导，推导不是分叉：两个 project 跑同一段代码，各自算出各自的真值），在两个 project 下各跑一遍且都绿
-- [ ] `fallback/user-story-no-webgpu.test.ts` 已从「`probe()` 是 `none`、`create()` 抛」翻成「`probe()` 是 `webgl2`、`create()` 成功并画出画面」
-- [ ] 三种降级环境各有一条测试，且**每一种在自己的 project 里都是真的状态改变**（环境一里有真适配器可以拿掉，环境二靠启动参数，环境三在环境二之上）
-- [ ] `capabilities.backend === 'webgl2'` 且 `externalTextures === false`，且这个值来自 `describeCapabilities`
-- [ ] `countDraws` 与 `captureRenderInputs` 覆盖两个后端，`no-webgpu` project 下的绘制计数不空过
-- [ ] 着色器编译失败会抛异常，不返回死后端
-- [ ] 连续创建/销毁 20 个后端不耗尽上下文额度
-- [ ] `webglcontextlost` 被 `preventDefault()` 并上报 `{ reason: 'context-lost' }`；`webglcontextrestored` 后能重新画出画面
-- [ ] `npm run build` 成功，且 `dist/index.js` 里能找到 `#version 300 es`（`?raw` 通道两端都通）
-- [ ] `npm run typecheck` 干净（两条 program）
-- [ ] **`src/index.ts` 的导出面与 P5 一致**（后端替换不改变公开 API）
-- [ ] **`demo/` 一个字节都没改**
+- [x] 门禁 C 的 18 条全绿，容差未被放宽
+- [x] P5 的四个用户故事文件**除 photo 的后端标签断言外一字不改**（该断言的期望值改为从浏览器实际状态推导，推导不是分叉：两个 project 跑同一段代码，各自算出各自的真值），在两个 project 下各跑一遍且都绿
+- [x] `fallback/user-story-no-webgpu.test.ts` 已从「`probe()` 是 `none`、`create()` 抛」翻成「`probe()` 是 `webgl2`、`create()` 成功并画出画面」
+- [x] 三种降级环境各有一条测试，且**每一种在自己的 project 里都是真的状态改变**（环境一里有真适配器可以拿掉，环境二靠启动参数，环境三在环境二之上）
+- [x] `capabilities.backend === 'webgl2'` 且 `externalTextures === false`，且这个值来自 `describeCapabilities`
+- [x] `countDraws` 与 `captureRenderInputs` 覆盖两个后端，`no-webgpu` project 下的绘制计数不空过
+- [x] 着色器编译失败会抛异常，不返回死后端
+- [x] 连续创建/销毁 20 个后端不耗尽上下文额度
+- [x] `webglcontextlost` 被 `preventDefault()` 并上报 `{ reason: 'context-lost' }`；`webglcontextrestored` 后能重新画出画面
+- [x] `npm run build` 成功，且 `dist/index.js` 里能找到 `#version 300 es`（`?raw` 通道两端都通）
+- [x] `npm run typecheck` 干净（两条 program）
+- [x] **`src/index.ts` 的导出面与 P5 一致**（后端替换不改变公开 API）
+- [x] **`demo/` 一个字节都没改**
 
 ## 明确的非目标
 
