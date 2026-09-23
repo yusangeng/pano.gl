@@ -328,16 +328,16 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ### Task 3: 门 A 验证登记 + 收口
 
-- [ ] **Step 1: gate-a 零改动验证 + 有意分歧登记**
+- [x] **Step 1: gate-a 零改动验证 + 有意分歧登记**
 
   背景节的测定已给出预期：非线性可比集只剩 `origin`（lng=0，新旧公式等价），C2/C3 不在门 A 射程（v1 侧硬编码 zoom:1）。本步做三件事：① 跑 `npx vitest run --project integration gate-a-pixels` 亲证全绿（连同 'has a non-empty comparable set' 那条——它防的是集合意外清空）；② 在 `comparableStates` 的注释块补一段：lng≠0 的非线性态自 C1（2026-09-23，spec §5.2）起**永久漂移**，由既有过滤器排除，属登记在案的有意分歧，不是待修的红；③ 确认 `git diff` 里 `test/fixtures/baseline/` 与 `test/support/baseline.ts` 零改动。若门 A 意外红：停下按红态取证——要么 C1 改坏了 wrap/纬度路径，要么测定前提（LNG_INERT=false）不成立，两者都不是「收窄可比集」能治的，走 task-block。
 
-- [ ] **Step 2: verify 六连（卡片 verify 原样当面跑）**
+- [x] **Step 2: verify 六连（卡片 verify 原样当面跑）**
 
   Run: `npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build`
   Expected: 全绿。特别确认：门 B 全绿（lng 不在其射程，红则改坏了别的东西）；门 C 全绿（两 shader 同步的直接证明）；`no-webgpu` project 全绿且零 diff。
 
-- [ ] **Step 3: 变异抽查（/tmp git-archive 沙箱，具名击杀才算数）**
+- [x] **Step 3: 变异抽查（/tmp git-archive 沙箱，具名击杀才算数）**
 
   装置沿既有纪律：`git archive HEAD` 解 `/tmp` + 软链 `node_modules`，锚点恰好命中一次，落刀前后 sentinel sha 与 `git show HEAD:<path>` 对照。三个变异体、三 project 完整跑，JSON 报告里具名 `status === 'failed'` 的必须至少含：
 
@@ -347,7 +347,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
   还原后 sha 双向核对相符。
 
-- [ ] **Step 4: 卡面登记**
+- [x] **Step 4: 卡面登记**
 
   任务卡「完成报告」节写四要素：做了什么 / 红网证据与自测结果（verify 数字 + 变异击杀名单 + 门 A 收窄清单）/ 偏离 plan 的点 / 遗留风险。plan 复选框全勾。
 
@@ -355,13 +355,13 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ## 完成标准
 
-- [ ] Task 1 全部红网在带缺陷树上各跑出过一次**具名红**（Step 5 的记录写进完成报告）
-- [ ] lng 公式三处（wgsl / glsl / reference）同一提交改齐，三处注释互指一致且指向 pan-zoom-semantics spec；门 C 全绿
-- [ ] `zoom()` 统一为 `param / max(1 + delta, EPSILON)` 两路 clamp；负分母路径有具名网
-- [ ] linear zoom 到达 fov（unit + US2 双证），clamp [15°, 110°] 两端有网
-- [ ] 非线性 quarter-turn 灵敏度网（`a 90° pose turns the picture by exactly a quarter of its width`）在位且绿；`360° round trip` 为伴随绿钉（公式盲，守 wrap/累积）
-- [ ] 门 A 零 diff 自然绿（非线性可比集 = `origin` 不因 C1 变化），`comparableStates` 注释登记 lng≠0 有意分歧；基线 PNG 与 `test/support/baseline.ts` 零改动
-- [ ] `npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build` 全绿
-- [ ] 变异抽查三体具名击杀（含变异体 1 的门 C 必红），还原 sha 核对相符
-- [ ] `src/index.ts`、`src/interaction/**`、`src/renderer/shaders/generated.ts`、US5 与 `no-webgpu` project 零 diff
-- [ ] 卡面完成报告四要素齐全，plan 复选框全勾
+- [x] Task 1 全部红网在带缺陷树上各跑出过一次**具名红**（Step 5 的记录写进完成报告）
+- [x] lng 公式三处（wgsl / glsl / reference）同一提交改齐，三处注释互指一致且指向 pan-zoom-semantics spec；门 C 全绿
+- [x] `zoom()` 统一为 `param / max(1 + delta, EPSILON)` 两路 clamp；负分母路径有具名网
+- [x] linear zoom 到达 fov（unit + US2 双证），clamp [15°, 110°] 两端有网
+- [x] 非线性 quarter-turn 灵敏度网（`a 90° pose turns the picture by exactly a quarter of its width`）在位且绿；`360° round trip` 为伴随绿钉（公式盲，守 wrap/累积）
+- [x] 门 A 零 diff 自然绿（非线性可比集 = `origin` 不因 C1 变化），`comparableStates` 注释登记 lng≠0 有意分歧；基线 PNG 与 `test/support/baseline.ts` 零改动
+- [x] `npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build` 全绿
+- [x] 变异抽查三体具名击杀（含变异体 1 的门 C 必红），还原 sha 核对相符
+- [x] `src/index.ts`、`src/interaction/**`、`src/renderer/shaders/generated.ts`、US5 与 `no-webgpu` project 零 diff
+- [x] 卡面完成报告四要素齐全，plan 复选框全勾

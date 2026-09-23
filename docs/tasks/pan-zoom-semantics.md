@@ -13,17 +13,75 @@ createdAt: 2026-09-23T09:00:57.224Z
 
 ## 完成报告
 
-（执行者填：做了什么 / 自测结果 / 偏离 plan 的点 / 风险）
+三行为变更（C1 经度诚实换算 / C2 zoom 方向 / C3 linear fov zoom）已全部落地并收口：修复与红网同一提交（eb56504），评审整改以纯注释提交补齐（d25549c），门 A 零改动验证、verify 六连与三体变异抽查（Task 3）由本报告登记在案。
+
+### 做了什么
+
+- **Task 1+2（eb56504，测试与修复同一提交）**：红网先行——unit `camera-controller` 翻转四条新增两条、unit `reference` pins 六条按 `lng = povLongitude * PI / 180` 重算、US2 两条翻转、photo 新增 quarter-shift 红 网（`a 90° pose turns the picture by exactly a quarter of its width`）与 360° 往返绿钉；修复同提交落齐——C1 三处同步（`panorama.wgsl` / `panorama.glsl` / `reference.ts`，注释互指 pan-zoom-semantics spec）、C2 `zoom()` 统一为 `param / max(1 + delta, EPSILON)` 两路 clamp、C3 linear 以 fov 落地（`MIN_FOV`/`MAX_FOV` = [15°, 110°]）；`viewer.ts` TSDoc 与 CLAUDE.md 仲裁节同步改述。具名红记录见 plan Task 1 Step 5（已在带缺陷树上逐条跑出）。
+- **d25549c（评审整改，纯注释提交）**：glsl 幅度量级 29 → 45/PI ≈ 14.3；`gestures.ts` `wheel()` TSDoc 方向改正（滚下才是 ceiling no-op）；photo 测试两处注释精确化。无行为行改动。
+- **Task 3（本步，验证+登记，零行为改动）**：门 A 亲跑全绿并在 `comparableStates` 注释块登记 lng≠0 有意分歧；基线族零 diff 核验；verify 六连当面跑全绿；三体变异抽查具名击杀、还原 sha 双向核对；卡面登记 + plan 勾选。
+
+### 红网证据与自测结果
+
+**verify 六连（2026-09-23，当面跑）**：
+
+| 命令 | 结果 |
+|---|---|
+| `gen:shaders -- --check` | up to date（生成管线未触碰） |
+| `typecheck` | 三个 program 全绿（root / integration / scripts） |
+| `lint` | 绿 |
+| `test:coverage` | 22 文件 / 301 用例绿；statements 99.4%（504/507）、branches 98.7%（228/231）、functions 98.95%（95/96）、lines 99.78%（466/467），四门槛（≥90%）全过 |
+| `test:integration` | 28 文件 / 170 用例绿（integration + no-webgpu 双 project）；门 B+C 复跑具名 22/22 绿；no-webgpu 单独复跑 38/38 绿 |
+| `build` | dist/index.js 127.61 kB / dist/index.cjs 127.84 kB 构建成功 |
+
+**变异抽查（沙箱 = `git archive HEAD`（d25549c）解 /tmp + 软链 node_modules；锚点 `grep -c` 恰好 1；落刀前后 touched/sentinel 文件 sha 与 `git show HEAD:<path>` 双向核对相符；沙箱已清理）**：
+
+| 变异体 | 具名击杀（报告 status=failed） | 负对照（预测不红者实测不红） |
+|---|---|---|
+| M1：lng 加回 `/4`（仅 wgsl 一处） | **门 C** 10/18 红——cylindrical/planet/pannini 各 state 1-3 共 9 条 cross-backend 像素比对 + arbiter 条全红；photo `a 90° pose turns the picture by exactly a quarter of its width` 红（12 条中唯一红） | photo `a full 360° turn … returns to the picture it started from` 绿（公式盲绿钉）；unit reference 25/25 绿（pins 测 CPU 侧） |
+| M2：`/ scale` → `* scale`（两处） | unit camera-controller 6/35 红，含具名两条 `'zoom moves by the delta, in the direction the delta asks for'`（0.6×1.5=0.9 ≠ 0.6/1.5）与 `'zoom clamps to the projection range'`（方向对调）；另 4 条连带红（linear fov / linear clamp / no-op / write-through） | — |
+| M2（续） | US2 video 3/8 红：wheel zoom-in / public zoom() / linear fov 三条 | — |
+| M3：linear 早退加回 | unit `'zoom reaches the linear projection as fov'` 红（另 `linear zoom clamps to [15°, 110°]…` 连带红）；US2 `'a wheel zoom reaches the linear projection as fov'` 红（8 条中唯一红，隔离干净） | — |
+
+sha 轨迹：M1 wgsl 656a97fa→3c06bc15→656a97fa（sentinel glsl cdae5445 恒定）；M2 controller 93e945dd→483b9eb7→93e945dd（sentinel viewer.ts a8b415e8 恒定）；M3 controller 93e945dd→4cfb8f2b→93e945dd（sentinel reference.ts 20082978 恒定）。
+
+**门 A 收窄清单（Step 1 实测）**：
+
+- 门 A 两条具名用例全绿：`compares every camera the baseline holds` + `has a non-empty comparable set covering all four projections`（后者防集合意外清空）。
+- `LNG_INERT=false` 成立（cylindrical `origin` 与 `tilt` 两张基线 PNG 字节不同：1522/1557 字节——/4 偏移在捕获像素里是活的）。
+- 非线性可比集 = `origin`（lat=0,lng=0，唯一 lng=0 处新旧公式等价）各 1 态；`tilt`(30,45) / `south`(-60,180) / `zoomed`(10,300) 全部排除（lat≠0 且 lng≠0）；perspective 可比集 = 全部 4 态（线性路径 lng 在矩阵里，P2 已逐元 pin）。可比集不因 C1 变化，与背景节测定一致。
+- `comparableStates` 注释块已登记：lng≠0 的非线性态自 C1（2026-09-23，spec §5.2）起永久漂移，由既有过滤器排除，属登记在案的有意分歧，不是待修的红。
+- 基线族零 diff：`git diff 4243e01 -- test/fixtures/baseline/ test/support/baseline.ts test/support/baseline-node.ts test/integration/support/baseline-browser.ts test/unit/baseline.ts` = 0 行；US5/no-webgpu 边界（`src/index.ts`、`src/interaction/**`、`src/renderer/shaders/generated.ts`、`demo/`）= 0 行。
+
+### 偏离 plan 的点（8 项 + 提交形状，按协调者裁定登记）
+
+1. Concern A：plan 的 `toBe(0.4)` 示例差一个 ulp——落地为表达式形式 `toBe(0.6 / 1.5)`（与实现除出的结果逐位相同）；plan 已同步。
+2. Concern B：photo 360° 往返的红预测结构性错误（姿态 wrap 至恰好 0，两公式同读 0）——改判为守 wrap/累积的绿钉；新 quarter-shift 测试才是 C1 的行为级红 网（旧树实测 worst=171 红 / 新树 worst=0 绿）。
+3. plan 文件清单漏了两个仍带旧 /4.0 shader-source pin 的文件：`test/unit/shaders.test.ts` 与 `test/unit/webgl2-shaders.test.ts`，已翻成诚实换算 pin（首轮 coverage 2F|299P 抓出）。
+4. GLSL 在 `project_cylindrical` 上方 ~:127 还有第三处 /4.0 提及（派工单只枚举了 :217 与头部 :27）——eb56504 已一并更新。
+5. plan 背景节有两行相邻同预测（~:44 bullet 与节标题）——eb56504 已成对修正。
+6. plan 的 zoom 调用普查写 14 处；实际 16 处调用 + 1 处注释——逐点映射已闭合，仅计数出入；已在 plan 标注。
+7. 质量评审 IMPORTANT：`test/integration/support/gestures.ts` `wheel()` TSDoc 方向被 C2 写反（滚下才是 ceiling no-op，不是滚上）——flip 清单第 4 处漏网，d25549c 已修。
+8. 质量评审 IMPORTANT：`panorama.glsl:221` 原文 "differ by a factor of about 29"；正确量级 45/PI ≈ 14.3——d25549c 已修。
+
+另登记：本卡以**两个提交**落地（eb56504 修复+红网；d25549c 质量评审后纯注释整改，评审循环 1 轮）；评审人另记两条非阻塞语法瑕疵（"the quarter-turn test's below" 缺名词；"1 / (1 - step)" 的量级读法），接受为注释打磨不再改。
+
+### 遗留风险
+
+- CLAUDE.md Commands 节注释漂移：写着 `npm run test:integration # playwright test`，实际 package.json 跑的是 vitest browser projects——先前已存在、与 C1–C3 无关，明确推迟到 p7-cleanup 文档轮（届时重写 CLAUDE.md）。
+- 上述两条非阻塞语法瑕疵：已记录、接受，不再动注释。
 
 ## 自审记录
 
+评审与测试质量两节按协调者通报与 Task 3 实测登记如下。
+
 ### CR 结论
 
-（执行者填：用了什么 review 手段（gstack review / codex review 等）、发现什么、整改了什么、循环了几轮）
+按协调者通报：spec 评审（pz-spec-task2）对 eb56504 判 **COMPLIANT**；质量评审（pz-quality-task2）报两处 IMPORTANT（均注释级：gestures.ts wheel TSDoc 方向、glsl 量级 29→14.3）加两条非阻塞语法瑕疵——IMPORTANT 项以 d25549c 整改后 **APPROVED**，共 1 轮整改循环。Task 3 收口步（本步）零行为改动，不在评审射程内。
 
 ### 测试质量结论
 
-（执行者填：effective-testing 评估发现什么、整改了什么）
+本轮未单独跑 effective-testing 技能评估；测试质量按以下实测证据登记：①红网先行纪律全程执行（Task 1 具名红记录在 plan Step 5，修复同提交落地）；②Task 3 三体变异抽查全部具名击杀，且 M1 的负对照（unit reference pins、photo 360° 往返）实测不红——证明网挂在其声称的位置而非顺带红；③coverage 四门槛 98.7% branch / 99.4% statements（门槛 90%）；④门 A 可比集断言（`has a non-empty comparable set…`）在位，防「集合静默清空导致零比对假绿」。
 
 ## 审查意见
 
