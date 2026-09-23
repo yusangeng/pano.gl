@@ -69,4 +69,13 @@ createdAt: 2026-09-23T03:11:50.274Z
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+按「审查 SOP」固定四步全审（审查面 `master...feature/camera-freeze-fix`，2026-09-23）：
+
+1. **结构化 review**：双关审查代行执行者未跑的第 1/2 关——spec 符合性（fresh 子代理，9 项逐一亲核，0 findings：三条网与 plan 代码块逐字一致、photo 插入位置读文件核实、912ade5 commit message 与 plan 字节级一致）+ quality（fresh 子代理：修复完整性/成本前提/invert 可达性均读源码核验，本地重跑 unit 38/38；3 条 MINOR → 整改 `d41d391` → 复核确认无剩余、无范围蔓延）。
+2. **plan 红线核对**：src 改动 = setCamera 删早退 + `#clip` 声明注释整改两处 hunk（后者为协调者裁决接受的审查驱动改动——P6 将照抄本文件，仍宣传"for detecting an unchanged camera"的注释会邀请抄写者复活早退）；边界 E35（TARGET_FORMAT）/ E37（`src/interaction/`）/ R1c-iii（US5 + no-webgpu project）零 diff，本人 `git diff master...feature` 亲验 0 行；分支恰 6 文件 = scope 白名单 4 + 卡 + plan。
+3. **门禁证据复核**：task-finish 六闸当面全过（闸 6 verify 本人见证：shaders up to date / typecheck 三程序 / lint 零告警 / coverage 276/276 四门槛 99.57·98.6·100·100 / integration 20 文件 108/108 / build 成功）；变异击杀两轮沙箱均按纪律具名证明（第一轮四杀手恰 4 红无意外红；net 加强后第二轮 unit 恰 1 红重证，sentinel sha 双向核对）；覆盖陈述在卡。**例外裁决**：执行者未跑正式 gstack/codex/effective-testing 轮——接受，双关审查以更强证据（变异击杀、前提源码核验、整改-复核循环）覆盖了同等检查面，卡面已如实注明。
+4. **最重发现亲自验证**：`mat4.equals` 全文件零残留（grep）；`#clip` 新注释如实（`git show d41d391` 亲读）；6/6 提交前缀合规；「verify 全绿」非转述——闸 6 输出为本人当面所见。
+
+**结论：approve。** 可合并；合并（task-merge）等用户下令。
+
+附注：本轮撞出 superloop 工具一处缺陷——`taskfile.mjs` 的 `sectionFilled` 正则遇「节标题后紧跟 `###` 子节头」时空捕获（本卡完成报告四要素分节书写即触发闸 1 误报，已在卡面补导语绕过）。是否修 `superloop-skills` 仓库由用户裁决。
