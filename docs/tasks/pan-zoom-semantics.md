@@ -4,7 +4,7 @@ scope: [src/core/reference.ts, src/renderer/webgpu/shaders/panorama.wgsl, src/re
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: foundation
 deps: [p6-webgl2-backend]
-state: open
+state: reported
 createdAt: 2026-09-23T09:00:57.224Z
 ---
 # 任务：pan 手感与 zoom 语义修正：lng 诚实换算 / zoom 方向 / linear fov zoom
