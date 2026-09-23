@@ -2,35 +2,33 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **The v1 migration is staged and not finished.** This file describes the **target** — the pano.gl that P0–P7 in `docs/superpowers/plans/` build. A path or command named here may not exist yet; the phase that creates it is the plan of the same name, and the plans are authoritative about order. While a phase is in flight, prefer its plan over this file. P7 Task 4 deletes this note once every claim below has been checked against the finished code.
-
 ## What this is
 
 `pano.gl` is a dependency-light viewer for equirectangular (360°) images and video. Two public entry points — `FramelessImageViewer` and `FramelessVideoViewer`, both re-exported from `src/index.ts` — render a full-screen panorama into a container element, with four camera models (`linear`, `cylindrical`, `planet`, `pannini`) and built-in pan-tilt-zoom.
 
 TypeScript 5, strict. Two rendering backends behind one interface: WebGPU (primary) and WebGL2 (fallback, for browsers that have no WebGPU).
 
-**The most important thing to understand before touching anything camera- or shader-related:** there is no geometry and no vertex-stage projection. Each backend draws a single fullscreen triangle and recovers the surface point per fragment by inverting the camera matrix. The GPU never interpolates a position.
+**The most important thing to understand before touching anything camera- or shader-related:** there is no geometry and no vertex-stage projection. v0.2.x projected a quad's vertices in the vertex stage and let the rasteriser interpolate the rest; v1 draws a single fullscreen triangle and recovers the surface point per fragment by inverting the camera matrix. The GPU never interpolates a position. Every intuition carried over from the old architecture — vertex buffers, attribute layout, per-camera meshes — describes something that no longer exists.
 
 ## Commands
 
 ```shell
 npm install
 npm run start              # demo dev server (vite)
-npm run build              # tsup -> dist/ (ESM + CJS), unminified
+npm run build              # vite build -> dist/ (index.js ESM + index.cjs CJS, unminified, plus .d.ts)
 npm test                   # unit, then integration
-npm run test:unit          # vitest run
-npm run test:integration   # playwright test
-npm run test:coverage      # vitest run --coverage (90% branch threshold, enforced)
-npm run typecheck          # tsc --noEmit, then the integration program (test/integration/tsconfig.json)
-npm run lint               # eslint
+npm run test:unit          # vitest run --project unit
+npm run test:integration   # vitest run --project integration --project no-webgpu
+npm run test:coverage      # vitest run --project unit --coverage (90% branch threshold, enforced)
+npm run typecheck          # three tsc programs: root, test/integration, tsconfig.scripts.json
+npm run lint               # eslint src test scripts demo/**/*.ts
 npm run gen:shaders        # regenerate src/renderer/shaders/generated.ts
-npm run doc                # API docs (typedoc)
+npm run doc                # typedoc -> docs/api (generated, gitignored)
 ```
 
-Run a single unit test: `npx vitest run test/unit/clamp.test.ts`. Run a single integration test: `npx playwright test gate-c-cross-backend`.
+Run a single unit test: `npx vitest run test/unit/clamp.test.ts`. Run a single integration test: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts` — say `--project no-webgpu` instead to run its fallback twin.
 
-Integration tests need a real GPU to be meaningful. `playwright.config.ts` sets `channel: 'chromium'` and the `gpuPage` fixture asserts a non-null adapter precisely so that a machine without WebGPU fails loudly instead of silently re-testing nothing. Chromium launch flags can only come from `use.launchOptions.args` — Playwright reads no environment variable for them.
+Integration tests need a real GPU to be meaningful. The `integration` project launches Chromium with `channel: 'chromium'` from `launchOptions` in `vitest.config.ts` — launch flags cannot come from an environment variable — and its setup file asserts a non-null adapter precisely so that a machine without WebGPU fails loudly instead of silently re-testing nothing. Under `CI=1` the same project adds the SwiftShader flags so software WebGPU exists; the `no-webgpu` project's setup file asserts the adapter **is** null, which is what proves `--disable-gpu` actually took effect.
 
 ## Layout and layering
 
@@ -95,13 +93,16 @@ Never write a numeric literal for a projection kind, in TypeScript or in a shade
 
 Camera state is memoised per render behind a dirty flag: a setter that changes what the GPU sees must mark it dirty, or the change never reaches a frame.
 
+There is no camera factory and nothing to register a camera into. Adding a camera model means: a new kind on the `Projection` union in `src/core/types.ts`, the constant in `src/core/projection-kinds.json` (then `npm run gen:shaders`), the formula written once in each shader, and a float64 copy in `src/core/reference.ts`. Gate C stays red until all of them agree.
+
 ## Testing
 
 - **Unit** — `test/unit/{sourceFileName}.test.ts`, vitest, node environment. 90% branch coverage is a build failure, not a target. Cover the normal path, the invalid-input path and the boundary. Unit tests must not reach a GPU context.
-- **Integration** — `test/integration/{userStoryName}.test.ts`, Playwright, one file per user story, driving the real library in a real page. The page-side surface they use is `window.__panoTest`, typed as `PanoTestApi`; hooks live in `demo/test-entry-hooks/*.ts` and are merged automatically, so a phase that adds a hook adds a file rather than editing a shared one. Never re-declare that shape at a call site with a cast — the whole point of the shared declaration is that "what the page provides" and "what the test takes" are constrained by one type.
-  - `PanoTestApi` is declared as a **global** interface (`declare global`), and a hook file widens it with a `declare global` block of its own. Global interfaces merge by name across files with no import and no registration step, which is exactly why the shape was chosen: a hook file cannot forget to wire itself in. An *exported* interface would instead force every hook to write `declare module '../test-entry'` — a relative specifier that has to resolve correctly from a file in a subdirectory, and which augments nothing at all, silently, when it does not.
-  - The hook files are loaded by `import.meta.glob('./test-entry-hooks/*.ts', { eager: true })` in `demo/test-entry.ts`. `import.meta.glob` is invisible to the type system and the hook modules are not in the integration program's `include`, so a test file that uses a hook imports its module type-only (`import type {} from '../../demo/test-entry-hooks/webgl2'`) purely to pull the augmentation into the program.
-  - `Window.__panoTest` is declared once, in `demo/test-entry.ts` — that is the half a type-only hook import cannot supply, and it is why the two `tsconfig` programs are split. The root `tsconfig.json` covers `src`, `test/unit` and `scripts` and **excludes** `test/integration`; `test/integration/tsconfig.json` covers the integration tests plus `demo/**` and carries `vite/client` types, because `import.meta.glob` needs them. `npm run typecheck` runs both. `demo/` must not enter the root program: a pure library's `tsc --noEmit` should not have to know Vite exists.
+- **Integration** — `test/integration/{userStoryName}.test.ts`, vitest **browser mode**: the test file itself runs inside the page and imports the library directly. User-story tests exercise the public surface the way a user does — `src/index.ts`, imported directly or through the viewer constructors in `support/viewer.ts` — while the gates and the infrastructure tests beside them (`dispose-order`, `uniform-layout`, ...) import `src/` internals, because pinning those internals is their job. There is no page-side surface and there must never be one again: tests reaching into the page through a global existed only as a workaround for running outside the page, and browser mode removed that premise. Rebuilding it would reintroduce exactly the indirection the mode exists to avoid.
+  - Gestures go through `support/gestures.ts`, which wraps vitest's `userEvent` rather than hand-building `PointerEvent`s. `InputController` calls `setPointerCapture`, which throws for any pointerId the browser does not consider active — and pointerId `1` silently works in Chromium, so a hand-built event passes by coincidence while its sibling built with `999` fails with a symptom that reads as a broken camera.
+  - Pixel readback goes through `support/canvas.ts`, and `await nextFrames(2)` comes first: a rAF-scheduled render has to land before the canvas is observable.
+  - The projects and their guards live in `vitest.config.ts`: `integration` (real GPU, `channel: 'chromium'`, setup file asserts a non-null adapter), `no-webgpu` (`--disable-gpu`, setup file asserts a null adapter; `test/integration/fallback/` runs only in this project) and `unit` (node environment).
+  - `npm run typecheck` is three programs, and the split is not decorative. The root `tsconfig.json` covers `src`, `test/unit` and `demo` and excludes `test/integration`. `test/integration/tsconfig.json` covers the integration tests alone and adds `@webgpu/types` and `vite/client` — the latter because `support/baseline-browser.ts` loads the baseline fixtures with `import.meta.glob`. `tsconfig.scripts.json` covers the build and test configs (`vite.config.ts`, `vitest.config.ts`, `scripts/**/*.mjs`) with node types. Demo's first-party TypeScript sits in the root program and needs no `vite/client`; the boundary that matters is that library code never knows Vite exists — `import.meta.glob` and Vite types appear only in test support and config files.
 - **Gates** — `gate-a-pixels` compares against the v0.2.2 baseline captured in `test/fixtures/baseline/`; `gate-b-projection` covers the surface-extent and latitude behaviour; `gate-c-cross-backend` is described above. Gate A must be green before gate C's tolerance means anything: two backends that are wrong in the same way agree with each other perfectly.
 
 ## Conventions
