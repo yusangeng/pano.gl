@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
 import { countNonBlack, nextFrames, readCanvas } from './support/canvas'
+import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
 
 test('the browser has a real WebGPU adapter', async () => {
   // Non-null: require-webgpu.ts already asserted it. This test's job is to
@@ -20,7 +21,7 @@ test('the browser has a real WebGPU adapter', async () => {
   ).toBeTruthy()
 })
 
-test('a WebGPU canvas reads back as RGBA, after frames have passed', async () => {
+test('a WebGPU canvas reads back as RGBA, after frames have passed', async (ctx) => {
   /*
    * The whole chain in one test: a real device, a canvas configured the way
    * P3's backend will configure it, one frame drawn, and pixels read out of
@@ -31,7 +32,14 @@ test('a WebGPU canvas reads back as RGBA, after frames have passed', async () =>
    * macOS, so a canvas whose format follows the host makes every pixel
    * assertion platform-dependent -- which is why the backend pins the format
    * instead (P3) and why this test pins the same one.
+   *
+   * The skip guard is this test's own subject: on the Linux SwiftShader CI
+   * adapter a presented canvas reads back transparent and its device dies
+   * (see support/presented-canvas.ts). The probe runs the same red-triangle
+   * draw with an offscreen control, so what is skipped is exactly what this
+   * test asserts.
    */
+  await skipIfPresentedCanvasBroken(ctx)
   const adapter = await navigator.gpu!.requestAdapter()
   const device = await adapter!.requestDevice()
 
@@ -40,9 +48,11 @@ test('a WebGPU canvas reads back as RGBA, after frames have passed', async () =>
   canvas.height = 8
   document.body.appendChild(canvas)
 
-  const ctx = canvas.getContext('webgpu')
-  expect(ctx, 'no webgpu context on a canvas in a project with a real adapter').not.toBeNull()
-  ctx!.configure({ device, format: 'rgba8unorm', alphaMode: 'opaque' })
+  // Named `gpu`, not `ctx`: `ctx` is the test context the skip guard above
+  // consumed, and shadowing it would break the guard's parameter for no gain.
+  const gpu = canvas.getContext('webgpu')
+  expect(gpu, 'no webgpu context on a canvas in a project with a real adapter').not.toBeNull()
+  gpu!.configure({ device, format: 'rgba8unorm', alphaMode: 'opaque' })
 
   const module = device.createShaderModule({
     code: `
@@ -66,7 +76,7 @@ test('a WebGPU canvas reads back as RGBA, after frames have passed', async () =>
   const encoder = device.createCommandEncoder()
   const pass = encoder.beginRenderPass({
     colorAttachments: [{
-      view: ctx!.getCurrentTexture().createView(),
+      view: gpu!.getCurrentTexture().createView(),
       clearValue: { r: 0, g: 0, b: 0, a: 1 },
       loadOp: 'clear',
       storeOp: 'store'
