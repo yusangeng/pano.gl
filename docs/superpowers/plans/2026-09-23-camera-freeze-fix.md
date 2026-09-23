@@ -59,7 +59,7 @@ opus 终审原建议「把比较条件补全成 pose/zoom/kind/extent 元组」�
 - Modify: `test/integration/user-story-video.test.ts`（滚轮用例，约 `:145-185`）
 - Modify: `test/integration/user-story-photo.test.ts`（拖拽用例之后插入新用例，约 `:73` 后）
 
-- [ ] **Step 1: unit——删掉 skip 用例，换成 always-upload 红测**
+- [x] **Step 1: unit——删掉 skip 用例，换成 always-upload 红测**
 
 在 `describe('setCamera')` 里，**整体删除**这个用例（它的前提随修复一起消失）：
 
@@ -104,12 +104,12 @@ opus 终审原建议「把比较条件补全成 pose/zoom/kind/extent 元组」�
 
 （`uniformUpload(h, 1)` 读的是 `writeBuffer` 第 2 次调用的数据，helper 在 `:242`。）
 
-- [ ] **Step 2: 跑它，确认红且红因正确**
+- [x] **Step 2: 跑它，确认红且红因正确**
 
 Run: `npx vitest run test/unit/webgpu-backend.test.ts -t 'uploads the camera uniforms on every call'`
 Expected: **FAIL**，`writeBuffer` 期望 2 实际 1——这正是缺陷的 unit 级形态（早退吃掉了第二次上传）。红在别处（如断言 72/76 偏移不对）= 写错了，先修测试。
 
-- [ ] **Step 3: integration——恢复 US2 滚轮缩放的像素断言**
+- [x] **Step 3: integration——恢复 US2 滚轮缩放的像素断言**
 
 把 `test/integration/user-story-video.test.ts` 里 `'a wheel zoom-out reaches the camera state of a non-linear projection'` 整个用例**替换**为（注意：原版在断言前就 `dispose`，像素读回必须在 dispose 之前，所以是整用例替换不是尾插）：
 
@@ -159,7 +159,7 @@ Expected: **FAIL**，`writeBuffer` 期望 2 实际 1——这正是缺陷的 uni
   })
 ```
 
-- [ ] **Step 4: integration——US1 补非线性平移两半像素用例**
+- [x] **Step 4: integration——US1 补非线性平移两半像素用例**
 
 在 `test/integration/user-story-photo.test.ts` 的 `'dragging rotates the camera and changes the image'` 用例之后插入：
 
@@ -203,7 +203,7 @@ Expected: **FAIL**，`writeBuffer` 期望 2 实际 1——这正是缺陷的 uni
 
 （`rotate(lat, lng)` 是绝对设值——`survives a whole session` 用例里 `rotate(15, 45)` 后位姿恰为 `{15, 45}` 可证。`imageViewer({ camera: 'cylindrical' })` 每轮新构，绝对值即所需。）
 
-- [ ] **Step 5: 两条 integration 各自跑一遍，确认红且红因正确**
+- [x] **Step 5: 两条 integration 各自跑一遍，确认红且红因正确**
 
 Run: `npx vitest run test/integration/user-story-video.test.ts -t 'wheel zoom-out'`
 Expected: **FAIL**，红在 `'the zoom-out did not redraw'` 或 `'did not move the picture'`（修复前两者都成立——脏标记没置、像素没动；`sourceCalls` 差分若意外 >0，则红必然在像素半边，同样正确）。
@@ -211,7 +211,7 @@ Expected: **FAIL**，红在 `'the zoom-out did not redraw'` 或 `'did not move t
 Run: `npx vitest run test/integration/user-story-photo.test.ts -t 'rotate() moves the picture'`
 Expected: **FAIL** ×2（latitude / longitude 两条参数化），红因同上。
 
-- [ ] **Step 6: 不提交**
+- [x] **Step 6: 不提交**
 
 红状态是证据不是交付物。三条测试与修复在 Task 2 末尾同一个提交里落地。
 
@@ -220,7 +220,7 @@ Expected: **FAIL** ×2（latitude / longitude 两条参数化），红因同上�
 **Files:**
 - Modify: `src/renderer/webgpu/backend.ts`（`setCamera`，约 `:343-366`）
 
-- [ ] **Step 1: 替换 setCamera 方法体**
+- [x] **Step 1: 替换 setCamera 方法体**
 
 现状（删除目标）：
 
@@ -285,7 +285,7 @@ Expected: **FAIL** ×2（latitude / longitude 两条参数化），红因同上�
 
 （`mat4.equals` 在本文件仅此一处使用；`mat4` 本体仍被 `create`/`copy`/`invert` 使用，import 不动。）
 
-- [ ] **Step 2: 三条网转绿**
+- [x] **Step 2: 三条网转绿**
 
 Run: `npx vitest run test/unit/webgpu-backend.test.ts -t 'uploads the camera uniforms on every call'`
 Expected: PASS（2 次上传，第二次带 pose）。
@@ -296,12 +296,12 @@ Expected: PASS。
 Run: `npx vitest run test/integration/user-story-photo.test.ts -t 'rotate() moves the picture'`
 Expected: PASS ×2。
 
-- [ ] **Step 3: 全量 unit 不回归**
+- [x] **Step 3: 全量 unit 不回归**
 
 Run: `npm run test:coverage`
 Expected: 全绿，四门槛（statements/branches/functions/lines ≥90%）过。特别关注 `webgpu-backend.test.ts` 里既有的 `'repacks the uniforms when a source swap changes the texture projection'`（setSource 路径的 writeBuffer 计数——setCamera 无条件写后计数起点变了，若该用例红，读它的计数注释按新事实重排数字并记入偏离，不许为绿而绿）与 `'throws when the clip matrix is singular'`（早退删除后首调用即 throw，仍应绿）。
 
-- [ ] **Step 4: 提交（测试与修复同一提交）**
+- [x] **Step 4: 提交（测试与修复同一提交）**
 
 ```bash
 git add src/renderer/webgpu/backend.ts test/unit/webgpu-backend.test.ts test/integration/user-story-photo.test.ts test/integration/user-story-video.test.ts
@@ -321,12 +321,12 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ### Task 3: 收口——verify 六连 + 变异抽查 + 卡面报告
 
-- [ ] **Step 1: verify 六连（卡片 verify 原样当面跑）**
+- [x] **Step 1: verify 六连（卡片 verify 原样当面跑）**
 
 Run: `npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build`
 Expected: 全绿。浏览器会话偶发连接超时是已登记的平台抖动——已跑用例全绿、恰好缺一个 project 的文件时，同尖端重跑一次，两次同签名才升级为缺陷。
 
-- [ ] **Step 2: 变异抽查（证明网真的网住了）**
+- [x] **Step 2: 变异抽查（证明网真的网住了）**
 
 在 `/tmp` 的 `git archive <HEAD>` 沙箱（软链 worktree 的 `node_modules`，落刀前 sentinel sha 核对）把早退加回去：
 
@@ -342,7 +342,7 @@ Expected: 全绿。浏览器会话偶发连接超时是已登记的平台抖动�
 
 还原后与 `git show HEAD:src/renderer/webgpu/backend.ts` 的 blob sha256 对照相符。任一具名杀手缺席 = 网有洞，回 Task 1 补，不许带洞交卷。
 
-- [ ] **Step 3: 卡面登记**
+- [x] **Step 3: 卡面登记**
 
 任务卡「完成报告」节写四要素：做了什么 / 自测结果（verify 数字 + 变异击杀名单）/ 偏离 plan 的点（含 Step 3 of Task 2 里任何计数重排）/ 遗留风险（若有）。plan 复选框全勾。
 
@@ -350,10 +350,10 @@ Expected: 全绿。浏览器会话偶发连接超时是已登记的平台抖动�
 
 ## 完成标准
 
-- [ ] 三条网在带缺陷的树上各跑出过一次**具名红**（Step 2/5 的记录写进完成报告）
-- [ ] `src/renderer/webgpu/backend.ts` 的早退已删，`#writeCameraUniforms()` 无条件执行；src 改动仅此一处
-- [ ] `npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build` 全绿
-- [ ] 变异抽查：早退加回后，上列四个具名用例全部转红；还原 sha 核对相符
-- [ ] US5 两条断言与 `no-webgpu` project 零 diff（R1c 第 iii 条）
-- [ ] `TARGET_FORMAT`（E35）与 `CameraController.onChange`（E37）零 diff
-- [ ] 卡面完成报告四要素齐全，plan 复选框全勾
+- [x] 三条网在带缺陷的树上各跑出过一次**具名红**（Step 2/5 的记录写进完成报告）
+- [x] `src/renderer/webgpu/backend.ts` 的早退已删，`#writeCameraUniforms()` 无条件执行；src 改动仅此一处
+- [x] `npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build` 全绿
+- [x] 变异抽查：早退加回后，上列四个具名用例全部转红；还原 sha 核对相符
+- [x] US5 两条断言与 `no-webgpu` project 零 diff（R1c 第 iii 条）
+- [x] `TARGET_FORMAT`（E35）与 `CameraController.onChange`（E37）零 diff
+- [x] 卡面完成报告四要素齐全，plan 复选框全勾
