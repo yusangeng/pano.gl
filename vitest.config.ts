@@ -85,7 +85,32 @@ export default defineConfig({
         // coverage: Task 5's five user stories drive these two classes, and the
         // `no-webgpu` project drives their failure paths.
         'src/viewer/image-viewer.ts',
-        'src/viewer/video-viewer.ts'
+        'src/viewer/video-viewer.ts',
+        // P6 Task 3's backend class, for the same reason as `viewer.ts`:
+        // `WebGL2Backend` takes a canvas, acquires a WebGL2 context, compiles
+        // GLSL and issues GL calls -- not one of its paths can run under
+        // `environment: 'node'`, and the obstacle is the DOM/GPU rather than
+        // anything a stub could honestly supply: a fake GL context handed to
+        // these methods would replay this file's assumptions back instead of
+        // testing anything. The protocol it delegates to IS unit tested --
+        // `context.ts` stays in coverage (96.87% statements) because its
+        // compile/link error paths are pure logic over injected objects.
+        //
+        // Measured at d7b0f0a (2026-09-23), the first `test:coverage` run of
+        // P6 (task-finish gate 6; every earlier verification ran the suites,
+        // not coverage): statements 502/618 (81.22%), branches 226/269
+        // (84.01%), functions 95/110 (86.36%), lines 464/566 (81.97%) -- all
+        // four gate limits fail, and this file alone is 2.58% statements /
+        // 0% branches / 0% functions / 2.88% lines with lines 51-368
+        // uncovered. With the exclusion the same run reports statements
+        // 499/502 (99.4%), branches 226/229 (98.68%), functions 95/96
+        // (98.95%), lines 461/462 (99.78%) -- every gate passes.
+        //
+        // It IS exercised, by the integration project, which reports no
+        // coverage: `webgl2-smoke` drives create/render/dispose/context-loss,
+        // gate C renders through the same program path, and the downgrade
+        // files drive backend selection.
+        'src/renderer/webgl2/backend.ts'
       ],
       thresholds: {
         branches: 90,
