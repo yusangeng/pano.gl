@@ -20,7 +20,7 @@ or path resolution anywhere in `src/` or `test/` reaches a deleted path.
 
 | Path | Reason | Verified no live reference |
 |---|---|---|
-| `legacy/` (160K) | The v0.2.2 source tree. v1's acceptance criterion was "renders what v0.2.2 rendered"; P0–P6 closed against the captured baseline in `test/fixtures/baseline/`, so the tree itself has no remaining consumer. | `src/` and `test/`: zero live references (comment prose only, listed below). Live importers were `demo/Index.js:5-6` and `webpack/{debug,release}.js` entries — both deleted in this same task. Config mentions: `eslint.config.js:7` (fixed in this task) and `tsconfig.legacy.json` (deleted in this task). |
+| `legacy/` (160K) | The v0.2.2 source tree. v1's acceptance criterion was "renders what v0.2.2 rendered"; P0–P6 closed against the captured baseline in `test/fixtures/baseline/`, so the tree itself has no remaining consumer. | `src/` and `test/`: zero live references (comment prose only, listed below). Live importers were `demo/Index.js:5-6` and `webpack/{debug,release}.js` entries — both deleted in this same task. Config mentions: `eslint.config.js:7` (deferred, see below) and `tsconfig.legacy.json` (deleted in this task). |
 | `webpack/` (8K: `debug.js`, `release.js`) | The v0.2.2 build configs; both files' entry is `../legacy/index.js`. Nothing on the v1 toolchain (vite) reads them. | Zero references outside `webpack/` itself. The only other "webpack" string in the tree is a comment in `test/integration/support/baseline-browser.ts:20` describing the fixture bundle as "v0.2.2 webpack output" — prose, not a path. |
 | `.babelrc` | Babel config for the legacy webpack build (`transform-decorators-legacy` etc. for `demo/Index.js`). v1 compiles nothing with babel. | Zero references. `package.json` has no babel dependency or script; the only consumer was `demo/webpack.config.js` (`babel-loader`), deleted in this task. |
 | `vendor/` (24K, contains only `cuon.js`) | cuon-matrix, the v0.2.2 matrix library. v1 uses `gl-matrix` plus its own `src/core/matrix.ts`. `vendor/` has no other content, so the directory goes whole. | Only live import was `legacy/core/camera/LinearProjection.js:13`, deleted with `legacy/`. All other "cuon" hits are comment prose or the baseline fixture (listed below). |
@@ -28,7 +28,6 @@ or path resolution anywhere in `src/` or `test/` reaches a deleted path.
 | `demo/Index.js` | The v0.2.x demo entry: babel-decorator classes importing `../legacy/Frameless*Viewer` and libs (`litchy`, `dodele`) that v1 does not even declare. Superseded by `demo/main.ts`. | Zero references anywhere (`git grep "Index\.js"` matches only the file itself). |
 | `demo/webpack.config.js` | Built the old `demo/Index.js` (`babel-loader`, `webpack-glsl-loader`). The new demo is served by `vite demo`. | Zero references anywhere. |
 | `demo/index.css` | The v0.2.x demo stylesheet (`.view-wrap`, `.j-2048` button styles — selectors that target markup only the old `Index.js` demo had). The P1-rewritten `demo/index.html` styles itself inline. | Zero references anywhere (`git grep "index\.css"` matches only the file itself). |
-| `eslint.config.js` line 7 (`'legacy/**'` ignore entry) | Config fix this audit adds to Task 2's list: with `legacy/` gone the ignore entry is stale. The plan's Task 2 does not list it; the grep found it. Remove the one line, keep the other ignores (`dist`, `.package`, `doc`, `test/fixtures` — all still exist). | The ignore list is the only place `eslint.config.js` touches a deleted path; `lint` script globs (`src test scripts "demo/**/*.ts"`) name no deleted file. |
 
 ## Kept
 
@@ -60,17 +59,26 @@ and takes down the rest of its command line with it.
 P1 Task 9 Step 4 deleted it when `.github/workflows/ci.yml` replaced it; this
 phase only records that it is gone.
 
+## Deferred
+
+- `eslint.config.js:7` — the stale `'legacy/**'` ignore entry, originally
+  listed as a Task 2 fix in "Removed". Re-registered here: the file is outside
+  this card's scope whitelist, so editing it would fail the delivery gate. The
+  entry has zero behavior impact — `legacy/` is gone, the glob matches no
+  file, and `lint` stays green — and it is left for coordinator/user
+  disposition.
+
 ## Config references found by the audit greps
 
-One needs a Task 2 fix:
+None rides along with Task 2 any more:
 
-- `eslint.config.js:7` — the `'legacy/**'` ignore entry. Listed as a row in
-  "Removed" above; Task 2 removes the line when it deletes `legacy/`. This is
-  the only config in the tree that names a deleted path: `.gitignore`,
-  `package.json`, `vite.config.ts`, `vitest.config.ts`, `tsconfig.json`,
-  `tsconfig.scripts.json`, and `.github/workflows/ci.yml` were all grepped
-  clean (`legacy` / `webpack` / `vendor` / `babel`), so no other config rides
-  along.
+- `eslint.config.js:7` — the `'legacy/**'` ignore entry. Originally listed as
+  a Task 2 fix, now deferred (see "Deferred" above) because the file is
+  outside this card's scope. It remains the only config in the tree that
+  names a deleted path: `.gitignore`, `package.json`, `vite.config.ts`,
+  `vitest.config.ts`, `tsconfig.json`, `tsconfig.scripts.json`, and
+  `.github/workflows/ci.yml` were all grepped clean (`legacy` / `webpack` /
+  `vendor` / `babel`), so no other config was touched.
 
 None of the following need touching, and Task 2 should leave them alone:
 

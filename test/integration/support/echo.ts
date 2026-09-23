@@ -187,7 +187,8 @@ export async function createEchoRenderer (): Promise<
 }
 
 /*
- * A named export, not a default one merged onto a global. The `PanoTestApi`
- * indirection existed so a Node-side test could reach page-side code; with the
- * tests in the page, the test imports this module like any other.
+ * A named export, not a default one merged onto a global. The old test
+ * runner's page-side indirection existed so a Node-side test could reach
+ * page-side code; with the tests in the page, the test imports this module
+ * like any other.
  */

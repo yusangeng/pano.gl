@@ -12,8 +12,8 @@ import type { CameraState } from '../../src/core/types'
  * context it took, and does it survive a loss.
  *
  * Everything is imported directly. Browser mode runs this file inside the page,
- * so there is no bridge, no page-side export, and no `window.__panoTest`: the
- * backend under test and the test are in one module system.
+ * so there is no bridge and no export hung on a window global: the backend
+ * under test and the test are in one module system.
  *
  * This file runs in the `integration` project, which has a real WebGPU adapter.
  * That is fine and deliberate -- WebGL2 works there too, and running the
