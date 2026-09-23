@@ -54,12 +54,19 @@ jobs:
           # Vitest exits 0 when a project's include pattern matches nothing
           # (measured), so a green run above proves nothing about what ran.
           # Assert each browser project executed tests: the verbose reporter
-          # prefixes every test-result line with "|<project> (<browser>)|",
-          # which stays correct even when P6 changes what no-webgpu includes.
-          # The "|project (browser)|" prefix only exists in non-color output;
-          # the `| tee` pipe guarantees no TTY, hence no color.
+          # prefixes every test-result line with the project and browser --
+          # "|<project> (<browser>)|" in plain output, or the same name in a
+          # colored badge where the pipes are replaced by terminal attributes.
+          # The badge is what this runner actually produces: GitHub's runner
+          # colors vitest's output even through the tee pipe (measured on run
+          # 35924514539, where counting the plain pipe-delimited form found 0
+          # on a log that visibly held every test line), and locally through a
+          # pipe the plain form is what appears. So the count strips ANSI
+          # escapes first and matches the name, not a delimiter that only one
+          # of the two forms carries.
+          plain=$(sed 's/\x1b\[[0-9;]*m//g' integration-tests.log)
           for project in 'integration' 'no-webgpu'; do
-            count=$(grep -cF "|$project (" integration-tests.log || true)
+            count=$(printf '%s\n' "$plain" | grep -cF "$project (" || true)
             if [ "$count" -eq 0 ]; then
               echo "::error::project '$project' ran 0 tests -- vitest exits 0 on an empty include, so this assertion is the only thing that catches it"
               exit 1
