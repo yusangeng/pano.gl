@@ -18,14 +18,14 @@ npm install pano.gl
 | No WebGPU, but WebGL2 | WebGL2 | Renders the same pixels as WebGPU (asserted by a cross-backend pixel gate). |
 | Neither | — | `create()` throws; `probe()` returns `{ backend: 'none' }` so you can decide before constructing anything. |
 
-WebGPU ships in current Chrome, Edge and Safari; WebGL2 covers essentially every
-browser released since 2017. If both work, pano.gl uses WebGPU and you never
-have to think about it.
+WebGPU ships in current Chrome, Edge and Safari, and in Firefox on Windows;
+WebGL2 covers essentially every browser released since 2017. If both work,
+pano.gl uses WebGPU and you never have to think about it.
 
 ## Minimal example
 
 ```html
-<div id="pano"></div>
+<div id="pano" style="width: 100vw; height: 100vh"></div>
 ```
 
 ```ts
@@ -148,14 +148,15 @@ fires `device-lost` and disposes itself.
 ## The four projections
 
 The names only go so far — the four cameras differ in ways pictures convey
-faster than prose. All four below are the same source at the default zoom:
+faster than prose. All four below are the same source — the linear camera at
+its default 70° fov, the non-linear cameras at zoom 1:
 
 | | |
 |---|---|
 | `linear` | `cylindrical` |
-| ![linear](demo/shots/linear.png) | ![cylindrical](demo/shots/cylindrical.png) |
+| ![linear](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/linear.png) | ![cylindrical](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/cylindrical.png) |
 | `planet` | `pannini` |
-| ![planet](demo/shots/planet.png) | ![pannini](demo/shots/pannini.png) |
+| ![planet](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/planet.png) | ![pannini](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/pannini.png) |
 
 Rule of thumb: `linear` for the photograph look, `cylindrical` when panning
 wide without side-stretch, `planet` for the little-planet effect, `pannini`
@@ -181,7 +182,8 @@ above. Integration tests run in a real browser against a real GPU — see
 
 1.0.0 is a rewrite: the entry points, constructor options and camera options
 all changed, and there is no compatibility shim. Every difference is listed,
-with the reason, in [docs/migration-v0.2-to-v1.0.md](docs/migration-v0.2-to-v1.0.md).
+with the reason, in
+[docs/migration-v0.2-to-v1.0.md](https://github.com/yusangeng/pano.gl/blob/master/docs/migration-v0.2-to-v1.0.md).
 
 ## License
 
