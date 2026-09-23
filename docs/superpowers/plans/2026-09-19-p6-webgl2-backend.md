@@ -2246,7 +2246,8 @@ P1 已经把两个 project 建好了，`no-webgpu` 的注释里写着它将来�
       'test/integration/user-story-(photo|video|camera-switch|media-failure).test.ts'
     ],
     // provider 原本只剩 --disable-gpu 一行；Task 5 给它补了 DPR 对齐，这是
-    // include 之外该 project 唯一的改动：
+    // include 之外该 project 唯一的功能性改动（整改轮另修了上方 --disable-gpu
+    // 注释里一句过时的预言，见质量审 F3）：
     provider: playwright({
       launchOptions: { channel: 'chromium', args: ['--disable-gpu'] },
       // DPR parity with the integration project: a user story
@@ -2267,7 +2268,7 @@ P1 已经把两个 project 建好了，`no-webgpu` 的注释里写着它将来�
 
 > **四个文件因此跑两次，同一段代码。** 这是这个做法相对「把测试体抽成 helper、再写一个 spec 文件」的全部价值：不是**劝阻**重复，而是让重复不可能发生。唯一的例外是 photo 的 probe 断言：期望值从固定标签改为按浏览器实际状态推导——推导不是分叉，两个 project 跑的是同一段代码，各自算出各自的真值。
 
-- [ ] **Step 1: 让 `countDraws` 与 `captureRenderInputs` 覆盖两个后端**
+- [x] **Step 1: 让 `countDraws` 与 `captureRenderInputs` 覆盖两个后端**
 
 `test/integration/support/spies.ts` 的两个入口现在都只包 `WebGPUBackend.prototype`。开工核实时发现（实现方 preflight STOP，协调者已在源里复核）：四个用户故事到达后端走的是 **`captureRenderInputs`**（photo 3 处 / video 3 处 / media-failure 1 处），不是 `countDraws`（它只有 dispose-order / viewer-events / viewer-render-input 用，那三个不进 `no-webgpu`）。所以两个都要扩，缺一个都会让 `no-webgpu` 里的绘制断言要么**空过**（`frames === 0` 对着没人调用的方法成立），要么**误红**（`sourceCalls() - before > 0` 恒假）。camera-switch 完全不用 spy；`captureTeardown` 包的是 ResizeObserver/EventEmitter 原型，本来就与后端无关。
 
@@ -2279,29 +2280,37 @@ import { WebGL2Backend } from '../../../src/renderer/webgl2/backend'
 /**
  * Counts every frame drawn by whichever backend the viewer selected.
  *
- * Both prototypes, because the same user-story file runs in two projects and
- * only one backend exists in each. Wrapping just the WebGPU one would make the
- * draw-count assertions in the fallback project silently vacuous -- `toBe(0)`
- * passes against a method nobody calls -- which is worse than a red test,
- * because it survives review.
+ * Both prototypes as prophylaxis, not as coverage: no current caller of this
+ * helper runs in the fallback project (its users -- dispose-order,
+ * viewer-events, viewer-render-input -- are all outside that project's
+ * include). Wrapping just the WebGPU one would let the first draw-counting
+ * test that DOES run there arrive silently vacuous -- `toBe(0)` passing
+ * against a method nobody calls -- which is worse than a red test, because
+ * it survives review.
+ *
+ * The spies call through, and the reader sums the two accounts -- the same
+ * shape `captureRenderInputs` gives `sourceCalls`. Calling through is the
+ * point: a helper that stubs `render` hands a guaranteed-blank canvas to any
+ * test that counts draws and then reads pixels.
  *
  * Returns a reader rather than a count: the callers snapshot it before and after
  * an action, and two reads of one number is what lets them.
  */
 export function countDraws (): () => number {
-  let count = 0
-  for (const backend of [WebGPUBackend, WebGL2Backend]) {
-    vi.spyOn(backend.prototype, 'render').mockImplementation(() => { count++ })
-  }
-  return () => count
+  const spies = [
+    vi.spyOn(WebGPUBackend.prototype, 'render'),
+    vi.spyOn(WebGL2Backend.prototype, 'render')
+  ]
+  for (const spy of spies) spy.mockClear()
+  return () => spies.reduce((total, spy) => total + spy.mock.calls.length, 0)
 }
 ```
 
-> **`mockImplementation(() => { count++ })` 而不是 `vi.fn()` 再读 `mock.calls.length`。** 两个 spy 各有一本账，读的人要把两个数加起来；一个闭包里的计数器只有一个数，而「一帧画了几次」本来就只有一个答案。
+> **两个 spy 都是纯 spy（call-through），读数是两本账之和——与 `captureRenderInputs` 的 `sourceCalls` 同式。** 保持调用放行是刻意的：一个 stub 掉 `render` 的 helper 会把保证全黑的画布递给任何「数完帧再读像素」的测试；本轮整改把首落地时的 stub 改回了调用放行（质量审 F2：stub 并非双后端目标所需，对只读计数的调用方，两种写法可观察行为完全一致）。
 >
 > **`afterEach(() => { vi.restoreAllMocks() })` 是必须的**，P5 的 US2 与 US4 已经写了。恢复之后 `render` 回到真实现，下一个测试才画得出东西 —— 少了它，一个文件里后面的每个测试都会拿到被掏空的 `render`。
 
-`captureRenderInputs` 同样扩到两个原型，但它是**纯 spy**（`vi.spyOn` 不带 `mockImplementation`，记录并放行）：用户故事在它之后做像素断言，一个被掏空的 `setSource` 会让那些断言变成「对着没人渲染过的帧」。
+`captureRenderInputs` 以同样的方式扩到两个原型（整改后两个 helper 都是纯 spy）：用户故事在它之后做像素断言，一个被掏空的 `setSource` 会让那些断言变成「对着没人渲染过的帧」。
 
 ```ts
 /**
@@ -2361,7 +2370,7 @@ export function captureRenderInputs (): {
 }
 ```
 
-- [ ] **Step 2: 把 US5 翻成正面断言**
+- [x] **Step 2: 把 US5 翻成正面断言**
 
 `test/integration/fallback/user-story-no-webgpu.test.ts` 现在断言 `probe()` 是 `'none'`、`create()` 抛异常 —— 那是 P6 还没落地时的诚实结果。**现在它要翻过来**，这正是那个文件存在的意义（P5 的交接表里点名了这件事）。落地版相对本计划初稿有三处修正：`create()` 必须带 `src`（`ImageViewerOptions.src` 是必填，缺了在 `assertSrc` 就抛）；两处对 probe 结果的字段读取前要先收窄掉 `SelectedCapabilities` 的 `'none'` 分支（否则过不了 typecheck）；外加协调者裁定的 probe-vs-constructed `maxTextureDimension` 相等断言（钉住 Task 3 的 probe 修正）：
 
@@ -2444,7 +2453,7 @@ describe('US5: running where WebGPU is unavailable', () => {
 })
 ```
 
-- [ ] **Step 3: photo 的 probe 断言改为按环境推导**
+- [x] **Step 3: photo 的 probe 断言改为按环境推导**
 
 include 扩容后（Step 1 的 config 块），同一份 photo 文本要在两个 project 里跑，而它有一条断言钉死了 `probe() === 'webgpu'` —— 那是 `integration` 一方的真值，在 `--disable-gpu` 下就是谎言（US5 的第一条测试断言的恰恰是 `'webgl2'`）。这条测试自称「US5 的另一半」，它的真值本来就随环境而变，所以期望值改为从浏览器实际状态推导，且推导放在 probe 调用**之前**：地面真值先行，被测物其次。这是四个文件里唯一的环境钉死字面量（开工时逐文件扫过：'webgpu'/'adapter'/`navigator.gpu`/`externalTextures`/`devicePixelRatio` 全查）。落地文本：
 
@@ -2468,7 +2477,7 @@ include 扩容后（Step 1 的 config 块），同一份 photo 文本要在两�
   })
 ```
 
-- [ ] **Step 4: 跑全部**
+- [x] **Step 4: 跑全部**
 
 Run: `npm test`
 Expected: 全 PASS。**四个用户故事要在两个 project 里各出现一次** —— 只出现一次是 `include` 没生效，不是测试通过：
@@ -2482,7 +2491,7 @@ Expected: 两条都大于 0。
 
 **如果 `no-webgpu` 里红的是绘制计数**：`countDraws` / `captureRenderInputs` 没覆盖到 `WebGL2Backend`（Step 1）。**如果红的是画面**：`preserveDrawingBuffer` 没开，于是 `readCanvas` 的 `toDataURL` 拿到的是清屏后的黑 —— 见「明确的非目标」里那一条。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add vitest.config.ts test/integration/support/spies.ts \

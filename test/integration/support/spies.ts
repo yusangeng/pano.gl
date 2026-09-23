@@ -25,21 +25,29 @@ import type { CameraState, Projection } from '../../../src/core/types'
 /**
  * Counts every frame drawn by whichever backend the viewer selected.
  *
- * Both prototypes, because the same user-story file runs in two projects and
- * only one backend exists in each. Wrapping just the WebGPU one would make the
- * draw-count assertions in the fallback project silently vacuous -- `toBe(0)`
- * passes against a method nobody calls -- which is worse than a red test,
- * because it survives review.
+ * Both prototypes as prophylaxis, not as coverage: no current caller of this
+ * helper runs in the fallback project (its users -- dispose-order,
+ * viewer-events, viewer-render-input -- are all outside that project's
+ * include). Wrapping just the WebGPU one would let the first draw-counting
+ * test that DOES run there arrive silently vacuous -- `toBe(0)` passing
+ * against a method nobody calls -- which is worse than a red test, because
+ * it survives review.
+ *
+ * The spies call through, and the reader sums the two accounts -- the same
+ * shape `captureRenderInputs` gives `sourceCalls`. Calling through is the
+ * point: a helper that stubs `render` hands a guaranteed-blank canvas to any
+ * test that counts draws and then reads pixels.
  *
  * Returns a reader rather than a count: the callers snapshot it before and after
  * an action, and two reads of one number is what lets them.
  */
 export function countDraws (): () => number {
-  let count = 0
-  for (const backend of [WebGPUBackend, WebGL2Backend]) {
-    vi.spyOn(backend.prototype, 'render').mockImplementation(() => { count++ })
-  }
-  return () => count
+  const spies = [
+    vi.spyOn(WebGPUBackend.prototype, 'render'),
+    vi.spyOn(WebGL2Backend.prototype, 'render')
+  ]
+  for (const spy of spies) spy.mockClear()
+  return () => spies.reduce((total, spy) => total + spy.mock.calls.length, 0)
 }
 
 /**
