@@ -128,7 +128,7 @@ export class WebGL2Backend implements Backend {
   readonly #invClip = mat4.create()
 
   // Not readonly: a lost-and-restored context invalidates the program and every
-  // uniform location with it, and both are rebuilt in #restore().
+  // uniform location with it, and both are rebuilt in #onContextRestored().
   #program: WebGLProgram
   #uniforms: Record<UniformName, WebGLUniformLocation | null>
 
@@ -242,6 +242,16 @@ export class WebGL2Backend implements Backend {
   }
 
   setSource (source: RenderableSource | null): void {
+    // During the loss window there is nothing to upload into. The spec allows
+    // createTexture() to return null on a lost context (this Chromium instead
+    // hands back a live object, which only turns the upload into a silent
+    // no-op), and the pixels would not survive the restore regardless:
+    // #onContextRestored drops the texture and the next setSource re-uploads.
+    // Returning before any GL call is what keeps a spec-conforming browser's
+    // null from reading as an allocation failure, thrown on every frame of
+    // the window.
+    if (this.#lost) return
+
     const gl = this.#gl
 
     if (!source) {

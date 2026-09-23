@@ -48,9 +48,10 @@ describe('probe() with no DOM at all', () => {
 
 describe('probe() with a DOM but no GPU', () => {
   /**
-   * A `document` whose canvases can answer the one question `probe()` asks them
-   * -- `getContext('webgl2') !== null`. Nothing else about the DOM is supplied
-   * because nothing else is read.
+   * A `document` whose canvases can answer the two questions `probe()` asks of
+   * a WebGL2 context -- `getContext('webgl2') !== null`, and (only when no
+   * adapter was found) `getParameter(MAX_TEXTURE_SIZE)`. Nothing else about
+   * the DOM is supplied because nothing else is read.
    *
    * This is the smallest stand-in that separates "the public method delegates
    * to the device probe" from "the public method returns a literal". Without
@@ -67,21 +68,27 @@ describe('probe() with a DOM but no GPU', () => {
   function stubCanvasWithWebGL2 (): void {
     vi.stubGlobal('document', {
       createElement: () => ({
-        getContext: (id: string) => (id === 'webgl2' ? {} : null)
+        // 0x0d33 is the real GL enum value; probe passes it as the
+        // getParameter key, so the stub has to carry both members.
+        getContext: (id: string) => (id === 'webgl2'
+          ? { MAX_TEXTURE_SIZE: 0x0d33, getParameter: () => 16384 }
+          : null)
       })
     })
   }
 
-  it('reports WebGL2 for the image viewer, at the spec-minimum texture floor', async () => {
+  it('reports WebGL2 for the image viewer, with the GL texture limit', async () => {
     stubCanvasWithWebGL2()
-    // The exact object, not a field of it: `maxTextureDimension: 2048` is
-    // `MIN_TRUSTWORTHY_TEXTURE_DIMENSION` applied to a probe that found no
-    // adapter reporting a limit of its own, and `externalTextures: false` is
-    // the WebGL2 branch's deliberate downgrade of a WebGPU-only flag.
+    // The exact object, not a field of it: `maxTextureDimension: 16384` is the
+    // stub's `MAX_TEXTURE_SIZE`, read on the WebGL2 branch -- a machine with
+    // no adapter has no adapter limit of its own, and a probe that left the
+    // value at 0 would report the 2048 floor here while the constructed
+    // WebGL2Backend reported the real limit. `externalTextures: false` is the
+    // WebGL2 branch's deliberate downgrade of a WebGPU-only flag.
     await expect(FramelessImageViewer.probe()).resolves.toEqual({
       backend: 'webgl2',
       externalTextures: false,
-      maxTextureDimension: 2048
+      maxTextureDimension: 16384
     })
   })
 
@@ -90,7 +97,7 @@ describe('probe() with a DOM but no GPU', () => {
     await expect(FramelessVideoViewer.probe()).resolves.toEqual({
       backend: 'webgl2',
       externalTextures: false,
-      maxTextureDimension: 2048
+      maxTextureDimension: 16384
     })
   })
 })

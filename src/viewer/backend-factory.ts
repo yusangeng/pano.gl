@@ -37,8 +37,21 @@ export async function probe (): Promise<SelectedCapabilities> {
     }
   }
 
-  const hasWebGL2 = typeof document !== 'undefined' &&
-    document.createElement('canvas').getContext('webgl2') !== null
+  const gl = typeof document !== 'undefined'
+    ? document.createElement('canvas').getContext('webgl2')
+    : null
+  const hasWebGL2 = gl !== null
+
+  // Read only on the no-adapter branch, so an adapter machine's answer is
+  // byte-identical with what it was before this line existed. There, the value
+  // stayed 0 and describeCapabilities clamped it up to the 2048 floor, while a
+  // constructed WebGL2Backend reported the real clamped MAX_TEXTURE_SIZE
+  // (typically 16384) -- probe() and createBackend answering the same question
+  // differently is exactly what "downgrade is a programmable state" must not
+  // allow.
+  if (adapter === null && gl !== null) {
+    maxTextureDimension = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number
+  }
 
   return describeCapabilities({
     hasWebGPU,
