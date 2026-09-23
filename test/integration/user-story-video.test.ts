@@ -175,10 +175,13 @@ describe('US2: play a 360 video and zoom', () => {
      * unmodified tree (P2+P3 defect: setCamera's matrix-equality early-out
      * skipped the uniform write AND the dirty flag for every camera change
      * on the non-linear kinds -- their clip matrix is constant by design --
-     * so zoom never reached the canvas). The redraw count is asserted first
-     * so a failure names its half: "did not redraw" is the dirty flag,
-     * "did not move the picture" is the uniform content. No gate covers
-     * this family -- gate A compares only states this defect never touches,
+     * so zoom never reached the canvas). A failure names its layer: the
+     * redraw count watches the loop only -- setSource fires for every frame
+     * the loop selects, upstream of the backend's dirty gate -- so "did not
+     * redraw" means no frame was ever attempted, while the pixel assertion
+     * is the half that catches the backend freeze (under the early-out it
+     * went red with the redraw count still passing). No gate covers this
+     * family -- gate A compares only states this defect never touches,
      * gate B varies extent between cases, which reflushes through setSource
      * -- so this test is the net.
      */
