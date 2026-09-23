@@ -41,7 +41,8 @@ jspm_packages
 .temp
 packinfo.js
 lib
-doc
+# Generated API docs (typedoc --out docs/api); docs/superpowers/ is handwritten
+docs/api
 wasm
 # Vibe design docs / research artifacts
 .vibe
