@@ -2569,7 +2569,8 @@ import { countNonBlack, nextFrames, readCanvas } from './support/canvas'
  * gets its own file and its own project, instead of being folded into the
  * fallback one.
  *
- * The mask is a plain assignment in the test body, not an init script. There is
+ * The mask is a plain `delete` on the prototype in the test body, not an init
+ * script. There is
  * no process boundary in browser mode, so there is no ordering question: the
  * probe reads `navigator.gpu` when it is called, and it is called after this.
  *
@@ -2586,17 +2587,28 @@ import { countNonBlack, nextFrames, readCanvas } from './support/canvas'
  * thing and is tested in webgl2-smoke.
  */
 
-const HAD_GPU = 'gpu' in Navigator.prototype
+// Captured at import, before any test in this file can touch it. `gpu` is an
+// own accessor of Navigator.prototype on every engine that has WebGPU at all,
+// so this descriptor is the complete original state -- and `HAD_GPU` derived
+// from it (rather than from `'gpu' in Navigator.prototype`) means an engine
+// that exposed `gpu` some other way fails the premise test below loudly,
+// instead of every mask in this file silently masking nothing.
+const GPU_DESCRIPTOR = Object.getOwnPropertyDescriptor(Navigator.prototype, 'gpu')
+const HAD_GPU = GPU_DESCRIPTOR !== undefined
 
 afterEach(() => {
   // Restored explicitly, not left to the next test file's fresh page: tests in
   // one file share a page, so a mask that outlives its test would make every
   // later test in this file run in the wrong environment -- and green.
-  if (HAD_GPU) {
-    Object.defineProperty(Navigator.prototype, 'gpu', {
-      configurable: true,
-      get: () => undefined
-    })
+  //
+  // The original descriptor, NOT a fresh stub getter: `probe()` reads
+  // `'gpu' in navigator` and then calls `navigator.gpu.requestAdapter()`, so
+  // a page left with `gpu` present-but-undefined is a page where the
+  // library's own probe crashes -- a worse inheritance than no restoration at
+  // all. The sibling fallback file patches `getContext` with the same
+  // save/restore idiom.
+  if (GPU_DESCRIPTOR) {
+    Object.defineProperty(Navigator.prototype, 'gpu', GPU_DESCRIPTOR)
   }
 })
 
@@ -2656,7 +2668,7 @@ describe('WebGPU absent, WebGL2 present', () => {
 })
 ```
 
-> **`afterEach` 里重新 `defineProperty` 而不是 `delete`。** `Navigator.prototype.gpu` 在 Chromium 上是一个继承来的访问器，`delete` 掉之后没有「原来的值」可以放回去 —— 只有测试开头记下的 `HAD_GPU` 这一个事实。把它定义成一个返回 `undefined` 的 getter 让 `'gpu' in navigator` 重新为真，这对 `integration` project 里**后面的其他文件**没有影响（每个文件一个新页面），但能让这个文件里后面的测试拿到一致的状态。
+> **`afterEach` 恢复的是 import 时捕获的原 descriptor，不是重新定义一个返回 `undefined` 的 getter。** 初稿的 `defineProperty({ get: () => undefined })` 是降级不是恢复：它让 `'gpu' in navigator` 为真而 `navigator.gpu` 为 `undefined`，而 `probe()`（backend-factory.ts）只查前者就去调 `requestAdapter()`——在这个状态上直接 TypeError。质量审的突变证明了泄漏：删掉 render 测试自己的 `delete` 行后套件仍全绿，因为前一个测试的「恢复」已经替它掩掉了 WebGPU。恢复成真 descriptor 后该突变按预期转红（`WebGPUBackend.create` 先于 WebGL2 被选中，backend 标签断言失败）。这与同目录 backend-unavailable 对 `getContext` 的 save/restore 是同一惯用法。
 
 - [x] **Step 2: 环境三 —— 两个后端都没有**
 
@@ -2677,9 +2689,12 @@ import { makeContainer } from '../support/dom'
  * this file only has to take WebGL2 away. Masking both here would mean the
  * project's own guard could stop working and nothing would notice.
  *
- * `getContext` is patched on the prototype and only for 'webgl2'. Blanking every
- * context type would also break the 2D canvas that P1's readCanvas uses, and the
- * test would then fail while constructing its own tools.
+ * `getContext` is patched on the prototype and only for 'webgl2'. The mask
+ * covers exactly the assumption under test -- WebGL2 absent -- and nothing
+ * else: blanking every context type would quietly turn "neither backend" into
+ * "a page with almost no canvas capability at all", a stronger premise than
+ * the one spec 9.7 asks this file to hold, and one whose extra restrictions
+ * no assertion here is watching.
  */
 
 const original = HTMLCanvasElement.prototype.getContext

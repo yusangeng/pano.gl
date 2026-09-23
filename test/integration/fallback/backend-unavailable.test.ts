@@ -12,9 +12,12 @@ import { makeContainer } from '../support/dom'
  * this file only has to take WebGL2 away. Masking both here would mean the
  * project's own guard could stop working and nothing would notice.
  *
- * `getContext` is patched on the prototype and only for 'webgl2'. Blanking every
- * context type would also break the 2D canvas that P1's readCanvas uses, and the
- * test would then fail while constructing its own tools.
+ * `getContext` is patched on the prototype and only for 'webgl2'. The mask
+ * covers exactly the assumption under test -- WebGL2 absent -- and nothing
+ * else: blanking every context type would quietly turn "neither backend" into
+ * "a page with almost no canvas capability at all", a stronger premise than
+ * the one spec 9.7 asks this file to hold, and one whose extra restrictions
+ * no assertion here is watching.
  */
 
 const original = HTMLCanvasElement.prototype.getContext
