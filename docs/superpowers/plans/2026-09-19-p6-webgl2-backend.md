@@ -1652,7 +1652,7 @@ did."
 **门禁 C 的问题**：两份手写的着色器，四个投影，**它们会不会悄悄漂开？**
 
 **怎么比：两个离屏渲染器，同一张源图，同一批相机状态。** 不走两个真实的 `Backend`（那个在 Task 5 的用户故事里验），因为门禁 C 要证的是**两份着色器源码**一致，而经画布走一遍会引入 present 与读回的时序，还会让两边的输入路径不同（WebGPU 的 canvas 纹理没有 `readPixels` 等价物）。
-- [ ] **Step 1: 门禁 C 的工具**
+- [x] **Step 1: 门禁 C 的工具**
 
 `test/integration/support/cross-backend.ts`。**一个文件装三样东西**：共用的源图、GLSL 离屏渲染、CPU 裁判。浏览器模式让它们可以放在一起 —— 都在页面里跑，`import` 一次就够了，不需要分成「页面侧出口」和「测试侧工具」两半。
 
@@ -1713,6 +1713,7 @@ export async function gateSource (): Promise<{ bitmap: ImageBitmap, size: number
   canvas.width = GATE_C_SIZE
   canvas.height = GATE_C_SIZE
   const ctx = canvas.getContext('2d')!
+
   const image = ctx.createImageData(GATE_C_SIZE, GATE_C_SIZE)
 
   for (let y = 0; y < GATE_C_SIZE; y++) {
@@ -1787,8 +1788,14 @@ export async function renderOffscreenGLSL (request: RenderRequest): Promise<Rend
   // False: the v flip lives in the shader. Doing it here too would cancel it.
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+  // REPEAT on both axes, exactly as both shipped image paths wrap: the WebGPU
+  // still sampler (webgpu/shaders/sampler.ts) and this backend's own image
+  // branch (webgl2/backend.ts). CLAMP_TO_EDGE here would make the two halves
+  // sample different rows wherever v leaves [0, 1] -- which the non-linear
+  // projections' `- lat` term makes happen at any non-zero latitude -- and the
+  // comparison would fail for a reason with nothing to do with the formulas.
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 
@@ -1815,23 +1822,35 @@ export async function renderOffscreenGLSL (request: RenderRequest): Promise<Rend
   return { width, height, rgba: topDown }
 }
 
-/** Bilinear sample model matching the GPU's: LINEAR with CLAMP_TO_EDGE. */
+/** Bilinear sample model matching the GPU's: LINEAR with REPEAT on both axes. */
 function sample (
   data: Uint8ClampedArray,
   size: number,
   u: number,
   v: number
 ): [number, number, number] {
-  const x = Math.min(1, Math.max(0, u)) * size - 0.5
-  const y = Math.min(1, Math.max(0, v)) * size - 0.5
+  // x - floor(x), which is what a REPEAT sampler does to a coordinate before
+  // it interpolates. Clamp-to-edge here would disagree with both GPU halves
+  // wherever a projection's v leaves [0, 1] -- at any non-zero latitude the
+  // non-linear `- lat` term pushes phi past PI, and the GPUs wrap while a
+  // clamping model would pin the edge row.
+  const wrap = (x: number): number => {
+    const w = x % 1
+    return w < 0 ? w + 1 : w
+  }
+  const x = wrap(u) * size - 0.5
+  const y = wrap(v) * size - 0.5
   const x0 = Math.floor(x)
   const y0 = Math.floor(y)
   const fx = x - x0
   const fy = y - y0
 
   const texel = (ix: number, iy: number, channel: number): number => {
-    const cx = Math.min(size - 1, Math.max(0, ix))
-    const cy = Math.min(size - 1, Math.max(0, iy))
+    // Modular, not clamped: REPEAT blends the last source column into the
+    // first at the seam, which is exactly the boundary behaviour both shipped
+    // image paths have (webgpu/shaders/sampler.ts, webgl2/backend.ts).
+    const cx = ((ix % size) + size) % size
+    const cy = ((iy % size) + size) % size
     return data[(cy * size + cx) * 4 + channel]!
   }
 
@@ -1881,8 +1900,13 @@ export async function referenceImage (request: RenderRequest): Promise<RenderRes
       const ndcY = 1 - ((y + 0.5) / height) * 2
 
       const [sx, sy, sz] = ndcToSurface(ndcX, ndcY, extent)
+      // project() returns the UNFLIPPED equirect v (phi / PI -- see toUV in
+      // src/core/reference.ts), while both shaders' to_uv sample 1 - phi / PI.
+      // The flip is compensated here, once, so the arbiter reads the same
+      // texture rows both GPUs read; sampling v raw would mirror the image
+      // vertically and disagree on the wrap-antisymmetric channel.
       const { u, v } = project(sx, sy, sz, camera, projection)
-      const [r, g, b] = sample(sourceData, GATE_C_SIZE, u, v)
+      const [r, g, b] = sample(sourceData, GATE_C_SIZE, u, 1 - v)
 
       const i = (y * width + x) * 4
       rgba[i] = Math.round(r)
@@ -1994,7 +2018,7 @@ export async function compareWithReference (
 
 > **`request.source.close()` 在每个用例末尾。** `ImageBitmap` 持有的显存不会被 GC 及时回收，20 个用例各漏一张 128×128 的位图不致命，但门禁 C 是要长期增长的（每加一个相机状态就多一张），所以关掉它是纪律而不是优化。
 
-- [ ] **Step 2: 写测试**
+- [x] **Step 2: 写测试**
 
 `test/integration/gate-c-cross-backend.test.ts`：
 
@@ -2054,11 +2078,14 @@ const projectionFor = (kind: Kind, s: State): Projection =>
 
 const CAMERAS: readonly Kind[] = ['linear', 'cylindrical', 'planet', 'pannini']
 
+// fov is in RADIANS (Projection.fov; see src/viewer/camera-controller.ts). The
+// plan originally wrote 75/60/90 here as degrees, which built a mirrored ~22
+// degree camera; the values below are the intended angles converted.
 const STATES: readonly State[] = [
-  { povLatitude: 0, povLongitude: 0, fov: 75, zoom: 1 },
-  { povLatitude: 30, povLongitude: 45, fov: 75, zoom: 1 },
-  { povLatitude: -60, povLongitude: 180, fov: 60, zoom: 1 },
-  { povLatitude: 10, povLongitude: 300, fov: 90, zoom: 0.5 }
+  { povLatitude: 0, povLongitude: 0, fov: (75 * Math.PI) / 180, zoom: 1 },
+  { povLatitude: 30, povLongitude: 45, fov: (75 * Math.PI) / 180, zoom: 1 },
+  { povLatitude: -60, povLongitude: 180, fov: (60 * Math.PI) / 180, zoom: 1 },
+  { povLatitude: 10, povLongitude: 300, fov: (90 * Math.PI) / 180, zoom: 0.5 }
 ]
 
 describe('gate C: WebGPU vs WebGL2', () => {
@@ -2086,8 +2113,16 @@ describe('gate C: WebGPU vs WebGL2', () => {
     // The CPU path is float64 with its own bilinear fetch and the shaders are
     // float32 with the hardware's; hardware bilinear weights are quantized to a
     // handful of sub-texel bits, which is most of the headroom here.
+    // Cylindrical, not linear, and not by taste: the reference's ndcToSurface
+    // inverts the FIXED quad view, while a linear camera's pose is baked into
+    // buildViewMatrix -- which this arbiter deliberately does not use (see
+    // project()'s docs in src/core/reference.ts). A non-zero-pose linear
+    // camera is beyond what the arbiter can model by construction. The
+    // non-linear projections carry their pose as explicit formula terms, so
+    // cylindrical at state 1 keeps the third opinion honest exactly where the
+    // formulas can disagree: at a non-zero pose.
     const s = STATES[1]!
-    const r = await compareWithReference(state(s), projectionFor('linear', s))
+    const r = await compareWithReference(state(s), projectionFor('cylindrical', s))
 
     expect(r.webgpu).toBeLessThanOrEqual(3)
     expect(r.webgl2).toBeLessThanOrEqual(3)
@@ -2099,7 +2134,7 @@ describe('gate C: WebGPU vs WebGL2', () => {
     // of atan lands many texels apart. The tolerance is relaxed there on
     // purpose; this test pins that it is still bounded rather than unbounded.
     for (const kind of CAMERAS) {
-      const s: State = { povLatitude: 89.5, povLongitude: 0, fov: 75, zoom: 1 }
+      const s: State = { povLatitude: 89.5, povLongitude: 0, fov: (75 * Math.PI) / 180, zoom: 1 }
       const diff = await renderBothBackends(state(s), projectionFor(kind, s))
 
       // Not equal, but not garbage: a broken implementation gives a uniform
@@ -2112,7 +2147,7 @@ describe('gate C: WebGPU vs WebGL2', () => {
 
 > **这个文件跑在 `integration` project 里，那里有真适配器** —— `require-webgpu.ts` 守着。它**不在** `no-webgpu` 的白名单里（P1 的 `include` 只盖 `fallback/**` 与四个用户故事），因为「两份着色器一致」这件事在只有一个后端可用时无法提问。
 
-- [ ] **Step 3: 跑门禁 C**
+- [x] **Step 3: 跑门禁 C**
 
 Run: `npx vitest run --project integration gate-c`
 Expected: 18 条全 PASS（16 条状态 + 裁判 + 极点）
@@ -2130,7 +2165,7 @@ Expected: 18 条全 PASS（16 条状态 + 裁判 + 极点）
 
 **不要为了让门禁 C 变绿而放宽容差。** 如果 ±2 不够，先搞清楚为什么 —— 放宽到 ±8 只是把一个真实的转写错误变成一条永远绿不了又没人管的测试。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/gate-c-cross-backend.test.ts test/integration/support/cross-backend.ts
