@@ -179,15 +179,17 @@ npm run doc          # typedoc -> docs/api/ (generated, not committed)
 ```
 
 The demo (`npm run start`) serves `demo/` with the assets used in the examples
-above. Integration tests run in a real browser against a real GPU — see
-`CLAUDE.md` for the gates and conventions.
+above. Integration tests run in a real browser — on CI against a software
+adapter (SwiftShader), locally against a real GPU — see `CLAUDE.md` for the
+gates and conventions.
 
 ## Migrating from 0.2.x
 
 1.0.0 is a rewrite: the entry points, constructor options and camera options
 all changed, and there is no compatibility shim. Every difference is listed,
 with the reason, in
-[docs/migration-v0.2-to-v1.0.md](https://github.com/yusangeng/pano.gl/blob/master/docs/migration-v0.2-to-v1.0.md).
+[docs/migration-v0.2-to-v1.0.md](https://github.com/yusangeng/pano.gl/blob/master/docs/migration-v0.2-to-v1.0.md)
+(written in Chinese).
 
 ## License
 
