@@ -69,11 +69,18 @@ const float TWO_PI = 6.283185307179586;
 
 // Equirectangular coordinate from an angle pair.
 //
-// Wrapping happens here rather than in the sampler. The legacy shader did none
-// at all: it handed texture2D a raw ratio and the texture object's default
-// REPEAT wrap did the work. The WebGPU backend's external-texture entry point
-// has no wrap-capable sampler at all (textureSampleBaseClampToEdge clamps), so
-// both backends wrap in the shader to stay identical.
+// `mod` here does the same job as the WGSL's `fract` -- it folds u into
+// [0, 1) -- and no more. The legacy shader did none of even that: it handed
+// texture2D a raw ratio and the texture object's default REPEAT wrap did the
+// work. The cross-seam and cross-pole LINEAR blend is likewise the sampler's,
+// not this function's, and clamp-to-edge cannot express it. On WebGPU the
+// still sampler is REPEAT on both axes for exactly that blend (see
+// src/renderer/webgpu/shaders/sampler.ts; gate A measured the seam blend at
+// up to 124 LSB), while WebGPU video is edge-clamped by
+// textureSampleBaseClampToEdge whatever the sampler's modes say -- an API
+// limit of its entry point, not a decision to treat video differently. The
+// WebGL2 sampler modes are Task 3's to set, and they must match WebGPU per
+// source kind: still textures REPEAT on both axes, video clamp-to-edge.
 //
 // `mod` is x - y * floor(x / y), the same function as WGSL's `fract` for a
 // divisor of 1.0. WGSL's `%` is NOT the same (it truncates toward zero) and

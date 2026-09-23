@@ -18,12 +18,52 @@ function wgslBody (name: string): string {
 /** Comments out, whitespace collapsed: the two languages' only shared vocabulary. */
 function skeleton (source: string): string {
   return source
-    .replace(/\/\/[^\n]*/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
+    // One alternation, one scan. Two sequential passes -- `//` first, then
+    // `/*...*/` -- let a `//` inside a block comment eat through the closing
+    // `*/` and leave the block's opening half behind as residue
+    // (`'/* see https:'` survives as `'/* see '`). With the alternation the
+    // block-comment branch consumes the whole `/*...*/` region, embedded `//`
+    // included, because the engine takes it as one match from the leftmost
+    // position.
+    .replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
     .split('\n')
     .map(l => l.trim())
     .filter(l => l.length > 0)
     .join(' ')
+}
+
+/**
+ * A function body reduced to language-neutral tokens, so the GLSL and WGSL
+ * copies can be compared as exact sequences rather than as multisets.
+ *
+ * The rules, in order:
+ *   1. comments out, whitespace collapsed (skeleton);
+ *   2. everything up to and including the first `{` is dropped -- the two
+ *      signatures spell one thing too differently to normalise
+ *      (`vec2 name (vec3 s)` vs `fn name(s: vec3f) -> vec2f`);
+ *   3. WGSL vocabulary maps onto GLSL's: `vec2f(` becomes `vec2(`, `fract(A)`
+ *      becomes `mod(A, 1.0)` where A holds no parenthesis (to_uv's argument
+ *      is the only fract site and is paren-free), and the declaration
+ *      keywords `var` / `let` join GLSL's `float` in being dropped, so
+ *      `let y = ...` and `float y = ...` both reduce to `y = ...`;
+ *   4. braces are dropped: the WGSL extractor reaches the function's closing
+ *      brace and the GLSL one stops just short of it, and the if-chain
+ *      structure survives in the `if` / `else` tokens anyway;
+ *   5. the remainder is split into identifier, numeric-literal and
+ *      single-character punctuation tokens.
+ *
+ * There is no uniform-name rule because none of the five bodies compared here
+ * reads a uniform -- `u_*` appears only in main().
+ */
+function bodyTokens (body: string): string[] {
+  const skel = skeleton(body)
+  const normalised = skel
+    .slice(skel.indexOf('{') + 1)
+    .replace(/vec2f\s*\(/g, 'vec2(')
+    .replace(/fract\s*\(([^()]*)\)/g, 'mod($1, 1.0)')
+    .replace(/\b(?:var|let|float)\s+/g, '')
+    .replace(/[{}]/g, '')
+  return normalised.match(/[A-Za-z_]\w*|\d+(?:\.\d+)?|[^\sA-Za-z0-9_]/g) ?? []
 }
 
 describe('WebGL2 shader source', () => {
@@ -130,25 +170,37 @@ describe('WebGL2 shader source', () => {
     expect(skeleton(PANORAMA_WGSL)).not.toMatch(/atan2\s*\(/)
   })
 
-  it('transcribes the same four projection formulas as the WGSL', () => {
-    // A structural check, not a numeric one: same call sites, same literal
-    // vocabulary. It will not catch a wrong sign -- that is what gate C is for
-    // -- but it catches the case where one file was edited and the other was
-    // not edited at all, which is the actual failure mode of hand transcription.
-    for (const [glslName, wgslName] of [
-      ['project_linear', 'project_linear'],
-      ['project_cylindrical', 'project_cylindrical'],
-      ['project_planet', 'project_planet'],
-      ['project_pannini', 'project_pannini']
-    ] as const) {
-      const glsl = skeleton(glslBody(glslName))
-      const wgsl = skeleton(wgslBody(wgslName))
+  it('transcribes the same formulas as the WGSL, token for token', () => {
+    // The token comparison is the load-bearing assertion: each body is
+    // normalised to a shared vocabulary (rules at bodyTokens) and compared as
+    // an exact sequence, so an edit to one file's formula that does not appear
+    // in the other -- a flipped sign, a swapped operand -- fails here. The
+    // multiset checks below cannot do that: they are symmetric under edits
+    // that preserve both (`theta -= lng` becoming `theta += lng` keeps every
+    // literal and every atan call site), which is why they stay only as a
+    // coarser first signal. Gate C remains the authority on rendering; this is
+    // the unit-level tripwire for the actual failure mode of hand
+    // transcription, one file edited and the other not.
+    for (const fn of ['to_uv', 'project_linear', 'project_cylindrical', 'project_planet', 'project_pannini']) {
+      expect(
+        bodyTokens(glslBody(fn)),
+        `${fn}: the GLSL body is not the WGSL body token for token`
+      ).toEqual(bodyTokens(wgslBody(fn)))
+    }
+
+    // to_uv is absent from this loop on purpose: its GLSL carries mod's `1.0`
+    // divisor where the WGSL's fract has none, so the raw literal multisets
+    // differ by design -- the normalised comparison above, which applies the
+    // fract-to-mod mapping, is where to_uv is held.
+    for (const fn of ['project_linear', 'project_cylindrical', 'project_planet', 'project_pannini']) {
+      const glsl = skeleton(glslBody(fn))
+      const wgsl = skeleton(wgslBody(fn))
 
       const literals = (s: string) => (s.match(/\b\d+\.\d+\b/g) ?? []).sort()
-      expect(literals(glsl), `${glslName} literals differ`).toEqual(literals(wgsl))
+      expect(literals(glsl), `${fn} literals differ`).toEqual(literals(wgsl))
       expect(
         (glsl.match(/atan\(/g) ?? []).length,
-        `${glslName} has a different number of atan call sites`
+        `${fn} has a different number of atan call sites`
       ).toBe((wgsl.match(/atan\(/g) ?? []).length)
     }
   })

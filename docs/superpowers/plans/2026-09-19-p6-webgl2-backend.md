@@ -1205,12 +1205,19 @@ export class WebGL2Backend implements Backend {
     // their pixels agreed -- which is the one kind of drift gate C cannot see.
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source.element)
-    // No power-of-two requirement in WebGL2, so a plain clamp + linear is
-    // correct at any size. The legacy path could not use these because WebGL1
-    // restricts NPOT textures to NEAREST + CLAMP_TO_EDGE. These are also the
-    // modes the WebGPU sampler uses, which is what keeps the two comparable.
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    // No power-of-two requirement in WebGL2, so REPEAT + linear is available
+    // at any size. The legacy path could not have asked for REPEAT because
+    // WebGL1 restricts NPOT textures to NEAREST + CLAMP_TO_EDGE. The wrap
+    // modes must match WebGPU PER SOURCE KIND, not blanket: the WebGPU still
+    // sampler is repeat on BOTH axes (src/renderer/webgpu/shaders/sampler.ts)
+    // because the cross-seam/pole LINEAR blend lives in the sampler and
+    // clamp-to-edge cannot express it (gate A measured the seam blend at up
+    // to 124 LSB), while WebGPU video is edge-clamped by
+    // textureSampleBaseClampToEdge whatever the sampler says -- an API limit
+    // of its entry point, which a clamp-to-edge wrap mirrors exactly.
+    const wrap = source.kind === 'video' ? gl.CLAMP_TO_EDGE : gl.REPEAT
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 
