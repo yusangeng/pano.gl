@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { compileShader, linkProgram, describeShaderError } from '../../src/renderer/webgl2/context'
 
+// Both get*Parameter mocks ignore their pname, so a COMPILE_STATUS ->
+// LINK_STATUS swap inside the implementation would still pass at unit level.
+// That class of mistake is Task 3's real-GPU integration to catch; these
+// tests pin the error protocol, not the enum choice.
 function fakeGl (ok: boolean, log = '') {
   return {
     createShader: vi.fn(() => ({})),
@@ -46,6 +50,15 @@ describe('compileShader', () => {
     try { compileShader(gl, 0x8b31, 'x', 'vertex') } catch { /* expected */ }
     expect(gl.deleteShader).toHaveBeenCalled()
   })
+
+  it('throws when the driver cannot allocate a shader object', () => {
+    // createShader is allowed to return null, and handing that null onward
+    // would only set the error flag nobody reads -- the exact failure mode
+    // this file exists to close.
+    const gl = { ...fakeGl(true), createShader: vi.fn(() => null) } as unknown as WebGL2RenderingContext
+    expect(() => compileShader(gl, 0x8b31, 'void main(){}', 'vertex'))
+      .toThrow('could not allocate a vertex shader object')
+  })
 })
 
 describe('linkProgram', () => {
@@ -59,14 +72,28 @@ describe('linkProgram', () => {
       .toThrow(/link.*varying mismatch/s)
   })
 
-  it('detaches and deletes both shaders on success', () => {
-    // Once linked, the shader objects are no longer needed. Keeping them is a
-    // small leak per backend construction, which matters when a viewer is
-    // recreated on every camera swap.
+  it('deletes both shaders after a successful link', () => {
+    // deleteShader on an attached shader only flags it for deletion; the spec
+    // frees it once nothing attaches it. The flags are what lets Task 3's
+    // dispose -> deleteProgram actually release the pair, instead of leaking
+    // two objects per backend teardown and rebuild.
     const gl = fakeGl(true)
     const vs = gl.createShader(0)!
     const fs = gl.createShader(0)!
     linkProgram(gl, vs, fs)
+    expect(gl.deleteShader).toHaveBeenCalledWith(vs)
+    expect(gl.deleteShader).toHaveBeenCalledWith(fs)
+  })
+
+  it('deletes both shaders and throws when the driver cannot allocate a program', () => {
+    // The two shaders already exist by the time the program fails to
+    // allocate, so cleaning them up is this function's job: the caller only
+    // ever sees the throw. lib.dom types createProgram as never returning
+    // null -- the spec disagrees, which is what the guard under test is for.
+    const gl = { ...fakeGl(true), createProgram: vi.fn(() => null) } as unknown as WebGL2RenderingContext
+    const vs = gl.createShader(0)!
+    const fs = gl.createShader(0)!
+    expect(() => linkProgram(gl, vs, fs)).toThrow('could not allocate a program object')
     expect(gl.deleteShader).toHaveBeenCalledWith(vs)
     expect(gl.deleteShader).toHaveBeenCalledWith(fs)
   })
