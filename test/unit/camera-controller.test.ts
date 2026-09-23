@@ -164,11 +164,21 @@ describe('CameraController', () => {
     expect(fn).not.toHaveBeenCalled()
   })
 
-  it('zoom only applies to projections that have one', () => {
-    const c = new CameraController(undefined, { kind: 'linear', fov: Math.PI / 2, aspect: 1 })
+  it('zoom reaches the linear projection as fov', () => {
+    const c = new CameraController(undefined, { kind: 'linear', fov: Math.PI / 2, aspect: 2 })
     c.consumeDirty()
     c.zoom(0.5)
-    expect(c.consumeDirty()).toBe(false)
+    const p = c.projection
+    if (p.kind !== 'linear') throw new Error(`expected linear, got ${p.kind}`)
+    // (PI / 2) / 1.5 -- the unified contract: a positive delta magnifies by
+    // (1 + delta), and a narrower fov IS the magnification for the linear
+    // camera. v1 returned at the kind guard (a no-op), which was a port
+    // regression: v0.2.2's PerspectiveTrans.zoom adjusted fov and worked.
+    expect(p.fov).toBeCloseTo(Math.PI / 3)
+    // The spread must carry the caller's aspect through -- losing it would
+    // stretch the picture on the next non-square resize.
+    expect(p.aspect).toBe(2)
+    expect(c.consumeDirty()).toBe(true)
   })
 
   it('zoom clamps to the projection range', () => {
@@ -180,18 +190,57 @@ describe('CameraController', () => {
     // The bounds are asserted exactly rather than by inequality. `<= 1` and
     // `> 0` are satisfied by any range inside (0, 1], so both constants could be
     // moved -- the ceiling to 0.5, the floor to 0.5 -- and the whole usable range
-    // could collapse to a single point with this test still green. The range is
-    // ported legacy behaviour, which is the one thing the port exists to keep.
+    // could collapse to a single point with this test still green. The bounds
+    // are the user-adjudicated spec values (pan-zoom-semantics spec section 4,
+    // 2026-09-23), not ported legacy behaviour.
+    //
+    // The second arm is the negative-divisor net: 1 + (-100) < 0, and an
+    // implementation that divides `zoom / (1 + delta)` without clamping the
+    // divisor first produces a negative zoom that the outer clamp then pins
+    // to the floor 0.01 -- expecting 1 is what catches it.
     const c = new CameraController(undefined, cylindrical())
     const zoomOf = (): number => {
       const p = c.projection
       return p.kind === 'cylindrical' ? p.zoom : NaN
     }
 
-    c.zoom(100)
-    expect(zoomOf()).toBe(1)
-    c.zoom(-100)
+    c.zoom(100)   // magnify far past the floor
     expect(zoomOf()).toBe(0.01)
+    c.zoom(-100)  // shrink far past the ceiling -- and past the negative divisor
+    expect(zoomOf()).toBe(1)
+
+    // Planet pins the same endpoints through a second non-linear kind. It
+    // shares the else-branch with cylindrical, so under the unified contract
+    // this arm is green because the branch is green -- the edit it exists for
+    // is a future "restore the legacy per-kind clamps" one: planet's legacy
+    // range was [0.1, 2], and with no test instantiating planet through
+    // zoom() that edit would redden nothing while changing what every planet
+    // user gets. Pannini is deliberately left without an arm: it shares the
+    // same branch, and a third instantiation of one line pins nothing the two
+    // here have not.
+    const planet = new CameraController(undefined, { kind: 'planet', zoom: 1, extent: [4, 4] })
+    const zoomOfPlanet = (): number => {
+      const p = planet.projection
+      return p.kind === 'planet' ? p.zoom : NaN
+    }
+    planet.zoom(100)
+    expect(zoomOfPlanet()).toBe(0.01)
+    planet.zoom(-100)
+    expect(zoomOfPlanet()).toBe(1)
+  })
+
+  it('linear zoom clamps to [15°, 110°] and pins at both ends', () => {
+    const max = (110 * Math.PI) / 180
+    const min = (15 * Math.PI) / 180
+    const c = new CameraController(undefined, { kind: 'linear', fov: max, aspect: 1 })
+    c.consumeDirty()
+    c.zoom(-100) // shrink past the ceiling: already there, no-op
+    expect(c.consumeDirty()).toBe(false)
+    c.zoom(100)  // magnify past the floor: lands ON min, dirty
+    const p = c.projection
+    if (p.kind !== 'linear') throw new Error(`expected linear, got ${p.kind}`)
+    expect(p.fov).toBeCloseTo(min)
+    expect(c.consumeDirty()).toBe(true)
   })
 
   it('zoom moves by the delta, in the direction the delta asks for', () => {
@@ -199,28 +248,37 @@ describe('CameraController', () => {
     // zoom-in is clamped away -- so a `zoom` with no effect at all would satisfy
     // all of them. Starting below the ceiling is what makes the sign and the
     // magnitude observable.
-    const half: Projection = { kind: 'cylindrical', zoom: 0.5, extent: [1, 1] }
+    //
+    // Under the unified contract a positive delta magnifies, which DIVIDES
+    // the parameter: 0.6 / 1.5, written as the expression because that is
+    // bit-identical to what the implementation divides out (the decimal 0.4
+    // is a different double, one ulp above it -- and 0.5 / 1.5 was rejected
+    // as the fixture because it is a repeating fraction no literal can pin).
+    const half: Projection = { kind: 'cylindrical', zoom: 0.6, extent: [1, 1] }
     const c = new CameraController(undefined, half)
     c.consumeDirty()
     c.zoom(0.5)
 
     const p = c.projection
-    expect(p.kind === 'cylindrical' ? p.zoom : NaN).toBe(0.75)
+    expect(p.kind === 'cylindrical' ? p.zoom : NaN).toBe(0.6 / 1.5)
     expect(c.consumeDirty()).toBe(true)
   })
 
   it('a zoom that clamps back to the value already held is a no-op', () => {
-    // A wheel held at the ceiling is an unbounded stream of positive deltas, and
-    // a delta below the float64 epsilon rounds to the value already held. Both
-    // land on the same no-redraw case `#apply` and `setAspect` guard; without it
-    // each event costs a full-screen redraw and a subscriber wake for a picture
-    // that cannot change.
+    // A wheel held at the ceiling is an unbounded stream of NEGATIVE deltas
+    // under the unified contract -- shrinking is what the ceiling pins: from
+    // zoom 1, zoom(-0.5) computes 1 / (1 - 0.5) = 2 and clamps back to 1,
+    // while magnifying at 1 (zoom(0.5) -> 1 / 1.5 = 0.667...) is a real
+    // write. And a delta below the float64 epsilon rounds to the value
+    // already held. Both land on the same no-redraw case `#apply` and
+    // `setAspect` guard; without it each event costs a full-screen redraw
+    // and a subscriber wake for a picture that cannot change.
     const c = new CameraController(undefined, cylindrical())
     const fn = vi.fn()
     c.onChange(fn)
     c.consumeDirty()
 
-    c.zoom(0.5)
+    c.zoom(-0.5)
     expect(c.consumeDirty()).toBe(false)
 
     c.zoom(5e-17)
@@ -302,10 +360,12 @@ describe('CameraController', () => {
     // Each half asserts the controller's own projection DID move before asserting
     // the caller's did not, and that order is not decoration. Without it the test
     // is satisfied by an implementation that writes nothing at all, and the
-    // obvious fixture lands exactly there: start at zoom 1, call zoom(0.5), and
-    // the clamp returns 1, the equal-value guard returns early, and no assignment
-    // is reached. Starting below the ceiling is what makes the write happen and
-    // the assertion mean something.
+    // obvious fixture lands exactly there under the unified formula: start at
+    // zoom 1, call zoom(-0.5), and 1 / (1 - 0.5) = 2 clamps back to 1, the
+    // equal-value guard returns early, and no assignment is reached --
+    // magnifying at 1 (zoom(0.5) -> 1 / 1.5 = 0.667...) is the real write.
+    // Starting below the ceiling is what makes the write happen and the
+    // assertion mean something.
     //
     // Inbound only. What `setProjection` accepts and whether the `projection`
     // getter should hand out a snapshot are Task 3's questions; this says nothing
@@ -313,7 +373,7 @@ describe('CameraController', () => {
     const passedToZoom: Projection = { kind: 'cylindrical', zoom: 0.5, extent: [1, 1] }
     const zoomed = new CameraController(undefined, passedToZoom)
     zoomed.zoom(0.5)
-    expect(zoomed.projection).toEqual({ kind: 'cylindrical', zoom: 0.75, extent: [1, 1] })
+    expect(zoomed.projection).toEqual({ kind: 'cylindrical', zoom: 0.5 / 1.5, extent: [1, 1] })
     expect(passedToZoom).toEqual({ kind: 'cylindrical', zoom: 0.5, extent: [1, 1] })
 
     const passedToAspect: Projection = { kind: 'linear', fov: Math.PI / 2, aspect: 1 }

@@ -54,6 +54,14 @@ const LNG_INERT = await longitudeIsInert()
  * Latitude is always neutral-or-divergent, never comparable, so it filters to
  * zero. Longitude is neutral only if the measurement above says it never reached
  * a pixel, or if this state does not use it.
+ *
+ * Registered divergence (C1, 2026-09-23, pan-zoom-semantics spec §5.2,
+ * docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md): the renderer now
+ * converts longitude honestly while the baseline PNGs still carry v0.2.2's
+ * `/ 4` offset in their pixels, so every non-linear state with lng != 0
+ * drifts from the baseline permanently. That drift is the fix itself, not a
+ * red waiting to be repaired, and the filter above already excludes exactly
+ * those states. At lng = 0 both formulas read 0, so `origin` stays comparable.
  */
 async function comparableStates (camera: string): Promise<string[]> {
   const all = statesOf(camera)

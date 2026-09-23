@@ -39,6 +39,15 @@ export const DEFAULT_PROJECTION: Projection = {
   aspect: 1
 }
 
+/**
+ * Linear zoom bounds in radians: 15° and 110°. Below 15° a handful of source
+ * pixels stretch across the viewport; past 110° rectilinear distortion
+ * dominates. User-adjudicated 2026-09-23, see the pan-zoom-semantics spec §4
+ * (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md).
+ */
+const MIN_FOV = (15 * Math.PI) / 180
+const MAX_FOV = (110 * Math.PI) / 180
+
 export class CameraController {
   #state: CameraState
   #projection: Projection
@@ -111,19 +120,38 @@ export class CameraController {
     this.#apply(this.#state.povLatitude + deltaLat, this.#state.povLongitude + deltaLng)
   }
 
-  /** Changes the zoom of the current projection. No-op for the linear one. */
+  /**
+   * Zooms by a relative magnification: a positive delta magnifies the picture
+   * by (1 + delta), a negative one shrinks it by the same factor.
+   *
+   * Both parameterisations divide by (1 + delta) -- fov for the linear camera,
+   * zoom for the others -- because in both a smaller parameter is a narrower
+   * field, so ONE formula serves four cameras and the wheel step feels the
+   * same on each. v1 multiplied instead (`zoom * (1 + delta)`), reading the
+   * "positive is zoom in" wheel contract backwards and inverting wheel and
+   * pinch relative to v0.2.2; and it returned at the kind guard for linear,
+   * which v0.2.2's fov-adjusting PerspectiveTrans.zoom never did.
+   *
+   * No-op for a zero delta and for a delta whose clamped result is the value
+   * already held (a wheel pinned at a limit).
+   */
   zoom (delta: number): void {
     assertFinite(delta, 'zoom delta')
     if (delta === 0) return
-    if (this.#projection.kind === 'linear') return
-    const next = Math.min(1, Math.max(0.01, this.#projection.zoom * (1 + delta)))
-    // The clamp can land back on the value already held -- a wheel held at the
-    // limit, or a delta below the float64 epsilon, where `zoom * (1 + delta)`
-    // rounds to `zoom` itself. Both are the no-redraw case `#apply` and
-    // `setAspect` already guard, and without it a wheel pinned at the ceiling
-    // costs a full-screen redraw and a subscriber wake per event.
-    if (next === this.#projection.zoom) return
-    this.#projection = { ...this.#projection, zoom: next }
+    // A public-API delta below -1 would flip the divisor's sign and clamp a
+    // "shrink" onto the most-magnified end of the range. Clamping the divisor
+    // keeps every delta on the monotone path; the real input layer already
+    // bounds its deltas to [-1, 1] (WheelZoom.MAX_STEP).
+    const scale = Math.max(1 + delta, Number.EPSILON)
+    if (this.#projection.kind === 'linear') {
+      const next = Math.min(MAX_FOV, Math.max(MIN_FOV, this.#projection.fov / scale))
+      if (next === this.#projection.fov) return
+      this.#projection = { ...this.#projection, fov: next }
+    } else {
+      const next = Math.min(1, Math.max(0.01, this.#projection.zoom / scale))
+      if (next === this.#projection.zoom) return
+      this.#projection = { ...this.#projection, zoom: next }
+    }
     this.#dirty = true
     this.#notify()
   }
