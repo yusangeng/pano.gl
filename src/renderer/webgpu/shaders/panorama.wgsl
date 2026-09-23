@@ -232,23 +232,27 @@ fn panorama_uv(ndc: vec2f) -> vec2f {
   let homogeneous = camera.invClip * vec4f(ndc, 1.0, 1.0);
   let surface = homogeneous.xyz / homogeneous.w;
 
-  // `CameraState.povLongitude` is in degrees. The legacy shader declared
-  // `float lng = u_CamPOVLongitude / 2.0` and each non-linear projection then
-  // subtracted `lng / 2.0`, so what actually came off a radian angle was
-  // `povLongitude / 4` -- degrees subtracted from radians. That is a bug in
-  // v0.2.2, reproduced here on purpose: the acceptance criterion is "renders
-  // what v0.2.2 rendered", and correcting it changes panning sensitivity, which
-  // is a separate user-visible decision that v1 does not make. Recorded as a
-  // deliberate retention in spec §11.4 (B1), which is where the three copies of
-  // this note point. See `lngOffset` in src/core/reference.ts for the full
-  // consequence.
-  let lng = camera.povLongitude / 4.0;
+  // `CameraState.povLongitude` is in degrees; converted here, honestly. The
+  // legacy shader declared `float lng = u_CamPOVLongitude / 2.0` and each
+  // non-linear projection then subtracted `lng / 2.0`, so what actually came
+  // off a radian angle was `povLongitude / 4` -- degrees subtracted from
+  // radians, ~14.3x oversensitive panning. That was a v0.2.2 defect; the port
+  // carried it through as the deliberate retention recorded in v1-design
+  // §11.4 (B1), and it was corrected 2026-09-23 by user adjudication -- the
+  // pan-zoom-semantics spec §1
+  // (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md) supersedes that
+  // retention and is where the three copies of this note point. The GLSL twin
+  // and `lngOffset` in src/core/reference.ts (which carries the full
+  // archaeology) changed in the same commit; gate C holds the three formulas
+  // together.
+  let lng = camera.povLongitude * PI / 180.0;
 
-  // Unlike `lng` above, this one is a real degrees-to-radians conversion.
-  // Latitude is the F5 fix, not a preserved bug: v0.2.2's non-linear cameras
-  // ignored it entirely (the shader never read `u_CamPOVLatitude`, and the
-  // viewer never uploaded it), so there is no legacy behaviour to reproduce
-  // and the term is born with correct units. Gate B pins the new behaviour.
+  // Latitude, like `lng` above, is honestly converted -- but its provenance
+  // differs. It is the F5 fix, not a corrected bug: v0.2.2's non-linear
+  // cameras ignored it entirely (the shader never read `u_CamPOVLatitude`,
+  // and the viewer never uploaded it), so there is no legacy behaviour to
+  // reproduce and the term was born with correct units rather than corrected
+  // to them. Gate B pins the new behaviour.
   let lat = camera.povLatitude * PI / 180.0;
 
   var uv: vec2f;

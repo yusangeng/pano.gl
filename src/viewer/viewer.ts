@@ -272,7 +272,13 @@ export class Viewer extends Disposable {
     this.#camera.rotate(lat, lng)
   }
 
-  /** Zooms. No-op for the linear projection, which has no zoom. */
+  /**
+   * Zooms by a relative magnification: a positive delta magnifies the picture
+   * by (1 + delta), a negative one shrinks it by the same factor. All four
+   * cameras divide their field parameter by (1 + delta) -- the linear camera
+   * parameterises by fov, clamped to [15°, 110°]; the other three by zoom,
+   * clamped to [0.01, 1].
+   */
   zoom (delta: number): void {
     this.assertAlive()
     this.#camera.zoom(delta)

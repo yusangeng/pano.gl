@@ -23,9 +23,11 @@
 //   1. `to_uv` has no `+ 0.5`. Adding one rotates the panorama half a turn.
 //   2. `to_uv` flips v (`1.0 - phi / PI`). Removing the flip renders it upside
 //      down.
-//   3. No `atan2` anywhere, and no `theta -= lng` with a converted longitude.
-//      The quadrant fixups and the `povLongitude / 4.0` are transcriptions of
-//      v0.2.2, bugs included. See the comments at each site.
+//   3. No `atan2` anywhere: the quadrant fixups are transcriptions of v0.2.2.
+//      The `povLongitude / 4.0` longitude offset this item also used to cover
+//      was a v0.2.2 bug as well, but unlike the fixups it was corrected
+//      (2026-09-23, pan-zoom-semantics spec §1) rather than kept. See the
+//      comments at each site.
 //
 // WHAT IS *NOT* SHARED: the uniform layout. WebGPU packs the camera into one
 // 96-byte block; WebGL2 uses named uniforms. The semantics are shared, the
@@ -124,8 +126,9 @@ vec2 project_linear (vec3 s) {
 // arrives here already baked into `s`; this file never sees an extent.
 //
 // `lng` and `lat` are in RADIANS and are already the values the formulas
-// consume. The degree conversion, and the `/ 4.0` that is NOT a degree
-// conversion, happen at the call site in main().
+// consume. Both degree conversions happen at the call site in main() -- `lng`
+// honestly converted only since 2026-09-23, when the `/ 4.0` mixed-units
+// offset was corrected (pan-zoom-semantics spec §1).
 
 vec2 project_cylindrical (vec3 s, float zoom, float lng, float lat) {
   // `s.x` is deliberately unread, exactly as in the WGSL and in the legacy
@@ -202,26 +205,30 @@ void main () {
   vec4 homogeneous = u_invClip * vec4(v_ndc, 1.0, 1.0);
   vec3 surface = homogeneous.xyz / homogeneous.w;
 
-  // `CameraState.povLongitude` is in DEGREES. The legacy shader declared
-  // `float lng = u_CamPOVLongitude / 2.0` at file scope and each non-linear
-  // projection then subtracted `lng / 2.0`, so what actually came off a radian
-  // angle was `povLongitude / 4` -- degrees subtracted from radians. That is a
-  // bug in v0.2.2, reproduced on purpose: the acceptance criterion is "renders
-  // what v0.2.2 rendered", and correcting it changes panning sensitivity, which
-  // v1 deliberately does not do -- recorded as a retention in spec §11.4 (B1),
-  // which is where this note, P3's WGSL copy and `lngOffset()` in
-  // src/core/reference.ts all point.
+  // `CameraState.povLongitude` is in DEGREES; converted here, honestly. The
+  // legacy shader declared `float lng = u_CamPOVLongitude / 2.0` at file scope
+  // and each non-linear projection then subtracted `lng / 2.0`, so what
+  // actually came off a radian angle was `povLongitude / 4` -- degrees
+  // subtracted from radians, ~14.3x oversensitive panning. That was a v0.2.2
+  // defect; the port carried it through as the deliberate retention recorded
+  // in v1-design §11.4 (B1), and it was corrected 2026-09-23 by user
+  // adjudication -- the pan-zoom-semantics spec §1
+  // (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md) supersedes that
+  // retention and is where this note, the WGSL copy and `lngOffset()` in
+  // src/core/reference.ts all point. Changing the formula means changing all
+  // three in one commit; gate C exists to catch a change made here alone.
   //
-  // `/ 4.0`. NOT `* PI / 180.0`. The two differ by a factor of about 29, and
+  // `* PI / 180.0`. NOT `/ 4.0`. The two differ by a factor of about 29, and
   // the wrong one still renders a plausible-looking panorama.
-  float lng = u_povLongitude / 4.0;
+  float lng = u_povLongitude * PI / 180.0;
 
-  // Latitude, by contrast, IS converted and used. The legacy non-linear cameras
-  // ignored it completely (defect F5: the uniform was declared and never read,
-  // and the inner ortho camera was built with latitude 0 and never updated).
-  // P3's Task 8 turns that into a deliberate, separately tested behaviour
-  // change, in the WGSL and in the reference at the same time. Both shaders
-  // carry the `- lat` term; neither carries it alone.
+  // Latitude, like `lng` above, is honestly converted -- but its provenance
+  // differs. The legacy non-linear cameras ignored it completely (defect F5:
+  // the uniform was declared and never read, and the inner ortho camera was
+  // built with latitude 0 and never updated). P3's Task 8 turned that into a
+  // deliberate, separately tested behaviour change, in the WGSL and in the
+  // reference at the same time. Both shaders carry the `- lat` term; neither
+  // carries it alone.
   float lat = u_povLatitude * PI / 180.0;
 
   vec2 uv;

@@ -145,14 +145,16 @@ describe('WebGL2 shader source', () => {
     }
   })
 
-  it('subtracts povLongitude / 4, not a converted angle', () => {
-    // v0.2.2 subtracted degrees from radians, and the acceptance criterion is
-    // "renders what v0.2.2 rendered". A degree conversion here is a real bug fix
-    // and therefore not this phase's business: it changes panning sensitivity,
-    // which is a user-visible decision that must not ride along with a port.
+  it('subtracts an honestly converted povLongitude, not / 4.0', () => {
+    // v0.2.2 subtracted degrees from radians; the port carried that through as
+    // the deliberate retention recorded in v1-design §11.4 (B1), corrected
+    // 2026-09-23 by user adjudication (pan-zoom-semantics spec §1, which
+    // supersedes that retention). The WGSL twin and `lngOffset` in
+    // src/core/reference.ts carry the same formula -- gate C holds the three
+    // together.
     const body = skeleton(PANORAMA_GLSL_FRAGMENT)
-    expect(body).toContain('u_povLongitude / 4.0')
-    expect(body).not.toMatch(/povLongitude \* PI \/ 180/)
+    expect(body).toContain('u_povLongitude * PI / 180.0')
+    expect(body).not.toMatch(/u_povLongitude \/ 4\.0/)
   })
 
   it('uses no two-argument atan, in either source', () => {

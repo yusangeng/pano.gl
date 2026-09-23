@@ -75,7 +75,7 @@ The shaders need to know nothing about this: both conventions put the far plane 
 
 `src/core/reference.ts` implements the same four projections in float64 and is the executable specification for them. When the two backends disagree, or a backend disagrees with the captured baseline, running all three and finding the odd one out is what turns "they differ" into "this one is wrong". It is deliberately independent: it inverts ndc to a surface point itself rather than reusing the camera matrix, because an arbiter that shares the shaders' precision and their matrix would agree with a wrong matrix by construction.
 
-It also reproduces v0.2.2 behaviour **including that version's bugs**, because the acceptance criterion is "renders what v0.2.2 rendered". The one to know about is `lngOffset`, which subtracts `povLongitude / 4` — degrees subtracted from a radian angle. That is not a degree conversion, and "fixing" it changes panning sensitivity, which is a separate user-visible decision rather than a port.
+It also reproduces v0.2.2 behaviour **including that version's bugs**, because the acceptance criterion is "renders what v0.2.2 rendered" — with one adjudicated exception: `lngOffset` used to subtract `povLongitude / 4`, degrees subtracted from a radian angle (~14.3× oversensitive panning). That was a v0.2.2 defect, corrected 2026-09-23 by user adjudication in the pan-zoom-semantics spec (§1), superseding v1-design §11.4 B1.
 
 ### Projection constants have exactly one source of truth
 
