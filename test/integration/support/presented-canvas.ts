@@ -22,12 +22,13 @@
  * here -- skip, not pass, in the shape of the video-import probe precedent in
  * video-orientation.test.ts.
  *
- * Fail-closed like every probe in this suite: the offscreen control below
- * renders the same red triangle through copyTextureToBuffer, which bypasses
- * presentation. If THAT reads back empty the device itself cannot render and
- * the probe throws, so the calling test fails honestly instead of skipping its
- * way past a real regression. `unavailable` is only ever reachable with the
- * control proven healthy.
+ * Fail-closed like every probe in this suite, at two layers: a plain 2D
+ * canvas controls the readback tool itself before anything GPU-shaped runs,
+ * and the offscreen control renders the same red triangle through
+ * copyTextureToBuffer, which bypasses presentation. If EITHER reads back
+ * empty the probe throws, so the calling test fails honestly instead of
+ * skipping its way past a real regression. `unavailable` is only ever
+ * reachable with both controls proven healthy.
  */
 
 import type { TestContext } from 'vitest'
@@ -60,6 +61,36 @@ const RED_WGSL = `
 const CONTROL_MIN = (64 * 8) / 2
 
 async function runProbe (): Promise<PresentedCanvasVerdict> {
+  /*
+   * Control for the measurement tool itself, before anything GPU-shaped is
+   * created: the same readCanvas + countNonBlack pair every verdict below is
+   * computed with, exercised on a plain 2D fill no device is involved in.
+   * The offscreen control further down proves the DEVICE can render, but it
+   * reads through copyTextureToBuffer and never touches readCanvas -- so a
+   * toDataURL drift would otherwise read back empty here, call every healthy
+   * device `unavailable`, and skip every gated test on a green build. An
+   * empty readback HERE means the helper is broken: throw, because a probe
+   * whose ruler is bent must fail tests, not excuse them.
+   */
+  const toolCanvas = document.createElement('canvas')
+  toolCanvas.width = 8
+  toolCanvas.height = 8
+  const toolCtx = toolCanvas.getContext('2d')
+  if (toolCtx === null) {
+    throw new Error('no 2d context, so the readback helper cannot be controlled')
+  }
+  toolCtx.fillStyle = 'red'
+  toolCtx.fillRect(0, 0, 8, 8)
+  const toolImage = await readCanvas(toolCanvas)
+  const toolNonBlack = countNonBlack(toolImage)
+  if (toolNonBlack < toolImage.width * toolImage.height / 2) {
+    throw new Error(
+      `the canvas readback helper itself is broken (${toolNonBlack} of ` +
+      `${toolImage.width * toolImage.height} non-black from a plain 2D fill); ` +
+      'every readback-based verdict would be a lie, so this fails rather than skips'
+    )
+  }
+
   /*
    * No adapter is the WebGL2 world (the no-webgpu project asserts exactly
    * this), where the mechanism this probe detects cannot occur: it is specific

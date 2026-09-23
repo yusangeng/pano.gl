@@ -4,6 +4,7 @@ import { Viewer } from '../../src/viewer/viewer'
 import { ImageSource } from '../../src/media/image-source'
 import type { MediaSource } from '../../src/media/source'
 import { WebGPUBackend } from '../../src/renderer/webgpu/backend'
+import { WebGL2Backend } from '../../src/renderer/webgl2/backend'
 import { RenderLoop } from '../../src/viewer/render-loop'
 import { canvasOf, makeContainer } from './support/dom'
 import { countDraws, captureBackends } from './support/spies'
@@ -133,10 +134,21 @@ describe('dispose', () => {
 
   it('is idempotent', async () => {
     const { viewer } = await mountImage('/fixtures/panorama.png')
-    const disposed = vi.spyOn(WebGPUBackend.prototype, 'dispose')
+    // BOTH backend prototypes, not just the WebGPU one: this file also runs
+    // in the no-webgpu project, where the viewer mounts a WebGL2Backend and a
+    // single-sided spy would never fire -- the dispose below would reach the
+    // backend unwatched and every count here would read zero (the same
+    // prophylaxis spies.ts wraps countDraws with). Exactly one of the two
+    // spies ever counts: the one on the chosen backend's prototype.
+    const disposed = [
+      vi.spyOn(WebGPUBackend.prototype, 'dispose'),
+      vi.spyOn(WebGL2Backend.prototype, 'dispose')
+    ]
+    const disposeCalls = (): number =>
+      disposed.reduce((sum, spy) => sum + spy.mock.calls.length, 0)
 
     viewer.dispose()
-    expect(disposed, 'the first dispose() never reached the backend').toHaveBeenCalledTimes(1)
+    expect(disposeCalls(), 'the first dispose() never reached the backend').toBe(1)
 
     viewer.dispose()
     /*
@@ -146,7 +158,7 @@ describe('dispose', () => {
      * not that the second call was a no-op. A second teardown reaches the
      * backend a second time, and that is what this counts.
      */
-    expect(disposed, 'the second dispose() tore down a second time').toHaveBeenCalledTimes(1)
+    expect(disposeCalls(), 'the second dispose() tore down a second time').toBe(1)
     expect(viewer.isDisposed).toBe(true)
   })
 
@@ -172,15 +184,27 @@ describe('dispose', () => {
     const { viewer } = await mountImage('/fixtures/panorama.png')
     await nextFrames(2)
 
-    const original = WebGPUBackend.prototype.dispose
+    // The mock goes on BOTH backend prototypes for the same reason as the
+    // spies in "is idempotent": this file also runs on WebGL2 in the no-webgpu
+    // project. Exactly one of the two mockImplementations ever runs -- the one
+    // on the prototype of the backend this machine's viewer actually mounted.
+    const gpuOriginal = WebGPUBackend.prototype.dispose
+    const glOriginal = WebGL2Backend.prototype.dispose
     const teardowns: number[] = []
-    vi.spyOn(WebGPUBackend.prototype, 'dispose').mockImplementation(function (this: WebGPUBackend) {
+    const reenterOnce = (): void => {
       teardowns.push(teardowns.length + 1)
       // Re-enter once and only once. An unguarded second teardown would
       // otherwise recurse through this spy for ever, and the failure would
       // arrive as a hung test rather than as a red assertion.
       if (teardowns.length === 1) viewer.dispose()
-      original.call(this)
+    }
+    vi.spyOn(WebGPUBackend.prototype, 'dispose').mockImplementation(function (this: WebGPUBackend) {
+      reenterOnce()
+      gpuOriginal.call(this)
+    })
+    vi.spyOn(WebGL2Backend.prototype, 'dispose').mockImplementation(function (this: WebGL2Backend) {
+      reenterOnce()
+      glOriginal.call(this)
     })
 
     expect(() => viewer.dispose()).not.toThrow()
@@ -222,7 +246,19 @@ describe('dispose', () => {
     expect(() => viewer.rotate(10, 10)).toThrow(/disposed/i)
   })
 
-  it('reports a destroyed device to listeners, then releases it', async () => {
+  it('reports a destroyed device to listeners, then releases it', async (ctx) => {
+    // WebGPU-keyed skip, in the shape of the presented-canvas gate: this test
+    // manufactures a WebGPU loss (captureBackends watches WebGPUBackend.create,
+    // the loss is backend.device.destroy()), so in the no-webgpu project -- where
+    // the viewer mounts a WebGL2Backend -- there is no subject and no device to
+    // destroy. The probe asks the same question the viewer's own factory asks,
+    // and skips with the reason printed rather than failing on a device that was
+    // never going to exist.
+    const adapter = await navigator.gpu?.requestAdapter()
+    if (adapter === null || adapter === undefined) {
+      console.warn('destroyed-device: no WebGPU adapter, so there is no device to destroy')
+      ctx.skip('no WebGPU adapter: this test manufactures a WebGPU device loss, which has no subject without WebGPU')
+    }
     /*
      * A real loss, not a simulated one: `device.destroy()` resolves `device.lost`
      * with reason 'destroyed' -- P0 measured that it does, which is what makes

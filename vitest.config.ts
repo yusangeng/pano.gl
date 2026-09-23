@@ -57,7 +57,13 @@ export default defineConfig({
         //
         // Both ARE exercised, by the integration project, which reports no
         // coverage: `dispose-order`, `camera-options`, `viewer-events` and
-        // `viewer-capabilities` each drive a real `Viewer`.
+        // `viewer-capabilities` each drive a real `Viewer`. On the CI runner
+        // that is only half the story, and the other half lives in the
+        // no-webgpu project: the runner's software adapter cannot keep a
+        // presented-canvas device alive, so the order-mechanism and event
+        // tests are skipped there by the presented-canvas gate -- `dispose-order`
+        // and `viewer-events` were added to that project (2026-09-24) so both
+        // mechanisms still execute, on WebGL2, in every CI run.
         'src/viewer/viewer.ts',
         'src/viewer/backend-factory.ts',
         // Task 4's two public classes, for the same reason as `viewer.ts` and
@@ -83,7 +89,11 @@ export default defineConfig({
         //
         // Both ARE exercised, by the integration project, which reports no
         // coverage: Task 5's five user stories drive these two classes, and the
-        // `no-webgpu` project drives their failure paths.
+        // `no-webgpu` project drives their failure paths. That second project
+        // also runs the same user-story files on WebGL2, which is what keeps
+        // these two classes' public-surface journeys executed on the CI
+        // runner, where the integration project's viewer-mounting photo and
+        // video tests are skipped by the presented-canvas gate.
         'src/viewer/image-viewer.ts',
         'src/viewer/video-viewer.ts',
         // P6 Task 3's backend class, for the same reason as `viewer.ts`:
@@ -182,24 +192,42 @@ export default defineConfig({
           name: 'no-webgpu',
           setupFiles: ['./test/integration/support/require-no-webgpu.ts'],
           /*
-           * Widened from `fallback/**` to also cover the four user stories, which is
-           * the whole point of this project: the same test text, run again with the
-           * WebGPU path gone, so "the fallback works" is a claim backed by the user
-           * stories themselves rather than by a second copy of them.
+           * Widened from `fallback/**` in two rounds, for two different reasons.
            *
-           * A whitelist, not `test/integration/**`. The gates and the backend smoke
-           * tests all assert a real adapter and would fail here for a reason that has
-           * nothing to do with their subject; a blacklist would have to name each of
-           * them and would silently start including the next one somebody adds.
+           * The four user stories (P6) are the whole point of this project: the
+           * same test text, run again with the WebGPU path gone, so "the fallback
+           * works" is a claim backed by the user stories themselves rather than
+           * by a second copy of them.
            *
-           * The four are named rather than matched with `user-story-.*` because
-           * `fallback/user-story-no-webgpu.test.ts` is also a user story and it means
-           * something different here -- it is the file about this project's own
-           * environment. It is picked up by the `fallback/**` line above, once.
+           * `viewer-events` and `dispose-order` (close-out CR, 2026-09-24) are
+           * backend-agnostic Viewer behaviour, and on the CI runner the
+           * integration project's copies of them are hollowed out by the
+           * presented-canvas gate: the runner's adapter kills devices that draw
+           * to a presented canvas, so the event sequencing and the dispose-order
+           * mechanism are skipped there every run. Here they run their full text
+           * on WebGL2 -- which is what actually executes those mechanisms in CI.
+           * `dispose-order` carries two single-sided WebGPU spies from its
+           * WebGPU-only days; both are dual-prototyped to match, and its one
+           * WebGPU-mechanism test skips itself with a probe.
+           *
+           * Still a whitelist, not `test/integration/**`. The gates and the
+           * backend smoke tests all assert a real adapter and would fail here
+           * for a reason that has nothing to do with their subject; a blacklist
+           * would have to name each of them and would silently start including
+           * the next one somebody adds. `smoke` stays out for the same reason:
+           * its first test reports the adapter itself, which does not exist
+           * here by construction.
+           *
+           * The user stories are named rather than matched with `user-story-.*`
+           * because `fallback/user-story-no-webgpu.test.ts` is also a user
+           * story and it means something different here -- it is the file about
+           * this project's own environment. It is picked up by the `fallback/**`
+           * line above, once.
            */
           include: [
             'test/integration/fallback/**/*.test.ts',
-            'test/integration/user-story-(photo|video|camera-switch|media-failure).test.ts'
+            'test/integration/user-story-(photo|video|camera-switch|media-failure).test.ts',
+            'test/integration/(viewer-events|dispose-order).test.ts'
           ],
           browser: {
             enabled: true,

@@ -66,12 +66,30 @@ jobs:
           # of the two forms carries.
           plain=$(sed 's/\x1b\[[0-9;]*m//g' integration-tests.log)
           for project in 'integration' 'no-webgpu'; do
-            count=$(printf '%s\n' "$plain" | grep -cF "$project (" || true)
+            # The verbose reporter gives every skipped test its own result
+            # line, headed with a down-arrow (measured on run 35925751205:
+            # "↓ integration (chromium) <file> > <test>" -- the arrow is a
+            # literal character, not an ANSI sequence, so it survives the
+            # strip above). A count that included those lines would let a run
+            # where every test of a project skipped satisfy this assertion,
+            # so the ran count excludes them and the skip count is printed
+            # beside it for the reader instead of hiding inside the number.
+            lines=$(printf '%s\n' "$plain" | grep -F "$project (" || true)
+            # Guarded, not piped blind: `printf '%s\n' ""` emits one empty
+            # line, which grep -cv would happily count as a ran test and hand
+            # the assertion a false green on exactly the empty-include case it
+            # exists to catch.
+            count=0
+            skipped=0
+            if [ -n "$lines" ]; then
+              count=$(printf '%s\n' "$lines" | grep -cv '↓' || true)
+              skipped=$(printf '%s\n' "$lines" | grep -c '↓' || true)
+            fi
             if [ "$count" -eq 0 ]; then
               echo "::error::project '$project' ran 0 tests -- vitest exits 0 on an empty include, so this assertion is the only thing that catches it"
               exit 1
             fi
-            echo "project '$project' ran $count test(s)"
+            echo "project '$project' ran $count test(s), skipped $skipped"
           done
         env:
           CI: 'true'

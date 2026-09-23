@@ -236,7 +236,7 @@ export async function renderVideoBothPaths (
   const channelMax = (rgba: Uint8Array): number => {
     let max = 0
     for (let i = 0; i < rgba.length; i += 4) {
-      max = Math.max(max, rgba[i]!, rgba[i + 1]!, rgba[i + 2]!, max)
+      max = Math.max(max, rgba[i]!, rgba[i + 1]!, rgba[i + 2]!)
     }
     return max
   }
@@ -293,7 +293,7 @@ export async function renderVideoBothPaths (
    */
   const uploadBoth = async (): Promise<
     | { readonly ok: true, readonly external: Uint8Array, readonly copy: Uint8Array }
-    | { readonly ok: false, readonly refusal: DOMException }
+    | { readonly ok: false, readonly refusal: DOMException, readonly readyState: number, readonly currentTime: number }
   > => {
     try {
       // Path 1: importExternalTexture. No flipY exists on this path, so whatever
@@ -337,7 +337,16 @@ export async function renderVideoBothPaths (
       // a validation error, a bug in this probe -- propagates and fails the
       // test honestly.
       if (err instanceof DOMException && err.name === 'OperationError') {
-        return { ok: false, refusal: err }
+        // readyState and currentTime ride along as diagnostics, not as a
+        // classifier: a seek that never landed throws the same refusal shape
+        // a genuinely incapable adapter does, and these two numbers are what
+        // tells those worlds apart when the detail is read after the fact.
+        return {
+          ok: false,
+          refusal: err,
+          readyState: video.readyState,
+          currentTime: video.currentTime
+        }
       }
       throw err
     }
@@ -351,8 +360,10 @@ export async function renderVideoBothPaths (
       detail:
         `the WebGPU adapter here reports vendor "${adapter.info.vendor}" architecture ` +
         `"${adapter.info.architecture}", and it refuses the video element at the upload ` +
-        `API itself: ${uploads.refusal.name}: ${uploads.refusal.message}. The fixture ` +
-        `decodes with a top/bottom contrast of ${measured.decodedContrast.toFixed(1)} and ` +
+        `API itself: ${uploads.refusal.name}: ${uploads.refusal.message}. The element was ` +
+        `at readyState ${uploads.readyState}, ${uploads.currentTime.toFixed(2)}s, when the ` +
+        'refusal arrived. The fixture decodes with a top/bottom contrast of ' +
+        `${measured.decodedContrast.toFixed(1)} and ` +
         `the device renders a constant colour readably (max ${measured.solidMax}), so the ` +
         'video and the device are both fine and it is the video-to-texture upload this ' +
         'adapter cannot do; the comparison has no subject here, a hardware adapter runs it.'
