@@ -256,15 +256,20 @@ describe('US1: view a 360 photo and look around', () => {
 
   it('an application can ask about the backend before it creates anything', async () => {
     /*
-     * The other half of US5. There, WebGPU is absent and `probe()` has to say
-     * so; here the project's guard has proven a live adapter, so it has to say
-     * 'webgpu'. A probe that misreported either quadrant is the legacy silent
-     * downgrade back again -- "ask first, then decide" was the whole reason
+     * The other half of US5, and the one environment-pinned literal this file
+     * carries: the same text runs in two projects, and a FIXED backend label
+     * would be true in one and a lie in the other. The expectation is derived
+     * from the browser's actual state instead -- independently of probe(),
+     * which is the thing under test -- so the assertion stays "probe() reports
+     * the truth of whichever environment it runs in", in both projects. A
+     * probe that misreported in either direction is the legacy silent
+     * downgrade back again: "ask first, then decide" was the whole reason
      * probe exists, and an answer that cannot be trusted in the good case is
      * worse than none.
      */
+    const adapter = navigator.gpu ? await navigator.gpu.requestAdapter() : null
     const caps = await FramelessImageViewer.probe()
-    expect(caps.backend).toBe('webgpu')
+    expect(caps.backend).toBe(adapter !== null ? 'webgpu' : 'webgl2')
   })
 
   it('survives a whole session: mount, turn, swap the photo, stay put, dispose', async () => {

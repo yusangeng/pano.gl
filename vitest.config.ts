@@ -156,7 +156,26 @@ export default defineConfig({
         test: {
           name: 'no-webgpu',
           setupFiles: ['./test/integration/support/require-no-webgpu.ts'],
-          include: ['test/integration/fallback/**/*.test.ts'],
+          /*
+           * Widened from `fallback/**` to also cover the four user stories, which is
+           * the whole point of this project: the same test text, run again with the
+           * WebGPU path gone, so "the fallback works" is a claim backed by the user
+           * stories themselves rather than by a second copy of them.
+           *
+           * A whitelist, not `test/integration/**`. The gates and the backend smoke
+           * tests all assert a real adapter and would fail here for a reason that has
+           * nothing to do with their subject; a blacklist would have to name each of
+           * them and would silently start including the next one somebody adds.
+           *
+           * The four are named rather than matched with `user-story-.*` because
+           * `fallback/user-story-no-webgpu.test.ts` is also a user story and it means
+           * something different here -- it is the file about this project's own
+           * environment. It is picked up by the `fallback/**` line above, once.
+           */
+          include: [
+            'test/integration/fallback/**/*.test.ts',
+            'test/integration/user-story-(photo|video|camera-switch|media-failure).test.ts'
+          ],
           browser: {
             enabled: true,
             /*
@@ -171,7 +190,16 @@ export default defineConfig({
              * every user story from P5 is proven to pass on the WebGL2 path.
              */
             provider: playwright({
-              launchOptions: { channel: 'chromium', args: ['--disable-gpu'] }
+              launchOptions: { channel: 'chromium', args: ['--disable-gpu'] },
+              // DPR parity with the integration project: a user story
+              // (user-story-photo, "renders sharply on a high-DPI display")
+              // hard-asserts devicePixelRatio === 2 precisely so it cannot
+              // silently pass at DPR 1, which is what this project would hand
+              // it without this line -- Playwright's default is 1. The only
+              // intended difference between the two projects is the GPU; the
+              // pixel density must not be a hidden variable that re-runs the
+              // same text against a differently-shaped canvas.
+              contextOptions: { deviceScaleFactor: 2 }
             }),
             headless: true,
             instances: [{ browser: 'chromium' }]

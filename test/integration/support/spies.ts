@@ -17,25 +17,29 @@
 
 import { vi } from 'vitest'
 import { WebGPUBackend } from '../../../src/renderer/webgpu/backend'
+import { WebGL2Backend } from '../../../src/renderer/webgl2/backend'
 import { EventEmitter } from '../../../src/core/events'
 import type { RenderableSource } from '../../../src/renderer/backend'
 import type { CameraState, Projection } from '../../../src/core/types'
 
 /**
- * Counts the frames a backend draws.
+ * Counts every frame drawn by whichever backend the viewer selected.
  *
- * `render()` is the only call that reaches the swapchain, so counting it is
- * counting frames. The spy calls through: these tests ask how MANY times the
- * loop ran, not what it drew, and a stubbed-out render would be a loop that
- * never rendered at all.
+ * Both prototypes, because the same user-story file runs in two projects and
+ * only one backend exists in each. Wrapping just the WebGPU one would make the
+ * draw-count assertions in the fallback project silently vacuous -- `toBe(0)`
+ * passes against a method nobody calls -- which is worse than a red test,
+ * because it survives review.
  *
- * Returns a reader rather than the spy, so a test that wants a delta cannot
- * accidentally assert on a total.
+ * Returns a reader rather than a count: the callers snapshot it before and after
+ * an action, and two reads of one number is what lets them.
  */
 export function countDraws (): () => number {
-  const spy = vi.spyOn(WebGPUBackend.prototype, 'render')
-  spy.mockClear()
-  return () => spy.mock.calls.length
+  let count = 0
+  for (const backend of [WebGPUBackend, WebGL2Backend]) {
+    vi.spyOn(backend.prototype, 'render').mockImplementation(() => { count++ })
+  }
+  return () => count
 }
 
 /**
@@ -74,26 +78,46 @@ export function captureBackends (): WebGPUBackend[] {
  * stubbed-out backend: replacing `setSource` with a recorder would leave the
  * real backend never told about the source, and every pixel assertion made
  * afterwards would be about a frame nobody rendered.
+ *
+ * BOTH prototypes, for the same reason `countDraws` wraps both: the same
+ * user-story file runs in two projects and only one backend exists in each.
+ * At most one of the two accounts is ever non-empty -- "the last call" is the
+ * last call of whichever one is, and `sourceCalls` is their sum for the same
+ * reason the draw counter is one number.
  */
 export function captureRenderInputs (): {
   readonly lastSource: () => RenderableSource | null | undefined
   readonly lastCamera: () => { state: CameraState, projection: Projection } | undefined
   readonly sourceCalls: () => number
 } {
-  const source = vi.spyOn(WebGPUBackend.prototype, 'setSource')
-  const camera = vi.spyOn(WebGPUBackend.prototype, 'setCamera')
-  source.mockClear()
-  camera.mockClear()
+  const sources = [
+    vi.spyOn(WebGPUBackend.prototype, 'setSource'),
+    vi.spyOn(WebGL2Backend.prototype, 'setSource')
+  ]
+  const cameras = [
+    vi.spyOn(WebGPUBackend.prototype, 'setCamera'),
+    vi.spyOn(WebGL2Backend.prototype, 'setCamera')
+  ]
+  for (const spy of [...sources, ...cameras]) spy.mockClear()
+
   return {
     // `undefined` means "never called", `null` means "called with no source".
     // Collapsing the two would make the not-yet-loaded case indistinguishable
     // from a backend the viewer never spoke to at all.
-    lastSource: () => source.mock.calls.at(-1)?.[0],
-    lastCamera: () => {
-      const call = camera.mock.calls.at(-1)
-      return call === undefined ? undefined : { state: call[0], projection: call[1] }
+    lastSource: () => {
+      for (const spy of sources) {
+        if (spy.mock.calls.length > 0) return spy.mock.calls.at(-1)?.[0]
+      }
+      return undefined
     },
-    sourceCalls: () => source.mock.calls.length
+    lastCamera: () => {
+      for (const spy of cameras) {
+        const call = spy.mock.calls.at(-1)
+        if (call !== undefined) return { state: call[0], projection: call[1] }
+      }
+      return undefined
+    },
+    sourceCalls: () => sources.reduce((total, spy) => total + spy.mock.calls.length, 0)
   }
 }
 
