@@ -8,6 +8,7 @@ import { RenderLoop } from '../../src/viewer/render-loop'
 import { canvasOf, makeContainer } from './support/dom'
 import { countDraws, captureBackends } from './support/spies'
 import { nextFrames } from './support/canvas'
+import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
 
 /*
  * `Viewer.setSource` is protected, and it is protected for a reason: a subclass
@@ -65,7 +66,20 @@ afterEach(() => { vi.restoreAllMocks() })
  * asked directly.
  */
 describe('dispose', () => {
-  it('stops drawing, and leaves no canvas behind', async () => {
+  /*
+   * The tests that count teardown calls or drawn frames probe first and skip
+   * on a device that cannot keep a presented-canvas WebGPU device alive
+   * (support/presented-canvas.ts). On such a device the viewer self-disposes
+   * mid-test when its device dies, and every ORDER assertion here then counts
+   * the observer's teardown instead of the test's -- measured on the CI
+   * runner as "expected 0 to be 1". Three tests need no guard: `is idempotent`
+   * disposes in the same task as the mount (the source load cannot have drawn
+   * yet), `throws from the public methods` asserts the same throw whether the
+   * viewer was disposed by the test or by a loss, and `reports a destroyed
+   * device` manufactures its own loss.
+   */
+  it('stops drawing, and leaves no canvas behind', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const draws = countDraws()
     const { viewer, container } = await mountImage('/fixtures/panorama.png')
     const canvas = canvasOf(container)
@@ -81,7 +95,8 @@ describe('dispose', () => {
     expect(canvas.isConnected).toBe(false)
   })
 
-  it('stops the loop, rather than leaving it running with nothing to do', async () => {
+  it('stops the loop, rather than leaving it running with nothing to do', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * The test above cannot see this, and the reason is worth stating rather
      * than leaving as a gap. After `dispose` the viewer holds no source and a
@@ -135,7 +150,8 @@ describe('dispose', () => {
     expect(viewer.isDisposed).toBe(true)
   })
 
-  it('does not re-enter its own teardown', async () => {
+  it('does not re-enter its own teardown', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * What the `#disposing` guard is actually for.
      *
@@ -172,7 +188,13 @@ describe('dispose', () => {
     expect(viewer.isDisposed).toBe(true)
   })
 
-  it('renders a still image a bounded number of times, not once per frame', async () => {
+  it('renders a still image a bounded number of times, not once per frame', async (ctx) => {
+    // Gated for the same condition as the count tests above, from the other
+    // direction: a device that dies 60ms into this test's 1000ms window makes
+    // the bound pass vacuously -- the viewer stops drawing because it is gone,
+    // not because it is idle. A skip with the reason beats a green that
+    // asserted nothing.
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * The legacy FrameDriver redrew unconditionally at up to 60fps, which is a
      * full-screen fragment shader running forever for a picture that is not

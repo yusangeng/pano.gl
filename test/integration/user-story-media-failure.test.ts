@@ -4,6 +4,7 @@ import { canvasOf } from './support/dom'
 import { countNonBlack, nextFrames, readCanvas } from './support/canvas'
 import { captureRenderInputs } from './support/spies'
 import { imageViewer, videoViewer } from './support/viewer'
+import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
 
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -25,7 +26,18 @@ function undecodable (mime: string): string {
 }
 
 describe('US4: media fails to load', () => {
-  it('a missing image emits media-error and does not throw', async () => {
+  /*
+   * The three tests that wait past the error event -- for pixels, or for the
+   * loop to carry a moved pose -- probe first and skip on a device that cannot
+   * keep a presented-canvas WebGPU device alive (support/presented-canvas.ts):
+   * a mounted viewer's load rhythm draws to the presented canvas even when the
+   * source never lands, so on such a device the viewer can self-dispose
+   * mid-wait. The two error-event-only tests resolve in milliseconds, an order
+   * under the measured ~60ms device-death floor, and the empty-src and
+   * frameSize tests assert before anything can draw.
+   */
+  it('a missing image emits media-error and does not throw', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * Broken at CONSTRUCTION, not by a later assignment: the factory cannot
      * build a viewer without a source (the frozen surface requires `src`), and a
@@ -82,7 +94,8 @@ describe('US4: media fails to load', () => {
     URL.revokeObjectURL(url)
   })
 
-  it('the viewer keeps working after a source error', async () => {
+  it('the viewer keeps working after a source error', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     // An error is a property of the source, not of the viewer. The camera must
     // still move and the loop must still draw, or one bad URL leaves the
     // application holding a dead object it cannot even navigate.
@@ -109,7 +122,8 @@ describe('US4: media fails to load', () => {
     expect(pose).toEqual({ povLatitude: 10, povLongitude: 10 })
   })
 
-  it('replacing a broken source recovers', async () => {
+  it('replacing a broken source recovers', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const { viewer, container } = await imageViewer()
     const errors: string[] = []
     const loads: string[] = []

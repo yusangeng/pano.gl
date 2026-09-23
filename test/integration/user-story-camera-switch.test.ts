@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { canvasOf } from './support/dom'
 import { maxChannelDiff, nextFrames, readCanvas } from './support/canvas'
 import { PROJECTIONS, imageViewer } from './support/viewer'
+import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
 import type { ProjectionName } from './support/viewer'
 
 const KINDS = ['linear', 'cylindrical', 'planet', 'pannini'] as const
@@ -12,7 +13,11 @@ describe('US3: switch camera models at runtime', () => {
   // no-op onto itself, and the pixel assertion would then hold for a reason that
   // has nothing to do with switching.
   for (const kind of KINDS) {
-    it(`switches to ${kind} and keeps the pose`, async () => {
+    it(`switches to ${kind} and keeps the pose`, async (ctx) => {
+      // Every viewer-mounting test in this file draws to a presented canvas and
+      // probes first: on the Linux SwiftShader CI adapter the device dies
+      // mid-test and the viewer self-disposes (support/presented-canvas.ts).
+      await skipIfPresentedCanvasBroken(ctx)
       // The legacy cameraOptions setter rebuilt the whole camera and reset the
       // pose to the origin, so changing the projection silently threw away where
       // the user was looking.
@@ -47,7 +52,8 @@ describe('US3: switch camera models at runtime', () => {
     })
   }
 
-  it('a projection swap does not reset the pose the user dragged to', async () => {
+  it('a projection swap does not reset the pose the user dragged to', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const { viewer } = await imageViewer()
     viewer.src = '/fixtures/panorama.png'
     await nextFrames(2)
