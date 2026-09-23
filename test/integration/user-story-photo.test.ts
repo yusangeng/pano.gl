@@ -186,6 +186,12 @@ describe('US1: view a 360 photo and look around', () => {
     // quarter shift is not a whole column count and the comparison below
     // smears a half-texel across every column.
     expect(width % 4).toBe(0)
+    // A blank pair of readbacks satisfies worst <= 2 vacuously (worst is
+    // exactly 0), and this 1:1 read path is the one place in this file no
+    // litFraction-style content net runs -- so the guard lives here: the
+    // home frame must carry real pixels for the comparison below to mean
+    // anything.
+    expect(countNonBlack(home)).toBeGreaterThan(0)
     const shift = width / 4
     let worst = 0
     let where = ''
