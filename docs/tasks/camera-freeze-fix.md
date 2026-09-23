@@ -4,7 +4,7 @@ scope: [src/renderer/webgpu/backend.ts, test/unit/webgpu-backend.test.ts, test/i
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build
 layer: foundation
 deps: [p5-viewer]
-state: open
+state: reported
 createdAt: 2026-09-23T03:11:50.274Z
 ---
 # 任务：相机冻结修复：删 setCamera 矩阵相等早退
