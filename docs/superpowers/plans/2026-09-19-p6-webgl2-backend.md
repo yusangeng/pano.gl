@@ -791,6 +791,7 @@ describe('describeShaderError', () => {
     expect(() => describeShaderError('ERROR: 0:9999: boom', 'short')).not.toThrow()
   })
 })
+```
 
 - [x] **Step 2: 跑测试确认失败**
 
