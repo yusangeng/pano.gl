@@ -6,6 +6,10 @@ A dependency-light viewer for equirectangular (360°) images and video. WebGPU
 first, WebGL2 as the fallback, four camera models and built-in pan-tilt-zoom —
 two runtime dependencies, one of which is a logger.
 
+The ESM bundle is 36.7 kB gzipped. That number is deliberately conservative:
+the build ships `minify: false` so the code stays readable in `node_modules`,
+and consumers who minify get it smaller.
+
 ```shell
 npm install pano.gl
 ```
