@@ -120,8 +120,11 @@ describe('US1: view a 360 photo and look around', () => {
      * discriminator between formulas: the conversion itself is pinned
      * by the quarter-turn test below (which holds a pose whose offset
      * differs) and by the reference pins. It still earns its place: a
-     * wrap or accumulate bug that lost or doubled the final pose would
-     * fail here, silently, with everything else green.
+     * wrap or accumulate bug that lost the pose or shifted it off a
+     * whole turn would fail here, silently, with everything else green.
+     * Doubling each delta would not -- 90 and 270 doubled sum to a whole
+     * 720, which wraps home to exactly 0 -- and that case is the
+     * quarter-turn test's below.
      */
     const { viewer, container } = await imageViewer({ camera: 'cylindrical' })
     const canvas = canvasOf(container)

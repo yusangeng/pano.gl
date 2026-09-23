@@ -218,8 +218,8 @@ void main () {
   // src/core/reference.ts all point. Changing the formula means changing all
   // three in one commit; gate C exists to catch a change made here alone.
   //
-  // `* PI / 180.0`. NOT `/ 4.0`. The two differ by a factor of about 29, and
-  // the wrong one still renders a plausible-looking panorama.
+  // `* PI / 180.0`. NOT `/ 4.0`. The two differ by a factor of about 14.3
+  // (45 / PI), and the wrong one still renders a plausible-looking panorama.
   float lng = u_povLongitude * PI / 180.0;
 
   // Latitude, like `lng` above, is honestly converted -- but its provenance

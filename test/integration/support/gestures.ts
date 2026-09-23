@@ -56,8 +56,11 @@ export async function drag (
  *
  * Positive `deltaY` is a scroll down, which the controller turns into a
  * negative zoom step -- zoom OUT. That direction matters at the default: zoom
- * is clamped to at most 1, so scrolling up from a fresh viewer is a no-op and a
- * test written that way asserts nothing.
+ * is clamped to at most 1, and under the divide contract a negative step
+ * computes 1 / (1 - step) > 1, which clamps straight back to the ceiling -- so
+ * scrolling DOWN from a fresh viewer is the no-op, and a test written that way
+ * asserts nothing. Scrolling up (a positive step, 1 / (1 + step) < 1) is the
+ * direction that moves.
  */
 export async function wheel (element: Element, deltaY: number): Promise<void> {
   await userEvent.wheel(element, { delta: { y: deltaY } })
