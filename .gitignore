@@ -59,3 +59,6 @@ tools/baseline/node_modules
 **/__traces__/
 # Library build output (produced since Task 4; never committed)
 dist
+
+# Brainstorming visual companion session files
+.superpowers/
