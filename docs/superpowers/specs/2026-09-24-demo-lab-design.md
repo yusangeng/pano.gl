@@ -48,7 +48,7 @@ v1 能力面（四投影、双后端、视频全景、事件 API、诊断通道�
 实验室唯一的业务核心；四个面板围着它转。
 
 1. **probe 先行**：`FramelessImageViewer.probe()` 问设备。`{ backend: 'none' }` 是答案不是异常——此时渲染整页「无可用后端」说明态，不建 viewer。probe 结果同时喂给状态栏面板。
-2. **创建**：图模式起步（`/image/2048x1024.jpg`），初始投影/参数从 URL 查询参数读（如 `?projection=planet&zoom=2`）——实验室状态可存书签。
+2. **创建**：图模式起步（`/image/2048x1024.jpg`），初始投影/参数从 URL 查询参数读（如 `?projection=planet&zoom=0.5`）——实验室状态可存书签。
 3. **同类换源**：`viewer.src = url`（`image-viewer.ts:124` / `video-viewer.ts:109`）——同设备同投影换 URL，不重建。2K↔4K↔8K 与视频重选源都走这条路。
 4. **图↔视频切换**：跨类必须 dispose 重建。流程：读 `viewer.cameraOptions` → `dispose()` → 建另一类 viewer → 姿态塞回 options。
 5. **viewer 引用盒**：面板不各自抓实例。main.ts 持 viewer 引用并广播 `onViewerChange`；面板在盒上订阅，换实例时重新接线（事件订阅、element 绑定全部重挂）。
@@ -64,10 +64,10 @@ v1 能力面（四投影、双后端、视频全景、事件 API、诊断通道�
 ### 3.1 相机/投影实验台（`panels/camera.ts`）
 
 - 投影切换：四段按钮 linear / cylindrical / planet / pannini → `setProjection`。切完视角不动（姿态保持是 v1 语义，本身就是演示点）。
-- 按变体出旋钮（`Projection` 是判别联合，`types.ts:53-57`）：
-  - `linear` → **fov 滑条**（20–160°）；`aspect` 只读显示（容器比例派生，非用户旋钮）；
-  - 其余三个 → **zoom 滑条**（0.25–8，对数刻度）+ **extent 滑条**（0.5–8，方形 `[v,v]`；默认值 cylindrical 1、planet/pannini 4）。planet 改 extent 直观看到「行星」缩放，是实验室最有趣的旋钮之一。
-- 实时读数：滑条旁数值（1 位小数）+ 姿态读数 lat/lng（订阅 `rotate` 事件实时刷新，拖画布时数字跟着走）。
+- 按变体出旋钮（`Projection` 是判别联合，`types.ts:53-57`；**公开面 fov 是弧度**——`camera-options.test.ts:97` 传 `Math.PI/2` 原样往返；滑条按度数展示、应用时换算）：
+  - `linear` → **fov 滑条**（15–110°——库的夹持域，pan-zoom-semantics §4 裁定值）；`aspect` 只读显示（容器比例派生，非用户旋钮）；
+  - 其余三个 → **zoom 滑条**（0.01–1，对数刻度——库的夹持域，1 最广、0.01 最远）+ **extent 滑条**（0.5–8，方形 `[v,v]`；默认值 cylindrical 1、planet/pannini 4）。planet 改 extent 直观看到「行星」缩放，是实验室最有趣的旋钮之一。
+- 实时读数：滑条旁数值（fov 整数度、zoom/extent 两位小数）+ 姿态读数 lat/lng（`rotate` 事件载荷是**增量**（`viewer.ts:161`），只作刷新信号；绝对值回读 `viewer.cameraOptions`，getter 读的是实时状态）。滚轮 zoom 后滑条同样回读刷新。
 
 ### 3.2 媒体源切换台（`panels/media.ts`）
 
@@ -90,7 +90,9 @@ v1 能力面（四投影、双后端、视频全景、事件 API、诊断通道�
 
 ### 3.5 共享
 
-`format.ts` 放纯格式化：时间码、角度、倍率、payload 紧凑化。无 DOM 依赖。
+- `format.ts`：纯格式化（时间码、角度、payload 紧凑化），无 DOM 依赖；
+- `context.ts`：面板与外壳之间的插座——`LabContext` 类型 + `ViewerBox`（viewer 引用盒）+ 各投影变体的默认值构造（外壳与相机面板共用，DRY）；
+- `dom.ts`：极小的元素工厂 `h()`，面板免写模板字符串。
 
 ---
 
@@ -123,7 +125,7 @@ v1 能力面（四投影、双后端、视频全景、事件 API、诊断通道�
 
 - `demo/index.html`（新实验室入口）
 - `demo/minimal.html`（现 index.html 原样改名）
-- `demo/lab/main.ts`、`demo/lab/lab.css`、`demo/lab/format.ts`
+- `demo/lab/main.ts`、`demo/lab/lab.css`、`demo/lab/format.ts`、`demo/lab/context.ts`、`demo/lab/dom.ts`
 - `demo/lab/panels/camera.ts`、`demo/lab/panels/media.ts`、`demo/lab/panels/status.ts`、`demo/lab/panels/eventlog.ts`
 - README 演示节一小段更新（双页说明：lab 主入口 + minimal 最小示例）
 
@@ -146,6 +148,6 @@ v1 能力面（四投影、双后端、视频全景、事件 API、诊断通道�
 5. 图↔视频切换姿态保留；视频 play/pause/seek/静音可用，play 拒绝有内联提示；
 6. 事件日志实时滚动，rotate/zoom 过滤芯片、暂停滚动、清空可用；
 7. 六诊断通道勾选后浏览器 console 出 trace，取消勾选停止；
-8. `?projection=planet&zoom=2` 书签往返（刷新后状态还原；改参数后地址栏跟随）；
+8. `?projection=planet&zoom=0.5` 书签往返（刷新后状态还原；改参数后地址栏跟随）；
 9. `minimal.html` 逐字等于 README 示例（改名零内容改动）；
 10. 无可用后端环境（如 `--disable-gpu` 强制回退失败时）整页说明态而非白屏。
