@@ -4,7 +4,7 @@ scope: [legacy/**, webpack/**, vendor/**, demo/**, test/**, scripts/**, docs/**,
 verify: npm run gen:shaders -- --check && npm run typecheck && npm run lint && npm run test:coverage && npm run test:integration && npm run build && npm publish --dry-run
 layer: tool
 deps: [p6-webgl2-backend, pan-zoom-semantics]
-state: open
+state: reported
 createdAt: 2026-09-19T08:51:53.032Z
 ---
 # 任务：P7 — 删旧代码与收尾
