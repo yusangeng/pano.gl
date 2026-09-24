@@ -24,6 +24,8 @@ verify 里 `npm publish --dry-run` 红了 = 打包配置有问题（`files` 字�
 
 ## 完成报告
 
+六大 Task + 终末全分支审查 + 收工四关（CR 两轮 / 测试质量一轮 / verify 七连 / task-finish 六闸）的完整记录，分五小节：做了什么、自测结果、偏离 plan 的点、遗留风险、开放项登记。
+
 ### 做了什么
 
 六个 Task 全部完成、双审（spec + quality）全部闭合、终末全分支审查 APPROVED：
