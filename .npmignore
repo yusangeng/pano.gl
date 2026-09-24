@@ -1,4 +1,14 @@
+# "files": ["dist"] in package.json is what decides the tarball, together with
+# the files npm always includes (package.json, README, LICENSE). While "files"
+# is present this root file is inert: a root .npmignore never overrides it,
+# and only an .npmignore placed inside a subdirectory can exclude from it.
+# This file is belt-and-braces for the day "files" is removed entirely -- from
+# that day these rules apply gitignore-style at every depth.
 node_modules
 coverage
 demo
-wasm
+test
+docs
+.package
+.vitest
+__traces__

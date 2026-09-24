@@ -5,9 +5,9 @@ import { ImageSource } from '../../src/media/image-source'
  * Runs in a real browser because everything here is a DOM concern: when `load`
  * fires, what `naturalWidth` is before it, whether listeners actually come off.
  *
- * No `page.evaluate` and no `window.__panoTest`: in vitest's browser mode this
- * file is already in the page. The only thing that used to justify the round
- * trip was that Playwright drove from Node.
+ * No `page.evaluate` round trip and no page-side export: in vitest's browser
+ * mode this file is already in the page. The only thing that used to justify
+ * the round trip was that Playwright drove from Node.
  */
 
 describe('ImageSource', () => {

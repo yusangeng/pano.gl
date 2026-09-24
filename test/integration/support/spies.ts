@@ -25,13 +25,15 @@ import type { CameraState, Projection } from '../../../src/core/types'
 /**
  * Counts every frame drawn by whichever backend the viewer selected.
  *
- * Both prototypes as prophylaxis, not as coverage: no current caller of this
- * helper runs in the fallback project (its users -- dispose-order,
- * viewer-events, viewer-render-input -- are all outside that project's
- * include). Wrapping just the WebGPU one would let the first draw-counting
- * test that DOES run there arrive silently vacuous -- `toBe(0)` passing
- * against a method nobody calls -- which is worse than a red test, because
- * it survives review.
+ * Both prototypes, and since 2026-09-24 as coverage, not just prophylaxis:
+ * dispose-order and viewer-events now run in the no-webgpu project, where the
+ * viewer mounts a WebGL2Backend -- and on the CI runner that project is the
+ * ONLY execution of their draw-count assertions, because the integration
+ * copies skip there behind the presented-canvas gate. A WebGPU-only wrap
+ * would hand those tests `toBe(0)` passing against a method nobody calls,
+ * which is worse than a red test, because it survives review.
+ * viewer-render-input stays outside that project's include, so for it the
+ * wrap remains prophylaxis against the same vacuous-pass shape arriving.
  *
  * The spies call through, and the reader sums the two accounts -- the same
  * shape `captureRenderInputs` gives `sourceCalls`. Calling through is the
@@ -60,7 +62,10 @@ export function countDraws (): () => number {
  * Wrapping the static factory is the narrow version of that -- it touches no
  * source file and the wrapper is gone when the spy is restored. A `null` return
  * (no adapter) is passed through unchanged: the caller decides what to do about
- * it, and one of the callers is the no-WebGPU project, where it is the point.
+ * it. Its one caller probes for an adapter first and skips itself in the
+ * no-adapter world before installing this, so in the no-webgpu project this
+ * spy is never even reached -- the null pass-through is the factory's honesty
+ * about failure, not a branch some project exercises.
  */
 export function captureBackends (): WebGPUBackend[] {
   const created: WebGPUBackend[] = []

@@ -7,6 +7,7 @@ import type { DeviceLost } from '../../src/renderer/backend'
 import { makeContainer } from './support/dom'
 import { nextFrames } from './support/canvas'
 import { captureRenderInputs, countDraws } from './support/spies'
+import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
 
 /*
  * `Viewer.on`, both arms: a named event and `'*'`.
@@ -117,7 +118,17 @@ describe('Viewer.on type pins', () => {
 })
 
 describe("Viewer.on('*')", () => {
-  it('receives the event type and the payload for a real event', async () => {
+  /*
+   * Every runtime test in this file mounts a viewer, installs a source and
+   * waits for the events that source's load produces. On a device that cannot
+   * keep a presented-canvas WebGPU device alive (support/presented-canvas.ts)
+   * the viewer self-disposes mid-wait, which tears down the very listeners
+   * these tests assert with -- different tests lose the race on different
+   * runs, which is why all of them probe first rather than only the ones that
+   * have happened to fail.
+   */
+  it('receives the event type and the payload for a real event', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const viewer = await mount()
 
     const seen: Array<{ type: string, event: unknown }> = []
@@ -134,7 +145,8 @@ describe("Viewer.on('*')", () => {
     expect((seen[0]?.event as { target: unknown }).target).toBe(viewer)
   })
 
-  it('stops receiving once its unsubscribe function has been called', async () => {
+  it('stops receiving once its unsubscribe function has been called', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const viewer = await mount()
     const seen: string[] = []
     const off = viewer.on('*', (type) => { seen.push(type) })
@@ -157,7 +169,8 @@ describe("Viewer.on('*')", () => {
     expect(seen.length, 'the wildcard kept receiving after it unsubscribed').toBe(before)
   })
 
-  it('is told the same payload the named listener is, for the same event', async () => {
+  it('is told the same payload the named listener is, for the same event', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const viewer = await mount()
 
     const named: unknown[] = []
@@ -177,7 +190,8 @@ describe("Viewer.on('*')", () => {
 })
 
 describe('swapping the source', () => {
-  it('redraws, even when the new source reports the version the old one ended on', async () => {
+  it('redraws, even when the new source reports the version the old one ended on', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * The version latch, and the user-visible defect when it is wrong.
      *

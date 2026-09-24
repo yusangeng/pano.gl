@@ -5,6 +5,7 @@ import { countNonBlack, maxChannelDiff, nextFrames, readCanvas } from './support
 import { drag } from './support/gestures'
 import { captureRenderInputs, captureTeardown } from './support/spies'
 import { imageViewer } from './support/viewer'
+import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
 
 /**
  * How much of the readback is lit, as a fraction.
@@ -22,9 +23,17 @@ function litFraction (image: ImageData): number {
  * follows its container, and is sharp on a retina display.
  */
 describe('US1: view a 360 photo and look around', () => {
+  /*
+   * Every test that waits on drawn frames probes first and skips on a device
+   * that cannot keep a presented-canvas WebGPU device alive (measured in
+   * support/presented-canvas.ts). Two tests need no guard: the probe() test
+   * constructs nothing, and the high-DPI test reads only the canvas's own
+   * dimensions, which outlive any device.
+   */
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('renders the image and reports load', async () => {
+  it('renders the image and reports load', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const { viewer, container } = await imageViewer()
     const loaded: string[] = []
     // Before `src`, always. See rule 1.
@@ -45,7 +54,8 @@ describe('US1: view a 360 photo and look around', () => {
     expect(litFraction(image)).toBeGreaterThan(0.2)
   })
 
-  it('dragging rotates the camera and changes the image', async () => {
+  it('dragging rotates the camera and changes the image', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const { viewer, container } = await imageViewer()
     const canvas = canvasOf(container)
     const rotations: string[] = []
@@ -72,46 +82,54 @@ describe('US1: view a 360 photo and look around', () => {
     expect(maxChannelDiff(before.data, after.data)).toBeGreaterThan(2)
   })
 
-  it.each([
+  // A loop rather than `it.each`: an each-case handler receives only the case
+  // item, and the skip guard needs the test context -- the same shape
+  // user-story-camera-switch.test.ts uses for its parameterised cases.
+  const NON_LINEAR_TURNS = [
     { lat: 30, lng: 0, half: 'latitude' },
     { lat: 0, lng: 90, half: 'longitude' }
-  ])('rotate() moves the picture on a non-linear camera: the $half half', async ({ lat, lng }) => {
-    /*
-     * The drag test above is the linear camera, where pose lives in the
-     * clip matrix and always reached the canvas. On the non-linear kinds
-     * the matrix is constant by design and the pose travels through the
-     * uniforms -- the path the P2/P3 setCamera early-out froze. The two
-     * halves are asserted separately because they fail separately: the
-     * longitude half was a working feature in v0.2.2 (a regression), the
-     * latitude half is new intended behaviour -- v0.2.2's shader never
-     * read u_CamPOVLatitude, v1's WGSL does -- so the expected value here
-     * is v1's own semantics (the pixels move), never the v0.2.2 capture.
-     * The redraw count below watches the loop layer only: setSource fires
-     * for every frame the loop selects, upstream of the backend's dirty
-     * gate, so the pixel assertion is the half that catches a backend
-     * freeze. Turn sizes are large on purpose: the sample window has to shift by
-     * more than rounding for the diff to clear the bound. If a half ever
-     * reads <= 2 WITH the redraw confirmed below, report it -- do not
-     * loosen the bound or shrink the turn silently.
-     */
-    const inputs = captureRenderInputs()
-    const { viewer, container } = await imageViewer({ camera: 'cylindrical' })
-    const canvas = canvasOf(container)
-    viewer.src = '/fixtures/panorama.png'
-    await nextFrames(3)
+  ]
+  for (const { lat, lng, half } of NON_LINEAR_TURNS) {
+    it(`rotate() moves the picture on a non-linear camera: the ${half} half`, async (ctx) => {
+      await skipIfPresentedCanvasBroken(ctx)
+      /*
+       * The drag test above is the linear camera, where pose lives in the
+       * clip matrix and always reached the canvas. On the non-linear kinds
+       * the matrix is constant by design and the pose travels through the
+       * uniforms -- the path the P2/P3 setCamera early-out froze. The two
+       * halves are asserted separately because they fail separately: the
+       * longitude half was a working feature in v0.2.2 (a regression), the
+       * latitude half is new intended behaviour -- v0.2.2's shader never
+       * read u_CamPOVLatitude, v1's WGSL does -- so the expected value here
+       * is v1's own semantics (the pixels move), never the v0.2.2 capture.
+       * The redraw count below watches the loop layer only: setSource fires
+       * for every frame the loop selects, upstream of the backend's dirty
+       * gate, so the pixel assertion is the half that catches a backend
+       * freeze. Turn sizes are large on purpose: the sample window has to shift by
+       * more than rounding for the diff to clear the bound. If a half ever
+       * reads <= 2 WITH the redraw confirmed below, report it -- do not
+       * loosen the bound or shrink the turn silently.
+       */
+      const inputs = captureRenderInputs()
+      const { viewer, container } = await imageViewer({ camera: 'cylindrical' })
+      const canvas = canvasOf(container)
+      viewer.src = '/fixtures/panorama.png'
+      await nextFrames(3)
 
-    const before = await readCanvas(canvas)
-    const drawsBefore = inputs.sourceCalls()
-    viewer.rotate(lat, lng)
-    await nextFrames(2)
-    const after = await readCanvas(canvas)
-    viewer.dispose()
+      const before = await readCanvas(canvas)
+      const drawsBefore = inputs.sourceCalls()
+      viewer.rotate(lat, lng)
+      await nextFrames(2)
+      const after = await readCanvas(canvas)
+      viewer.dispose()
 
-    expect(inputs.sourceCalls() - drawsBefore, `rotate(${lat}, ${lng}) did not redraw`).toBeGreaterThan(0)
-    expect(maxChannelDiff(before.data, after.data), `rotate(${lat}, ${lng}) did not move the picture`).toBeGreaterThan(2)
-  })
+      expect(inputs.sourceCalls() - drawsBefore, `rotate(${lat}, ${lng}) did not redraw`).toBeGreaterThan(0)
+      expect(maxChannelDiff(before.data, after.data), `rotate(${lat}, ${lng}) did not move the picture`).toBeGreaterThan(2)
+    })
+  }
 
-  it('a full 360° turn on a non-linear camera returns to the picture it started from', async () => {
+  it('a full 360° turn on a non-linear camera returns to the picture it started from', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * A full turn comes home. The pose wraps into [0, 360) on every
      * rotate, so 90 + 270 lands on exactly 0 -- and lngOffset(0) is 0
@@ -144,7 +162,8 @@ describe('US1: view a 360 photo and look around', () => {
     expect(maxChannelDiff(home.data, back.data), 'a 360° round trip did not come home').toBeLessThanOrEqual(2)
   })
 
-  it('a 90° pose turns the picture by exactly a quarter of its width', async () => {
+  it('a 90° pose turns the picture by exactly a quarter of its width', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * The round-trip test above is formula-blind: the pose wraps into
      * [0, 360) on every rotate, 90 + 270 lands on exactly 0, and
@@ -209,7 +228,8 @@ describe('US1: view a 360 photo and look around', () => {
     expect(worst, `a 90° pose is not a quarter turn: worst=${worst} at ${where}`).toBeLessThanOrEqual(2)
   })
 
-  it('a press and release without movement reports nothing', async () => {
+  it('a press and release without movement reports nothing', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * The pan wiring has an early return for a zero displacement, and this is
      * the only gesture that can reach it: a drag whose release is at its press
@@ -234,7 +254,8 @@ describe('US1: view a 360 photo and look around', () => {
     expect(pose).toEqual({ povLatitude: 0, povLongitude: 0 })
   })
 
-  it('PTZ = false leaves the image static', async () => {
+  it('PTZ = false leaves the image static', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const { viewer, container } = await imageViewer()
     const canvas = canvasOf(container)
     viewer.PTZ = false
@@ -255,7 +276,8 @@ describe('US1: view a 360 photo and look around', () => {
     expect(maxChannelDiff(before.data, after.data)).toBeLessThanOrEqual(2)
   })
 
-  it('the image fills a container that changes size', async () => {
+  it('the image fills a container that changes size', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * The legacy code listened on window resize and additionally called
      * `window.removeEventLstener` (a typo), so the listener never came off. A
@@ -370,7 +392,8 @@ describe('US1: view a 360 photo and look around', () => {
     expect(caps.backend).toBe(adapter !== null ? 'webgpu' : 'webgl2')
   })
 
-  it('survives a whole session: mount, turn, swap the photo, stay put, dispose', async () => {
+  it('survives a whole session: mount, turn, swap the photo, stay put, dispose', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * The full journey, not its pieces. The defect this is shaped against was
      * measured, not imagined: a `setSource` that reset the camera's pose to the

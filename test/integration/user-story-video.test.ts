@@ -4,6 +4,8 @@ import { maxChannelDiff, nextFrames, readCanvas } from './support/canvas'
 import { wheel } from './support/gestures'
 import { captureRenderInputs } from './support/spies'
 import { imageViewer, videoViewer } from './support/viewer'
+import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
+import { skipIfVideoUploadUnavailable } from './support/upload-paths'
 
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -24,7 +26,22 @@ afterEach(() => { vi.restoreAllMocks() })
  *   Task 5 completion report.
  */
 describe('US2: play a 360 video and zoom', () => {
-  it('plays and advances frames', async () => {
+  /*
+   * The tests that draw to a presented canvas -- every one but the muted
+   * default and the disposed-play rejection, whose assertions hold before any
+   * frame lands -- probe first and skip on a device that cannot keep a
+   * presented-canvas WebGPU device alive (support/presented-canvas.ts).
+   *
+   * The two tests whose assertions need real video PIXELS additionally gate on
+   * the video upload itself (skipIfVideoUploadUnavailable): a machine can keep
+   * presented-canvas devices alive and still be unable to turn a video element
+   * into a texture -- measured on a macOS SwiftShader launch, where exactly
+   * these two fail while every image test passes. The teardown, muted-default
+   * and zoom tests assert DOM state or image pixels and hold either way.
+   */
+  it('plays and advances frames', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
+    await skipIfVideoUploadUnavailable(ctx)
     const { viewer, container } = await videoViewer({ loop: true })
     const events: string[] = []
     // Both listeners before playback starts, so neither event can be missed --
@@ -61,7 +78,9 @@ describe('US2: play a 360 video and zoom', () => {
     viewer.dispose()
   })
 
-  it('a paused video stops drawing', async () => {
+  it('a paused video stops drawing', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
+    await skipIfVideoUploadUnavailable(ctx)
     // The loop draws when the source's version changes, and a video advances its
     // version only while it is playing. Without that guard, this is the test
     // that catches "a paused video still burns a full-screen shader at 60Hz".
@@ -90,7 +109,8 @@ describe('US2: play a 360 video and zoom', () => {
     expect(frames).toBe(0)
   })
 
-  it('a source swap tears down the old element', async () => {
+  it('a source swap tears down the old element', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const { viewer } = await videoViewer({ loop: true })
     const loaded: string[] = []
     viewer.on('media-load', () => loaded.push('load'))
@@ -142,7 +162,8 @@ describe('US2: play a 360 video and zoom', () => {
     expect(muted).toBe(true)
   })
 
-  it('a wheel zoom-in reaches the camera state of a non-linear projection', async () => {
+  it('a wheel zoom-in reaches the camera state of a non-linear projection', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const inputs = captureRenderInputs()
     const { viewer, container } = await imageViewer({ camera: 'cylindrical' })
     const canvas = canvasOf(container)
@@ -191,7 +212,8 @@ describe('US2: play a 360 video and zoom', () => {
     expect(maxChannelDiff(before.data, after.data), 'the zoom-in did not move the picture').toBeGreaterThan(2)
   })
 
-  it('the public zoom() method reaches the projection the backend receives', async () => {
+  it('the public zoom() method reaches the projection the backend receives', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     /*
      * The wheel test above drives zoom through the input wiring; this one
      * drives the method an application calls. They share a controller but not
@@ -227,7 +249,8 @@ describe('US2: play a 360 video and zoom', () => {
     viewer.dispose()
   })
 
-  it('a wheel zoom reaches the linear projection as fov', async () => {
+  it('a wheel zoom reaches the linear projection as fov', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
     const inputs = captureRenderInputs()
     const { viewer, container } = await imageViewer()
     const canvas = canvasOf(container)

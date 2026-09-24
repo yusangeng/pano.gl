@@ -1,6 +1,6 @@
 {
   "name": "pano.gl",
-  "version": "1.0.0-alpha.0",
+  "version": "1.0.0",
   "description": "Dependency-light WebGPU/WebGL2 viewer for equirectangular 360 images and video",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -36,9 +36,6 @@
     "name": "yusangeng",
     "email": "yusangeng@outlook.com"
   },
-  "publishConfig": {
-    "tag": "alpha"
-  },
   "scripts": {
     "build": "vite build",
     "prepublishOnly": "npm run build",
@@ -46,12 +43,12 @@
     "test:unit": "vitest run --project unit",
     "test:unit:watch": "vitest --project unit",
     "test:integration": "vitest run --project integration --project no-webgpu",
-    "test:coverage": "vitest run --project unit --coverage",
+    "test:coverage": "vitest run --project unit --coverage --coverage.reporter=text --coverage.reporter=json-summary && node scripts/check-coverage.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/integration && tsc --noEmit -p tsconfig.scripts.json",
     "lint": "eslint src test scripts \"demo/**/*.ts\"",
     "gen:shaders": "node scripts/gen-shader-constants.mjs",
     "start": "vite demo",
-    "doc": "typedoc --out doc"
+    "doc": "typedoc --out docs/api src/index.ts"
   },
   "dependencies": {
     "debug": "^4.4.3",
@@ -72,5 +69,8 @@
     "vite": "^7",
     "vite-plugin-dts": "^5.1.1",
     "vitest": "^5"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
