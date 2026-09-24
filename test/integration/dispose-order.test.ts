@@ -230,6 +230,11 @@ describe('dispose', () => {
     await nextFrames(3)
 
     const start = draws()
+    // Without this the bound below passes vacuously on a viewer that never
+    // drew at all: frames = 0 satisfies toBeLessThan(10) just as readily as
+    // idleness does, and "bounded" would certify nothing -- the same guard
+    // the `stops drawing` test above puts on its own before-count.
+    expect(start, 'nothing was ever drawn, so this test cannot see a bound').toBeGreaterThan(0)
     await new Promise((resolve) => setTimeout(resolve, 1000))
     const frames = draws() - start
     viewer.dispose()

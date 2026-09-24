@@ -66,30 +66,61 @@ jobs:
           # of the two forms carries.
           plain=$(sed 's/\x1b\[[0-9;]*m//g' integration-tests.log)
           for project in 'integration' 'no-webgpu'; do
-            # The verbose reporter gives every skipped test its own result
-            # line, headed with a down-arrow (measured on run 35925751205:
-            # "↓ integration (chromium) <file> > <test>" -- the arrow is a
-            # literal character, not an ANSI sequence, so it survives the
-            # strip above). A count that included those lines would let a run
-            # where every test of a project skipped satisfy this assertion,
-            # so the ran count excludes them and the skip count is printed
-            # beside it for the reader instead of hiding inside the number.
+            # The verbose reporter prefixes every test-result line with the
+            # project and browser and marks the outcome with a literal glyph
+            # that survives the ANSI strip: ✓ pass, × fail, ↓ skip (measured
+            # on runs 35925751205 and 35935446143, where every 'project ('
+            # line in a real log is a per-test result line -- console/stderr
+            # headers carry the file path, not the project name).
+            #
+            # The ran count MATCHES the outcome glyphs rather than excluding
+            # the skip glyph, so its polarity is fail-closed: if a vitest
+            # upgrade ever changes the glyphs, this count reads 0 and the
+            # build goes red on exactly the all-skipped false green it exists
+            # to catch. The old inverse form (count everything without ↓)
+            # would instead count skipped lines as ran and stay green through
+            # the same upgrade. Glyph alternation, not a bracket class: under
+            # the runner's C locale a bracket expression over multi-byte
+            # glyphs degenerates into a set of UTF-8 bytes and matches almost
+            # anything. A test TITLE containing a glyph would over-count --
+            # inflating a number cannot produce a false green; zeroing one
+            # can.
             lines=$(printf '%s\n' "$plain" | grep -F "$project (" || true)
             # Guarded, not piped blind: `printf '%s\n' ""` emits one empty
-            # line, which grep -cv would happily count as a ran test and hand
+            # line, which grep -c would happily count as a ran test and hand
             # the assertion a false green on exactly the empty-include case it
             # exists to catch.
             count=0
             skipped=0
             if [ -n "$lines" ]; then
-              count=$(printf '%s\n' "$lines" | grep -cv '↓' || true)
+              count=$(printf '%s\n' "$lines" | grep -cE '✓|×' || true)
               skipped=$(printf '%s\n' "$lines" | grep -c '↓' || true)
             fi
             if [ "$count" -eq 0 ]; then
               echo "::error::project '$project' ran 0 tests -- vitest exits 0 on an empty include, so this assertion is the only thing that catches it"
               exit 1
             fi
-            echo "project '$project' ran $count test(s), skipped $skipped"
+            # A skip BUDGET, not just a printed count. The runner's
+            # presented-canvas gate skips a known, stable set every run (34 on
+            # integration as of 2026-09-24; no-webgpu's one is
+            # destroyed-device's WebGPU-keyed probe), so the honest responses
+            # to that number changing are a deliberate budget bump or a red
+            # build. Without the ceiling, a regression that mass-skips -- a
+            # probe reading every healthy device as unavailable, say -- shows
+            # up as a log line on a green build, and the next backend-agnostic
+            # mechanism file added to the integration project would silently
+            # run nowhere in CI, which is exactly the hole viewer-events sat
+            # in until this branch widened the no-webgpu include.
+            budget=0
+            case "$project" in
+              integration) budget=34 ;;
+              no-webgpu) budget=1 ;;
+            esac
+            if [ "$skipped" -gt "$budget" ]; then
+              echo "::error::project '$project' skipped $skipped tests, over the recorded budget of $budget -- every skip is a test CI no longer executes; bump the budget only in the commit that explains why"
+              exit 1
+            fi
+            echo "project '$project' ran $count test(s), skipped $skipped (budget $budget)"
           done
         env:
           CI: 'true'
