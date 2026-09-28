@@ -191,8 +191,10 @@ vec2 project_planet (vec3 s, float zoom, float lng, float lat) {
   // phi's formula below assigns theta and phi their +z-side one-sided
   // limits, measured identical at every branch point on the float64
   // arbiter. The float64 reference still carries no floor -- it is the
-  // arbiter -- but it carries the same guard, firing in float64 only at
-  // the lat = 0 centre.
+  // arbiter -- but it carries the same guard, which float64 reaches only
+  // at exact tilt-centre hits whose ct * y - st cancels bit for bit:
+  // always the lat = 0 centre, never the +-90 sites (one ulp short
+  // there, their finite artifacts pinned on the arbiter).
   float d2 = max(den_re * den_re + den_im * den_im, 1e-15);
 
   float zn = (num_re * den_re + num_im * den_im) / d2;
@@ -220,7 +222,7 @@ vec2 project_planet (vec3 s, float zoom, float lng, float lat) {
   // at every branch point on the float64 arbiter (2026-09-28
   // planet-review-followups spec, section 2.2): theta = 1.5*PI, and
   // phi = PI where the denominator is the zero factor (the Mobius pole,
-  // num nonzero) versus 0 where the numerator is (w = 0). The lng
+  // num nonzero) versus 0 where the numerator is wholly zero. The lng
   // subtraction runs after the guard so the canonical theta receives it
   // like every other fragment's.
   if (p == 0.0 && q == 0.0) {

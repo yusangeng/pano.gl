@@ -12,8 +12,9 @@
  *
  * **Everything here is transcribed line by line from
  * `legacy/shader/fshader.glsl`, including its quirks, and must stay that
- * way** -- with two exceptions, each an adjudicated behaviour change rather
- * than a transcription choice (see `lngOffset` and `latOffset`). That is not
+ * way** -- with three exceptions, each an adjudicated behaviour change
+ * rather than a transcription choice (see `lngOffset`, `latOffset`, and
+ * planet's branch-point guard). That is not
  * laziness -- it is the requirement. v1's acceptance criterion is "renders
  * what v0.2.2 rendered", so the reference must encode what v0.2.2 actually
  * computed, not what it should have. One consequence worth stating up front,
@@ -24,7 +25,7 @@
  *     object used the default `REPEAT` wrap, so the sampler did the wrapping.
  *     A `+ 0.5` here would rotate the panorama half a turn.
  *
- * And two departures, each of which is neither a quirk nor an error:
+ * And three departures, each of which is neither a quirk nor an error:
  *
  *   - The non-linear cameras consume a properly-converted latitude. v0.2.2
  *     read latitude nowhere on those cameras -- the shader declared
@@ -41,6 +42,12 @@
  *     pan-zoom-semantics spec §1
  *     (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md) supersedes the
  *     retention recorded in v1-design §11.4 (B1). See `lngOffset`.
+ *   - Planet's Mobius reduction reached `p = q = 0` at its exact branch
+ *     points, and the faithful transcription computed `atan(0/0)` = NaN
+ *     there. Since 2026-09-28 those points take the spec's canonical value
+ *     instead (planet-review-followups spec section 2.2,
+ *     docs/superpowers/specs/2026-09-28-planet-review-followups-design.md);
+ *     the guard in `projectPlanet` and its comment carry the details.
  */
 
 import type { CameraState, Projection } from './types'
@@ -190,8 +197,9 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
   // bit -- except a -0 -> +0 flip of theta's sign of zero on the z = 0
   // half-line, which no consumer distinguishes. The WGSL/GLSL twins carry a
   // 1e-15 floor on d2 for the excluded point's viewport crossing; this
-  // float64 arbiter deliberately does not -- its tests sample around the
-  // pole, never on it.
+  // float64 arbiter deliberately does not -- its exact hits at the pole
+  // are pinned as finite one-ulp artifacts, and the branch points take
+  // the canonical value below.
   const tilt = lat
   const ct = Math.cos(tilt / 2)
   const st = Math.sin(tilt / 2)
@@ -228,17 +236,22 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
   // are the +z-side one-sided limits, measured identical at every branch
   // point: theta = 1.5*PI, and phi = PI where the denominator is the zero
   // factor (the Mobius pole, num nonzero) versus 0 where the numerator is
-  // (w = 0: the lat = 0 centre, and the tilt centres at the +-90 clamps).
-  // 2026-09-28 planet-review-followups spec, section 2.2. In float64 this
-  // guard fires only at the lat = 0 centre -- at the +-90 exact-hit sites
-  // sin and cos of the half-angle differ by one ulp, num and den stay
-  // nonzero, and the formula's own finite values stand (pinned, as
-  // non-normative artifacts, in test/unit/reference.test.ts).
-  // The phi = PI arm never wins in float64 -- only the lat = 0 centre
-  // fires this guard, and its numerator is exactly zero -- but it is
-  // load-bearing, not dead: the WGSL and GLSL twins DO reach the pole arm
-  // in f32, and the spec's three-place same-rule requires the same guard
-  // statements here.
+  // wholly zero (the lat = 0 centre, and the tilt centres at the +-90
+  // clamps). 2026-09-28 planet-review-followups spec, section 2.2. In
+  // float64 this guard fires at exact tilt-centre hits (yy bit-exactly
+  // tan(tilt / 2)) whenever ct * yy - st cancels bit for bit -- always
+  // the lat = 0 centre, where st = 0 makes the cancellation exact by
+  // construction; at other tilts per rounding luck (most integer-degree
+  // tilts cancel; 45 and 60 degrees stay half an ulp short); never at
+  // the +-90 exact-hit sites, where sin and cos of the half-angle differ
+  // by one ulp, the would-be zero factor keeps a one-ulp residue (denRe
+  // at the pole sites, numIm at the tilt centres), q stays nonzero, and
+  // the formula's own finite values stand (pinned, as non-normative
+  // artifacts, in test/unit/reference.test.ts).
+  // The phi = PI arm never wins in float64 -- every firing site has num
+  // wholly zero -- but it is load-bearing, not dead: the WGSL and GLSL
+  // twins DO reach the pole arm in f32, and the spec's three-place
+  // same-rule requires the same guard statements here.
   if (p === 0 && q === 0) {
     theta = 1.5 * PI
     phi = PI
@@ -278,10 +291,11 @@ function projectPannini (x: number, y: number, z: number, zoom: number, lng: num
  *
  * `state.povLatitude` is read by the three non-linear projections through
  * `latOffset` -- subtracted from `phi` by cylindrical and pannini, and
- * consumed as the Mobius tilt angle by planet -- the F5 fix, and this
- * module's one deliberate departure from v0.2.2 (which read latitude
- * nowhere on those cameras). The linear projection ignores it here because
- * its latitude lives in `buildViewMatrix` instead.
+ * consumed as the Mobius tilt angle by planet -- the F5 fix, one of this
+ * module's deliberate departures from v0.2.2 (which read latitude nowhere
+ * on those cameras; the module header lists all three). The linear
+ * projection ignores it here because its latitude lives in
+ * `buildViewMatrix` instead.
  *
  * @param x - Surface position. For the linear projection only the direction
  *   matters; for the others the magnitude is part of the projection.
