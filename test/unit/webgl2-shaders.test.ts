@@ -161,6 +161,22 @@ describe('WebGL2 shader source', () => {
     expect(body, 'the excluded-point floor is missing').toContain('1e-15')
   })
 
+  it('assigns the canonical branch-point value where p and q are both zero', () => {
+    // 2026-09-28 planet-review-followups spec, section 2.2. Structural pins
+    // for the guard: its condition, the canonical theta, and the num-based
+    // phi discrimination (statement form, no ternary -- WGSL has none, and
+    // the token-for-token test below compares the two bodies as sequences).
+    // The 'transcribes the same formulas as the WGSL, token for token' test
+    // holds the WGSL twin to the same statements; the f32 witness in
+    // test/unit/reference.test.ts pins the values.
+    const body = skeleton(glslBody('project_planet'))
+    expect(body, 'the guard condition is missing').toContain('p == 0.0 && q == 0.0')
+    expect(body, 'the canonical theta is missing').toContain('theta = 1.5 * PI')
+    expect(body, 'the phi discrimination is missing').toContain('num_re == 0.0 && num_im == 0.0')
+    expect(body, 'the phi pole value is missing').toContain('phi = PI')
+    expect(body, 'the phi zero value is missing').toContain('phi = 0.0')
+  })
+
   it('planet no longer carries the phi latitude offset the tilt replaced', () => {
     // The pre-2026-09-28 body ended with 'atan(...) + HALF_PI - lat'. A merge
     // that keeps that term alongside the Mobius tilt passes every parity test
