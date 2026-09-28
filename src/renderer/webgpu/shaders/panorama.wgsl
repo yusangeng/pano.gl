@@ -218,8 +218,9 @@ fn project_planet(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
   // arbiter. The float64 reference still carries no floor -- it is the
   // arbiter -- but it carries the same guard, which float64 reaches only
   // at exact tilt-centre hits whose ct * y - st cancels bit for bit:
-  // always the lat = 0 centre, never the +-90 sites (one ulp short
-  // there, their finite artifacts pinned on the arbiter).
+  // the lat = 0 centre always, most other tilts per rounding luck, never
+  // the +-90 sites (one ulp short there, their finite artifacts pinned
+  // on the arbiter).
   let d2 = max(den_re * den_re + den_im * den_im, 1e-15);
 
   let zn = (num_re * den_re + num_im * den_im) / d2;

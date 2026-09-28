@@ -193,8 +193,9 @@ vec2 project_planet (vec3 s, float zoom, float lng, float lat) {
   // arbiter. The float64 reference still carries no floor -- it is the
   // arbiter -- but it carries the same guard, which float64 reaches only
   // at exact tilt-centre hits whose ct * y - st cancels bit for bit:
-  // always the lat = 0 centre, never the +-90 sites (one ulp short
-  // there, their finite artifacts pinned on the arbiter).
+  // the lat = 0 centre always, most other tilts per rounding luck, never
+  // the +-90 sites (one ulp short there, their finite artifacts pinned
+  // on the arbiter).
   float d2 = max(den_re * den_re + den_im * den_im, 1e-15);
 
   float zn = (num_re * den_re + num_im * den_im) / d2;

@@ -611,8 +611,10 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     expect(rotated.u).toBe(0.5)
 
     // The four B-class sites in float64: sin and cos of the half-angle
-    // differ by one ulp here, so num and den stay nonzero, the guard does
-    // NOT fire, and the formula's own finite values stand. They are
+    // differ by one ulp here, so numIm and denRe stay nonzero and keep q
+    // off zero (numRe is -0, denIm is +-0, and p is exactly +-0 -- the q
+    // conjunct alone holds the guard off at all four sites), so the guard
+    // does NOT fire and the formula's own finite values stand. They are
     // mid-jump artifacts of that one ulp -- each sits 0 or 1/2 a turn from
     // the 0.75 limit either side homes in on -- pinned as the documented,
     // non-normative divergence between this arbiter and the f32 shaders
