@@ -8,9 +8,13 @@ const state: CameraState = { povLatitude: 0, povLongitude: 0 }
  * The transcribed formulas divide by zero at a handful of exactly-degenerate
  * points, and a faithful transcription must keep producing NaN there (the
  * legacy GPU computed atan(0.0 / 0.0) just the same; see the "faithful NaNs"
- * test). This predicate names those points so the finiteness and range sweeps
- * can step around them without silently weakening themselves: anything not
- * listed here that produces a NaN is a real bug and fails the sweep.
+ * test). Planet left that class on 2026-09-28: the planet-review-followups
+ * spec, section 2.2, adjudicated a canonical value at its Mobius branch
+ * points, so projectPlanet is finite everywhere and its case below returns
+ * false. This predicate names the remaining points so the finiteness and
+ * range sweeps can step around them without silently weakening themselves:
+ * anything not listed here that produces a NaN is a real bug and fails the
+ * sweep.
  */
 function isDegenerate (kind: Projection['kind'], x: number, y: number, z: number): boolean {
   switch (kind) {
@@ -20,9 +24,10 @@ function isDegenerate (kind: Projection['kind'], x: number, y: number, z: number
       // when both operands are zero.
       return x === 0 && z === 0
     case 'planet':
-      // atan(P / Q) hits 0/0 when y and z are both zero; the formula never
-      // reads x.
-      return y === 0 && z === 0
+      // The Mobius branch points (p = q = 0, including y = z = 0 at lat 0)
+      // take a canonical value since 2026-09-28, so nothing here is
+      // degenerate any more -- the sweeps below now cover (0, 0) too.
+      return false
     case 'cylindrical':
       // Nothing it divides by can be zero.
       return false
@@ -234,11 +239,11 @@ describe('output range', () => {
     // the single NaN texel, but the formula is the formula. Normalising the
     // NaN away here would be a silent spec change: gate B compares against
     // this module, not against an idealised sphere.
-    const planet: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }
-    // The planet centre is the one degenerate point that lies ON the surface
-    // itself (x is never read, so the x = 1 plane does not save it).
-    expect(project(1, 0, 0, state, planet).u).toBeNaN()
-
+    //
+    // Planet's centre pixel left this class on 2026-09-28, by adjudication
+    // rather than silently: the planet-review-followups spec, section 2.2,
+    // defines the canonical value and pins it in the planet-tilt describe.
+    //
     // The zero vector never arises from ndcToSurface, which pins x to 1; these
     // are pinned only to keep the transcription honest about its own domain.
     const linear: Projection = { kind: 'linear', fov: 1, aspect: 1 }
@@ -579,6 +584,50 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
           expect(uv.v, `v in [0,1] at lat=${latDeg} ndc=(${ndcX},${ndcY})`).toBeLessThanOrEqual(1)
         }
       }
+    }
+  })
+
+  it('takes the canonical branch-point value where p and q are both zero', () => {
+    // 2026-09-28 planet-review-followups spec, section 2.2, by user
+    // adjudication -- this departs, openly, from the faithful-NaN stance the
+    // "keeps the NaNs" test below still pins for linear and pannini. The
+    // Mobius reduction reaches p = q = 0 at five sites: the lat = 0 centre
+    // (the numerator is the zero factor, in float64 too) and, in f32 only,
+    // the four exact-hit sites at the +-90 clamps. The canonical values are
+    // the +z-side one-sided limits, measured identical at every site:
+    // theta = 1.5*PI, and phi = PI where the denominator is the zero factor
+    // versus 0 where the numerator is. Bit-exact by construction, hence
+    // toBe: 1.5*PI / TWO_PI is exact in float64, and a tolerance here would
+    // hide a changed constant.
+    const centre = project(1, 0, 0, { povLatitude: 0, povLongitude: 0 }, projection)
+    expect(centre.u).toBe(0.75)
+    expect(centre.v).toBe(0)
+
+    // The lng subtraction runs after the guard, so the canonical theta
+    // receives it like any other fragment's. This is the pin for the
+    // statement order: a guard placed after `theta -= lng` fails it.
+    const rotated = project(1, 0, 0, { povLatitude: 0, povLongitude: 90 }, projection)
+    expect(rotated.u).toBe(0.5)
+
+    // The four B-class sites in float64: sin and cos of the half-angle
+    // differ by one ulp here, so num and den stay nonzero, the guard does
+    // NOT fire, and the formula's own finite values stand. They are
+    // mid-jump artifacts of that one ulp -- each sits 0 or 1/2 a turn from
+    // the 0.75 limit either side homes in on -- pinned as the documented,
+    // non-normative divergence between this arbiter and the f32 shaders
+    // (which take 0.75 at every site, witnessed in the f32 block below).
+    // A change to them is an engine or half-angle change and must be seen.
+    const artifacts: Array<[number, number, number, number]> = [
+      // [y, lat, u, v] -- Mobius pole sites first, then tilt centres.
+      [1, -90, -0, 1],
+      [-1, 90, 0.5, 1],
+      [-1, -90, 0.5, 0],
+      [1, 90, 0, 0]
+    ]
+    for (const [y, latDeg, u, v] of artifacts) {
+      const hit = project(1, y, 0, { povLatitude: latDeg, povLongitude: 0 }, projection)
+      expect(hit.u, `u at (y=${y}) lat=${latDeg}`).toBe(u)
+      expect(hit.v, `v at (y=${y}) lat=${latDeg}`).toBe(v)
     }
   })
 

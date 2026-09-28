@@ -221,9 +221,28 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
     theta = TWO_PI + theta
   }
 
-  theta -= lng
+  let phi = Math.atan(r / Math.sqrt(p * p + q * q)) + HALF_PI
 
-  const phi = Math.atan(r / Math.sqrt(p * p + q * q)) + HALF_PI
+  // The Mobius reduction's branch points: p = q = 0 makes the atan above
+  // atan(0/0) and collapses phi's argument to -1/0. The canonical values
+  // are the +z-side one-sided limits, measured identical at every branch
+  // point: theta = 1.5*PI, and phi = PI where the denominator is the zero
+  // factor (the Mobius pole, num nonzero) versus 0 where the numerator is
+  // (w = 0: the lat = 0 centre, and the tilt centres at the +-90 clamps).
+  // 2026-09-28 planet-review-followups spec, section 2.2. In float64 this
+  // guard fires only at the lat = 0 centre -- at the +-90 exact-hit sites
+  // sin and cos of the half-angle differ by one ulp, num and den stay
+  // nonzero, and the formula's own finite values stand (pinned, as
+  // non-normative artifacts, in test/unit/reference.test.ts).
+  if (p === 0 && q === 0) {
+    theta = 1.5 * PI
+    phi = PI
+    if (numRe === 0 && numIm === 0) {
+      phi = 0
+    }
+  }
+
+  theta -= lng
   return toUV(theta, phi)
 }
 
