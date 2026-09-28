@@ -3,7 +3,7 @@ plan: docs/superpowers/plans/2026-09-28-backend-preference.md
 scope: [src/**, test/**, demo/**, README.md]
 verify: npm run typecheck && npm run lint && npm test
 layer: app
-state: reported
+state: merged
 createdAt: 2026-09-28T15:14:36.774Z
 ---
 # 任务：后端选择选项：backend 选项 + lab 开关
