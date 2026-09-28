@@ -549,7 +549,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md` (§2.3, ~line 79)
 
-- [ ] **Step 1: Append the dated erratum to §2.3**
+- [x] **Step 1: Append the dated erratum to §2.3**
 
 At the end of the §2.3 paragraph (the one carrying the existing `**2026-09-28 勘误（plan 期推导）**：` — append after its last sentence `…且测试采样点避开分母零点。`), append:
 
@@ -557,11 +557,11 @@ At the end of the §2.3 paragraph (the one carrying the existing `**2026-09-28 �
 **2026-09-28 二次勘误（planet-review-followups spec §2.4）**：上文「极限值连续（p, q → 0，r → 1, phi → π）」在**精确分支点**不成立——floor 在极点**附近**交付有限 zn/yn（f32 证人钉住的档位），但 lat 恰 ±90 的精确命中站点上 f32 `sin`/`cos` 对同一半角舍入到同一位，`den_re` 恰 +0（Möbius 极点站点）或分子恰 ±0（倾斜中心站点，d2 = 2，任何 d2 下限夹持够不着）→ `p = q = 0` → `atan(0/0) = NaN`；phi 的连续极限也按站点分侧（极点站点 → π，中心站点 → 0），不存在单一 phi 极限值。按 2026-09-28 用户裁决，分支点在三处实现（WGSL / GLSL / reference.ts）由显式守卫取规范值 `theta = 1.5·π`、phi 按零因子侧取 π/0，详见 planet-review-followups spec §2.1–2.2。本 spec 的任务卡是历史记录，实现以该 spec 为准。
 ```
 
-- [ ] **Step 2: Proofread the erratum**
+- [x] **Step 2: Proofread the erratum**
 
 Re-read the appended paragraph: no typos, the two spec cross-references (`planet-review-followups spec §2.4` / `§2.1–2.2`) match the section numbers of `docs/superpowers/specs/2026-09-28-planet-review-followups-design.md` (the erratum clause lives in its §2.4; the rule in §2.1–2.2).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md
