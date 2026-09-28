@@ -1,0 +1,214 @@
+/*
+ * pano.gl lab styling: dark, DevTools-leaning, zero dependencies.
+ * Readouts and logs are monospace with tabular numbers so values can jump
+ * without the layout twitching.
+ */
+
+:root {
+  color-scheme: dark;
+  --bg: #14161c;
+  --panel: #1c1f27;
+  --edge: #2a2e3a;
+  --text: #d7dae2;
+  --muted: #8b90a0;
+  --accent: #4da3ff;
+  --ok: #3fbf6f;
+  --warn: #e0a63a;
+  --err: #e05555;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.lab { display: flex; height: 100vh; }
+
+/* The viewer sizes its canvas from its container; min-width lets flex shrink it. */
+#stage { flex: 1; min-width: 0; }
+
+.dock {
+  display: flex;
+  flex-direction: column;
+  width: clamp(300px, 34%, 420px);
+  min-width: 300px;
+  background: var(--panel);
+  border-left: 1px solid var(--edge);
+  overflow: hidden;
+}
+
+.panel { padding: 10px 12px; border-bottom: 1px solid var(--edge); }
+
+.panel-grow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-bottom: none;
+}
+
+.panel h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.row-label { color: var(--muted); white-space: nowrap; }
+.row-value {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.segmented { display: flex; gap: 4px; margin-bottom: 8px; }
+.segmented button {
+  flex: 1;
+  padding: 4px 0;
+  font: inherit;
+  color: var(--text);
+  background: #262a35;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.segmented button.active { border-color: var(--accent); color: var(--accent); }
+
+.slider-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+.slider { width: 100%; accent-color: var(--accent); }
+.readout {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-family: var(--mono);
+  border-radius: 8px;
+  border: 1px solid var(--edge);
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+.chip-loading { color: var(--warn); border-color: var(--warn); }
+.chip-loaded { color: var(--ok); border-color: var(--ok); }
+.chip-error { color: var(--err); border-color: var(--err); }
+.chip.active { color: var(--accent); border-color: var(--accent); }
+
+/* The state readout borrows the chip look; unlike the button chips above it
+   is not clickable. */
+.chip-loading, .chip-loaded, .chip-error { cursor: default; }
+
+.chiprow { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.transport { display: flex; align-items: center; gap: 6px; padding-top: 6px; }
+.transport button {
+  font: inherit;
+  padding: 2px 10px;
+  color: var(--text);
+  background: #262a35;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.transport .slider { flex: 1; }
+/* Author display beats the UA [hidden] rule, so hiding this row needs the
+   same explicit guard the page banner has. */
+.transport[hidden] { display: none; }
+
+.hint { margin: 4px 0 0; font-size: 11px; color: var(--muted); }
+
+.status-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.badge { padding: 1px 10px; border-radius: 9px; font-weight: 600; font-size: 12px; }
+.badge-webgpu { background: #103c22; color: var(--ok); }
+.badge-webgl2 { background: #3c2d10; color: var(--warn); }
+.badge-none { background: #3c1010; color: var(--err); }
+#status-panel.lost { background: #2a1212; }
+#status-panel.lost .badge { background: #3c1010; color: var(--err); }
+
+.panel-bar { display: flex; gap: 4px; align-items: center; margin-bottom: 6px; }
+
+.log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  background: #16181f;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+.log-row { display: flex; gap: 8px; white-space: nowrap; }
+.log-stamp { color: var(--muted); }
+.log-type { color: var(--accent); min-width: 92px; }
+.log-payload { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+
+.diag { margin-top: 8px; }
+.diag .label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 10px;
+  font-size: 12px;
+}
+.check input { accent-color: var(--accent); }
+
+#page-banner {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 22, 28, 0.92);
+  z-index: 10;
+}
+#page-banner[hidden] { display: none; }
+.banner-card {
+  max-width: 420px;
+  text-align: center;
+  padding: 24px;
+  background: var(--panel);
+  border: 1px solid var(--err);
+  border-radius: 8px;
+}
+.banner-card h2 { margin: 0 0 8px; color: var(--err); }
+.banner-card button {
+  margin-top: 12px;
+  font: inherit;
+  padding: 6px 18px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+}

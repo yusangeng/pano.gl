@@ -3,16 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>pano.gl</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #111; }
-    /* The viewer sizes its canvas from the container, so a zero-height
-       container is the most common way to get a blank page with no error. */
-    #pano { width: 100vw; height: 100vh; }
-  </style>
+  <title>pano.gl lab</title>
 </head>
 <body>
-  <div id="pano"></div>
-  <script type="module" src="./main.ts"></script>
+  <!-- The lab: panorama stage plus a dock-right instrument column. -->
+  <main class="lab">
+    <div id="stage"></div>
+    <aside class="dock">
+      <section id="status-panel" class="panel"></section>
+      <section id="camera-panel" class="panel"></section>
+      <section id="media-panel" class="panel"></section>
+      <section id="eventlog-panel" class="panel panel-grow"></section>
+    </aside>
+  </main>
+  <!-- Full-page states: no backend, creation failure, device lost. -->
+  <div id="page-banner" hidden></div>
+  <script type="module" src="./lab/main.ts"></script>
 </body>
 </html>

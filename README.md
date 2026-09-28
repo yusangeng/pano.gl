@@ -178,8 +178,11 @@ npm run lint         # eslint
 npm run doc          # typedoc -> docs/api/ (generated, not committed)
 ```
 
-The demo (`npm run start`) serves `demo/` with the assets used in the examples
-above. Integration tests run in a real browser — on CI against a software
+`npm run start` serves `demo/` with the assets used in the examples above. The
+landing page is an interactive lab — projection switching with live readouts,
+2K/4K/8K/video sources, backend capabilities, an event stream and the
+diagnostics channels — and `minimal.html` is the example above as a runnable
+page. Integration tests run in a real browser — on CI against a software
 adapter (SwiftShader), locally against a real GPU — see `CLAUDE.md` for the
 gates and conventions.
 
