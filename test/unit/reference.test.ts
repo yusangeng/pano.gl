@@ -318,10 +318,13 @@ describe('latitude on the non-linear cameras (the F5 fix)', () => {
    * The size of the shift also pins the units: subtracting the raw degrees
    * instead of the radians would move v by -30/PI, and folding latitude into
    * theta would move u instead of v.
+   *
+   * Planet left this table on 2026-09-28: its latitude is no longer a phi
+   * offset but the tilt of a Mobius pre-transform -- see the planet-tilt
+   * describe below.
    */
   const nonLinear: Array<[string, Projection]> = [
     ['cylindrical', { kind: 'cylindrical', zoom: 1, extent: [1, 1] }],
-    ['planet', { kind: 'planet', zoom: 1, extent: [4, 4] }],
     ['pannini', { kind: 'pannini', zoom: 1, extent: [4, 4] }]
   ]
 
@@ -347,5 +350,105 @@ describe('latitude on the non-linear cameras (the F5 fix)', () => {
     const b = project(1, 0.3, 0.7, { povLatitude: 45, povLongitude: 90 }, projection)
     expect(b.u).toBe(a.u)
     expect(b.v).toBe(a.v)
+  })
+})
+
+describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
+  /*
+   * The planet latitude is a sphere rotation: the Mobius pre-transform of
+   * projectPlanet rolls the source point at polar angle |lat| to the screen
+   * centre, so the centre displays the pose (povLatitude, povLongitude).
+   * The four blocks pin the spec's invariants I1-I4 in order.
+   */
+  const projection: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }
+  const wrap = (x: number): number => {
+    const w = x % 1
+    return w < 0 ? w + 1 : w
+  }
+
+  it('is bit-identical to the legacy closed form at lat = 0 (I1)', () => {
+    // A verbatim copy of the pre-tilt formula. The tilt must be the identity
+    // here term for term, which is gate A's unit-level precondition. Points
+    // stay off the zz = 0 and yy = 0 axes so a signed-zero difference cannot
+    // masquerade as (or hide) a real one.
+    const legacy = (y: number, z: number, lng: number) => {
+      const yy = y
+      const zz = -z
+      const m = 1 + zz * zz + yy * yy
+      const p = (2 * zz) / m
+      const q = (2 * yy) / m
+      const r = (m - 2) / m
+      let theta = Math.atan(p / q)
+      if (q < 0) theta = Math.PI + theta
+      else if (q > 0 && p < 0) theta = 2 * Math.PI + theta
+      theta -= lng
+      const phi = Math.atan(r / Math.sqrt(p * p + q * q)) + Math.PI / 2
+      return { u: wrap(theta / (2 * Math.PI)), v: phi / Math.PI }
+    }
+    for (const [y, z] of [[0.3, 0.7], [-0.4, 0.2], [0.5, -0.6], [-0.25, -0.85]] as const) {
+      const uv = project(1, y, z, { povLatitude: 0, povLongitude: 90 }, projection)
+      const want = legacy(y, z, (90 * Math.PI) / 180)
+      expect(uv.u, `u at (y=${y}, z=${z})`).toBe(want.u)
+      expect(uv.v, `v at (y=${y}, z=${z})`).toBe(want.v)
+    }
+  })
+
+  it('shows the pose at the screen centre: v = |lat| / PI, u tracks lng (I2)', () => {
+    // ndcToSurface(0, 0, [4, 4]) is the surface point the exact centre of the
+    // viewport reconstructs. The centre's sampled azimuth is PI for lat > 0
+    // (the q < 0 fixup branch) and 0 for lat < 0: the sign of lat picks which
+    // meridian the roll follows, |lat| how far -- the pole being the default
+    // centre, either drag direction can only leave it.
+    for (const [latDeg, lngDeg] of [[30, 90], [-45, 350], [90, 180], [-90, 0], [60, 0]] as const) {
+      const centre = ndcToSurface(0, 0, projection.extent)
+      const uv = project(centre[0], centre[1], centre[2], { povLatitude: latDeg, povLongitude: lngDeg }, projection)
+      expect(uv.v, `v at lat=${latDeg}`).toBeCloseTo((Math.abs(latDeg) * Math.PI / 180) / Math.PI, 12)
+      const azimuth = latDeg > 0 ? Math.PI : 0
+      const expectedU = wrap((azimuth - (lngDeg * Math.PI / 180)) / (2 * Math.PI))
+      expect(uv.u, `u at lat=${latDeg} lng=${lngDeg}`).toBeCloseTo(expectedU, 12)
+    }
+  })
+
+  it('rolls monotonically from the pole to the horizon and stays finite (I3)', () => {
+    let previous = -1
+    for (let latDeg = 0; latDeg <= 90; latDeg += 15) {
+      const uv = project(1, 0, 0, { povLatitude: latDeg, povLongitude: 0 }, projection)
+      expect(Number.isFinite(uv.v), `v at lat=${latDeg}`).toBe(true)
+      expect(uv.v, `v at lat=${latDeg}`).toBeGreaterThan(previous)
+      previous = uv.v
+    }
+    expect(previous).toBeCloseTo(0.5, 12)
+
+    // Finiteness across the full tilt range on a grid that never lands on the
+    // Mobius pole (|yy| = cot(|tilt|/2) with zz = 0, so |yy| >= 1 everywhere in
+    // the clamp range; 0.75 dodges it). The reference deliberately carries no
+    // denominator floor -- it is the arbiter, not a pixel comparison.
+    for (let latDeg = -90; latDeg <= 90; latDeg += 15) {
+      for (const y of [-0.75, -0.5, 0.5, 0.75]) {
+        for (const z of [-0.6, 0, 0.6]) {
+          const uv = project(1, y, z, { povLatitude: latDeg, povLongitude: 30 }, projection)
+          expect(Number.isFinite(uv.u), `u at lat=${latDeg} (y=${y}, z=${z})`).toBe(true)
+          expect(Number.isFinite(uv.v), `v at lat=${latDeg} (y=${y}, z=${z})`).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('drags the content with the finger (I4)', () => {
+    // A downward drag is povLatitude going negative (classifyDrag negates
+    // deltaY). The roll must bring what was ABOVE the centre to the centre:
+    // the source point at polar 30 degrees used to sit at w = +i*tan(15 deg)
+    // (one arm up the screen-vertical meridian), and after a 30-degree
+    // downward roll the centre samples exactly that point.
+    const arm = Math.tan(Math.PI / 12)
+    const before = project(1, arm, 0, { povLatitude: 0, povLongitude: 0 }, projection)
+    const after = project(1, 0, 0, { povLatitude: -30, povLongitude: 0 }, projection)
+    expect(after.u).toBeCloseTo(before.u, 12)
+    expect(after.v).toBeCloseTo(before.v, 12)
+    // The mirror roll: 0 -> +30 brings the point from below instead.
+    const mirror = project(1, -arm, 0, { povLatitude: 0, povLongitude: 0 }, projection)
+    const up = project(1, 0, 0, { povLatitude: 30, povLongitude: 0 }, projection)
+    expect(up.u).toBeCloseTo(mirror.u, 12)
+    expect(up.v).toBeCloseTo(mirror.v, 12)
   })
 })

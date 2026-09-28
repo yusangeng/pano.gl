@@ -26,12 +26,15 @@
  *
  * And two departures, each of which is neither a quirk nor an error:
  *
- *   - The three non-linear projections subtract a properly-converted latitude
- *     from `phi`. v0.2.2 read latitude nowhere on those cameras -- the shader
- *     declared `u_CamPOVLatitude` and never read it, and the recorded uniform
- *     stream shows the viewer never uploaded it either (defect F5). There is
- *     nothing to transcribe, so the term is v1's own, with correct units. See
- *     `latOffset`.
+ *   - The non-linear cameras consume a properly-converted latitude. v0.2.2
+ *     read latitude nowhere on those cameras -- the shader declared
+ *     `u_CamPOVLatitude` and never read it, and the recorded uniform stream
+ *     shows the viewer never uploaded it either (defect F5). There is nothing
+ *     to transcribe, so the term is v1's own, with correct units. Cylindrical
+ *     and pannini subtract it from `phi`; planet, since 2026-09-28, consumes
+ *     it as the tilt angle of the Mobius pre-transform in `projectPlanet`
+ *     (docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md).
+ *     See `latOffset`.
  *   - The longitude subtraction was `povLongitude / 4`, in *degrees*,
  *     subtracted from a value in *radians* -- a v0.2.2 defect the port carried
  *     through deliberately, corrected 2026-09-23 by user adjudication: the
@@ -89,7 +92,11 @@ function lngOffset (state: CameraState): number {
 }
 
 /**
- * The latitude offset the three non-linear projections subtract from `phi`.
+ * The latitude offset the non-linear projections consume: cylindrical and
+ * pannini subtract it from `phi`; planet uses it as the tilt angle of the
+ * Mobius pre-transform in `projectPlanet` (2026-09-28 planet-drag-semantics
+ * spec, which supersedes the undefined-geometry reading of this term that
+ * v1-design §11.4 F5 left open).
  *
  * This term is not a transcription of v0.2.2: on the non-linear cameras the
  * legacy shader never read latitude and the legacy viewer never uploaded it
@@ -171,10 +178,37 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
   // projection renders mirrored and inside out.
   const zz = -(z * zoom)
 
-  const m = 1 + zz * zz + yy * yy
+  // The tilt: a sphere rotation expressed as a Mobius transform of the plane
+  // point w = zz + i*yy, rolling the source point at polar angle |lat| along
+  // the screen-vertical meridian to the screen centre (2026-09-28
+  // planet-drag-semantics spec, section 2.1). The rotation axis is the
+  // horizontal screen axis -- the fixed points are w = +-1 -- and the angle is
+  // lat itself, no negation: drag down (lat < 0) rolls the centre so it
+  // samples what was above it, the content-follows-the-finger convention the
+  // other three cameras use. At lat = 0 this is the identity term for term
+  // (sin 0 = 0, cos 0 = 1), so the default little planet does not move by one
+  // bit. The WGSL/GLSL twins carry a 1e-15 floor on d2 for the excluded
+  // point's viewport crossing; this float64 arbiter deliberately does not --
+  // its tests sample around the pole, never on it.
+  const tilt = lat
+  const ct = Math.cos(tilt / 2)
+  const st = Math.sin(tilt / 2)
 
-  const p = (2 * zz) / m
-  const q = (2 * yy) / m
+  // w' = (ct*w - i*st) / (-i*st*w + ct), expanded into real components:
+  // numerator (ct*zz, ct*yy - st), denominator (ct + st*yy, -st*zz).
+  const numRe = ct * zz
+  const numIm = ct * yy - st
+  const denRe = ct + st * yy
+  const denIm = -st * zz
+  const d2 = denRe * denRe + denIm * denIm
+
+  const zn = (numRe * denRe + numIm * denIm) / d2
+  const yn = (numIm * denRe - numRe * denIm) / d2
+
+  const m = 1 + zn * zn + yn * yn
+
+  const p = (2 * zn) / m
+  const q = (2 * yn) / m
   const r = (m - 2) / m
 
   let theta = Math.atan(p / q)
@@ -187,7 +221,7 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
 
   theta -= lng
 
-  const phi = Math.atan(r / Math.sqrt(p * p + q * q)) + HALF_PI - lat
+  const phi = Math.atan(r / Math.sqrt(p * p + q * q)) + HALF_PI
   return toUV(theta, phi)
 }
 
