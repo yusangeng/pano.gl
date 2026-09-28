@@ -591,7 +591,7 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
   it('takes the canonical branch-point value where p and q are both zero', () => {
     // 2026-09-28 planet-review-followups spec, section 2.2, by user
     // adjudication -- this departs, openly, from the faithful-NaN stance the
-    // "keeps the NaNs" test below still pins for linear and pannini. The
+    // "keeps the NaNs" test above still pins for linear and pannini. The
     // Mobius reduction reaches p = q = 0 at five sites: the lat = 0 centre
     // (the numerator is the zero factor, in float64 too) and, in f32 only,
     // the four exact-hit sites at the +-90 clamps. The canonical values are
@@ -633,6 +633,22 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
       expect(hit.u, `u at (y=${y}) lat=${latDeg}`).toBe(u)
       expect(hit.v, `v at (y=${y}) lat=${latDeg}`).toBe(v)
     }
+
+    // The guard's other conjunct. On the whole y = 0 line at lat 0, q is
+    // exactly +0 while p stays nonzero (the tilt is the identity there, so
+    // w' is real -- not a branch point), so the q === 0 half must NOT fire.
+    // Every artifact row above has p = 0 with q != 0 -- they pin the p
+    // conjunct only -- and a guard widened to q === 0 alone survives every
+    // other test in this file and every gate (verified by mutation: it
+    // passed all 311 unit tests before these pins). Each pin kills one
+    // side of such a mutant: its v collapses to 1 at z = +0.25, its u
+    // homogenises to 0.75 at z = -0.25. The v literal is atan-derived, so
+    // toBeCloseTo per this file's convention; u = 0.25 is exact by
+    // construction ((PI/2) / TWO_PI quarters the turn bit for bit).
+    const axisPos = project(1, 0, 0.25, { povLatitude: 0, povLongitude: 0 }, projection)
+    expect(axisPos.v).toBeCloseTo(0.15595826075473862, 12)
+    const axisNeg = project(1, 0, -0.25, { povLatitude: 0, povLongitude: 0 }, projection)
+    expect(axisNeg.u).toBe(0.25)
   })
 
   it('witnesses the f32 floored path the shaders run: floor fires, branch points take the canonical value', () => {
