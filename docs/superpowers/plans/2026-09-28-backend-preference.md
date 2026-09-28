@@ -444,7 +444,7 @@ git commit -m "task-backend-preference: real-GPU user story for the forced backe
 
 This file is collected only by the `no-webgpu` project (per `vitest.config.ts` includes), whose setup asserts the adapter is null and WebGL2 answers — exactly the environment where forcing `'webgpu'` must reject.
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 Create `test/integration/fallback/backend-preference.test.ts`:
 
@@ -487,12 +487,12 @@ describe('forced backend preference without WebGPU', () => {
 })
 ```
 
-- [ ] **Step 2: Run it in the no-webgpu project**
+- [x] **Step 2: Run it in the no-webgpu project**
 
 Run: `npx vitest run --project no-webgpu test/integration/fallback/backend-preference.test.ts`
 Expected: both PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/integration/fallback/backend-preference.test.ts
