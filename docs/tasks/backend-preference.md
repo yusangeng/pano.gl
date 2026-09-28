@@ -80,4 +80,19 @@ SDD 期其余 Minor（终审 M1/M2、Task 1–7 各条）已在台账留档不�
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve**（2026-09-29，superloop-verify 自动验收，四步全审）。
+
+1. **结构化 review**：全 16 文件 diff 亲读（src 5 + test 6 + demo 3 + README + plan）。库面与 plan 代码块逐字一致（类型/字段/assertBackend/工厂三分支/两 viewer 线程化/index 导出）；auto 路径构造性逐字节未动（backend-factory.ts auto 行无 diff 标记）；demo 三件（context.ts 接口、main.ts 书签+开关+重建、status.ts 活 viewer 重渲染）与卡文逐项对上，ADV-1/2 守卫（replaceState try/catch、裸 `?` 处理）与 RT-1 严读披露（头注释 paused at t=0）在码亲见；README 一句文档准确；plan diff 为纯勾选翻转（58 行全为 `[ ]`→`[x]`，零内容改动）。
+2. **plan 红线逐条核对**：scope 白名单 16 文件全在 `[src/**, test/**, demo/**, README.md]` 内（plan/卡自动放行）；30/30 提交带 `task-backend-preference:` 前缀；File Structure 表逐文件吻合，无表外文件。偏离①–⑤均在案且有裁决依据（见下）。
+3. **门禁证据复核**：卡五节齐备，CR（0C/8I、整改 3 提交、4 条无法清零含理由）与测试质量结论（1C→整改 5b225c9+938b56a→0C/0W、突变双向击杀）留痕合规，覆盖陈述有网/无网+理由齐。计数核对：单测 316 = 309+7 ✓；集成 188 = 分支基线 182+6（分支点在 planet 合并前），合并后 master 应为 189 过/1 skip，与 task-merge 前后 verify 对照。**覆盖主张亲验**：分支 worktree 亲跑 `npm run test:coverage`，**98.73%（235/238 branches）逐位复现**，check-coverage 闸绿——注意 npm test 不含覆盖闸（spec §7.6 括注措辞失准，执行者实跑并上报了，不构成缺陷，记观察）。
+4. **最重发现亲验**：
+   - **突变双向击杀对**（最重测试主张）：真 GPU 侧 `videoViewer({backend:'webgl2'})` 断言 `capabilities.backend==='webgl2'`——本机 auto≡webgpu，该读回只可能来自线程化强制值；no-webgpu 侧 `create({backend:'webgpu'})` 具名拒绝——丢参则缺省回落 WebGL2、create 会 resolve，`expect(...).rejects` 反向红。两半逻辑亲读成立，击杀主张采信。
+   - **强制语义亲验**：`preference !== 'auto'` 只试一个后端、失败即拒且消息点名（spec §2 消息逐字）；拒绝消息与单测断言字面一致。
+   - **容差注释亲验**：MAX_CROSS_BACKEND_DIFF=4 的 4=2+2 分解、Gate A ±2 LSB 锚（WebGPU 半）、Gate C "only cross-backend pixel check on WebGL2" 2/255、外推非实测之披露——与两道门源码口径一致（GAP1/GAP2 两轮修正后的终稿）。
+   - **书签偏好-事实分离亲验**：readUrlState/writeUrlState 均记 preference 非 capability（spec §3）；URL 回写仅在 installViewer 成功后；boot 失败无条件摘参（代价已披露）+ replaceState 有守卫。
+
+**裁决项与偏离逐条裁决：接受，不构成打回**——D1（'Backend switch failed' 标题偏离 spec §4.1 字面）：机制完全一致（同一 showBanner、终态、Reload 唯一恢复），标题点名故障源语义更准，已披露、审者建议保留，accept；D2（video 播放态）：spec §3 只承诺 pose 携带，严读披露在 main.ts 头注释，seek-on-load 属超线不做，accept；无法清零 4 条：①video 强制路径实际已由第 2 关 5b225c9 落测试闭合（CR 时"排期第 2 关"已兑现）②setBackend 无消费者系 plan Task 6 Step 1 指定交付物，修法备档③dispose+recreate ×2 样本量 2 不抽象④RT-2 瞬态吞并有轻量替代备档——均 accept；偏离①（c6d3c17+06cb381 两处 spec 主导修复）②③④⑤均属 spec/plan 已裁或工具行为，无 scope 逃逸。
+
+**勘误记录（不阻塞）**：卡「做了什么」第 1 条路径笔误 `src/core/options.ts`，实为 `src/viewer/options.ts`（spec §6 与 plan 均为 viewer）——纯文档笔误，留档不改。
+
+合并安全性由 task-merge 六重保护收口（合并前后主分支 verify 双跑）。
