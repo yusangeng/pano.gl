@@ -5,7 +5,8 @@
  *  - projection change -> `viewer.cameraOptions = { projection }` (pose kept)
  *  - same-class source  -> `viewer.src = url` (pose and projection kept)
  *  - image <-> video    -> dispose + recreate the other class, pose carried over
- *  - backend preference -> dispose + recreate with the `backend` option (pose carried, video playback restarts)
+ *  - backend preference -> dispose + recreate with the `backend` option
+ *    (pose carried; video playback does not carry -- the new element starts paused at t=0)
  *
  * The URL query (`?projection=planet&zoom=0.5&source=video`) is lab state as
  * a bookmark: read once at boot, written back on every change.
