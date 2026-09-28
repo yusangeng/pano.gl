@@ -1,0 +1,36 @@
+import { describe, expect, it } from 'vitest'
+import { FramelessImageViewer } from '../../../src/index'
+import { makeContainer } from '../support/dom'
+
+/*
+ * The forced-preference rejections, in the project that exists to hold
+ * them: --disable-gpu took the WebGPU adapter away (this project's setup
+ * asserts it), so 'webgpu' is a request this environment genuinely cannot
+ * honour while WebGL2 still answers. The real-GPU twin
+ * (test/integration/backend-preference.test.ts) holds the success half.
+ */
+describe('forced backend preference without WebGPU', () => {
+  it("forcing 'webgpu' rejects, naming the requested backend", async () => {
+    // The message is the contract: a caller deciding what to do about a
+    // machine without the requested backend has to be told WHICH backend
+    // failed, or 'auto' and 'webgpu' failures are indistinguishable.
+    await expect(FramelessImageViewer.create({
+      container: makeContainer(),
+      src: '/fixtures/panorama.png',
+      backend: 'webgpu'
+    })).rejects.toThrow(/backend 'webgpu' was requested/i)
+  })
+
+  it('the default still falls back to WebGL2 rather than rejecting', async () => {
+    // The control for the test above: strictness belongs to the explicit
+    // request. A caller who passed nothing keeps the fallback the library
+    // has always performed -- the compatibility red line of spec §2.
+    const viewer = await FramelessImageViewer.create({
+      container: makeContainer(),
+      src: '/fixtures/panorama.png'
+    })
+    const backend = viewer.capabilities.backend
+    viewer.dispose()
+    expect(backend).toBe('webgl2')
+  })
+})
