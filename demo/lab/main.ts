@@ -141,7 +141,7 @@ async function boot (): Promise<void> {
       .catch((error) => showBanner(banner, 'Backend switch failed', String(error)))
   }
 
-  mountStatusPanel(required('#status-panel'), selected, backendPref, setBackend)
+  mountStatusPanel(required('#status-panel'), selected, () => backendPref, setBackend, (listener) => viewers.subscribe(listener))
 
   if (selected.backend === 'none') {
     showBanner(banner, 'No rendering backend',
