@@ -615,11 +615,13 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     // off zero (numRe is -0, denIm is +-0, and p is exactly +-0 -- the q
     // conjunct alone holds the guard off at all four sites), so the guard
     // does NOT fire and the formula's own finite values stand. They are
-    // mid-jump artifacts of that one ulp -- each sits 0 or 1/2 a turn from
-    // the 0.75 limit either side homes in on -- pinned as the documented,
-    // non-normative divergence between this arbiter and the f32 shaders
-    // (which take 0.75 at every site, witnessed in the f32 block below).
-    // A change to them is an engine or half-angle change and must be seen.
+    // mid-jump artifacts of that one ulp -- each artifact u is exactly 0
+    // or 0.5 (theta exactly 0 or PI), the midpoint position of the
+    // half-turn jump between the 0.25 and 0.75 one-sided limits -- pinned
+    // as the documented, non-normative divergence between this arbiter
+    // and the f32 shaders (which take 0.75 at every site, witnessed in
+    // the f32 block below). A change to them is an engine or half-angle
+    // change and must be seen.
     const artifacts: Array<[number, number, number, number]> = [
       // [y, lat, u, v] -- Mobius pole sites first, then tilt centres. The
       // -0 in the first row is deliberate and load-bearing (toBe is

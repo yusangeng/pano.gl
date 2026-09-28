@@ -176,13 +176,16 @@ describe('WebGL2 shader source', () => {
     expect(body, 'the phi pole value is missing').toContain('phi = PI')
     expect(body, 'the phi zero value is missing').toContain('phi = 0.0')
 
-    // Ordered pin, the role and position net. The five pins above test
-    // presence and the token parity is symmetric under an edit made to
-    // both files at once: swap the phi arms, or hoist theta -= lng back
-    // above the guard (where cylindrical and pannini carry it), and every
-    // other test in the repo stays green -- the f32 witness pins lng at 0,
-    // and gate C's even canvas never rasterises a guarded texel. The whole
-    // collapsed guard plus its tail, one string.
+    // Ordered pin, the role and position net. The five pins above are
+    // diagnostics only: the ordered string below contains all five
+    // substrings, so they add no killing power beyond it -- their value is
+    // naming which piece went missing when one of them fails. The token
+    // parity is symmetric under an edit made to both files at once: swap
+    // the phi arms, or hoist theta -= lng back above the guard (where
+    // cylindrical and pannini carry it), and every other test in the repo
+    // stays green -- the f32 witness pins lng at 0, and gate C's even
+    // canvas never rasterises a guarded texel. The whole collapsed guard
+    // plus its tail, one string.
     expect(body, 'the guard arms or position changed').toContain(
       'if (p == 0.0 && q == 0.0) { theta = 1.5 * PI; phi = PI; ' +
         'if (num_re == 0.0 && num_im == 0.0) { phi = 0.0; } } theta -= lng; return to_uv'
