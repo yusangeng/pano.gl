@@ -172,11 +172,23 @@ vec2 project_planet (vec3 s, float zoom, float lng, float lat) {
   float den_re = ct + st * y;
   float den_im = -st * z;
   // The excluded sphere point crosses the viewport at large tilts (spec
-  // section 2.3): exactly on its crossing the denominator is zero and the
-  // division would be 0/0 = NaN, a bad pixel. The floor keeps w' finite and
-  // the fragment at its continuous limit. The float64 reference deliberately
-  // carries no floor -- it is the arbiter, and its tests sample around the
-  // pole, never on it.
+  // section 2.3): near its crossing d2 underflows toward zero and the
+  // division below blows up. The floor's deliverable is that division -- it
+  // keeps zn/yn finite and the fragment at its continuous limit, pinned with
+  // the floor firing at z = 1e-8 off the pole by the f32 witness in
+  // test/unit/reference.test.ts. Exactly ON the crossing the floor stops one
+  // link short: at the lat = +-90 clamps, f32 sin and cos of the same f32
+  // half-angle round to the same bits, den_re cancels to +0, the floor then
+  // yields zn = yn = +-0, and atan(p / q) becomes atan(0 / 0) = NaN. The
+  // tilt's own centre w' = 0 (y = tan(tilt / 2), exactly +-1 at those same
+  // clamps) is a second NaN site with d2 = 2, beyond any floor. Both need
+  // lat exactly at the clamp and a fragment centre landing exactly on them:
+  // at zoom 1 that is odd width with height = 2 mod 4, and other zoom
+  // values reach the same y = +-1 through other rational rows; both are
+  // the single-NaN-texel class the lat = 0 centre pixel has always carried,
+  // kept rather than normalised per the reference's faithful-NaN stance. The
+  // float64 reference deliberately carries no floor -- it is the arbiter, and
+  // its tests sample around the pole, never on it.
   float d2 = max(den_re * den_re + den_im * den_im, 1e-15);
 
   float zn = (num_re * den_re + num_im * den_im) / d2;

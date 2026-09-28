@@ -361,7 +361,8 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
    * The four blocks pin the spec's invariants I1-I4 in order; the fifth pins
    * the transform's values away from the centre (review I-1); the sixth pins
    * the Mobius pole the other blocks deliberately sample around (CR round 1,
-   * testing specialist).
+   * testing specialist); the seventh witnesses the f32 floored arithmetic
+   * the shaders actually run (CR round 2, red team).
    */
   const projection: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }
   const wrap = (x: number): number => {
@@ -535,8 +536,12 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     }
     // The approach is strict: v still rising and u still homing in on its
     // per-side limit at every step. A floor on d2 -- the one thing the
-    // shaders carry and this arbiter must not -- caps |w'| and flattens both
-    // progressions, so these two lines are what kill a floor-adding mutant.
+    // shaders carry and this arbiter must not -- caps |w'|, which reverses
+    // the v progression and deflates the exact-pole v pinned below (checked
+    // against the shaders' actual 1e-15 floor: v falls from 1 - 3.2e-8 back
+    // to 1 - 6.4e-8, exact-pole v to 0.099). The u homing happens to survive
+    // the floor, so the v line and the exact-pole pin are the pair that kill
+    // a floor-adding mutant.
     for (let i = 1; i < approach.length; i++) {
       const cur = approach[i]!
       const prev = approach[i - 1]!
@@ -546,12 +551,12 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
       expect(Math.abs(cur.minus.u - 0.25), `u- homing in from eps=${prev.eps} to ${cur.eps}`)
         .toBeLessThan(Math.abs(prev.minus.u - 0.25))
     }
-    // The exact pole: ct and st differ in the last ulp at tilt = -PI/2, so
-    // d2 is ~1e-34 rather than 0 and the point stays finite by float64
-    // rounding. Pinned so a change in that luck (an engine swap, a different
-    // half-angle path) is a visible, adjudicated failure rather than a
-    // silent one -- the same stance the module takes at its other
-    // degenerate points.
+    // The exact pole: ct and |st| differ by exactly one ulp at tilt = -PI/2,
+    // so d2 is (1.1e-16)^2 = 1.2e-32 rather than 0 and the point stays
+    // finite by float64 rounding. Pinned so a change in that luck (an engine
+    // swap, a different half-angle path) is a visible, adjudicated failure
+    // rather than a silent one -- the same stance the module takes at its
+    // other degenerate points.
     const exact = project(1, 1, 0, { povLatitude: -90, povLongitude: 0 }, projection)
     expect(Number.isFinite(exact.u) && Number.isFinite(exact.v), 'finite exactly on the pole').toBe(true)
     expect(exact.v).toBeCloseTo(1, 6)
@@ -573,6 +578,100 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
           expect(uv.v, `v in [0,1] at lat=${latDeg} ndc=(${ndcX},${ndcY})`).toBeGreaterThanOrEqual(0)
           expect(uv.v, `v in [0,1] at lat=${latDeg} ndc=(${ndcX},${ndcY})`).toBeLessThanOrEqual(1)
         }
+      }
+    }
+  })
+
+  it('witnesses the f32 floored path the shaders run: floor fires, atan(0/0) remains', () => {
+    // The blocks above run the float64 arbiter; the shaders run f32 with the
+    // 1e-15 floor, and until this block nothing executed that arithmetic (CR
+    // round 2, red team). This replica transcribes panorama.glsl's
+    // project_planet -- the WGSL twin is token-identical, held by the shader
+    // tests -- with Math.fround at every intermediate, and three deliberate
+    // elisions: lng pinned at 0 (theta -= 0 changes no bit), the zoom
+    // pre-multiplication (every pin runs zoom 1, an exact identity), and
+    // to_uv's mod on u (every pinned theta / TWO_PI sits in [0, 1) and mod of
+    // NaN stays NaN; the v flip is transcribed). One caveat the pins below
+    // carry: JS Math.sin/cos/atan/sqrt are f64-then-rounded, so a backend's
+    // f32 transcendentals may differ by an ulp; the exact-hit behaviour
+    // pinned here is the JS-rounding truth and documents the class, not
+    // every backend's bits.
+    const f = Math.fround
+    const F32_PI = f(Math.PI)
+    const shaderPlanet = (y: number, z: number, latDeg: number): { u: number, v: number, d2: number } => {
+      const yy = f(y)
+      const zz = f(-z)
+      const lat = f(f(f(latDeg) * F32_PI) / f(180))
+      const ct = f(Math.cos(f(lat * f(0.5))))
+      const st = f(Math.sin(f(lat * f(0.5))))
+      const numRe = f(ct * zz)
+      const numIm = f(f(ct * yy) - st)
+      const denRe = f(ct + f(st * yy))
+      const denIm = f(f(-st) * zz)
+      const d2 = f(Math.max(f(f(denRe * denRe) + f(denIm * denIm)), 1e-15))
+      const zn = f(f(f(numRe * denRe) + f(numIm * denIm)) / d2)
+      const yn = f(f(f(numIm * denRe) - f(numRe * denIm)) / d2)
+      const m = f(f(1 + f(zn * zn)) + f(yn * yn))
+      const p = f(f(2 * zn) / m)
+      const q = f(f(2 * yn) / m)
+      const r = f(f(m - 2) / m)
+      let theta = Math.atan(f(p / q))
+      if (q < 0) theta = f(f(Math.PI) + theta)
+      else if (q > 0 && p < 0) theta = f(f(f(2) * F32_PI) + theta)
+      const phi = f(f(Math.atan(f(r / f(Math.sqrt(f(f(p * p) + f(q * q))))))) + f(F32_PI / f(2)))
+      const u = f(theta / f(f(2) * F32_PI))
+      const v = f(1 - f(phi / f(Math.PI)))
+      return { u, v, d2 }
+    }
+
+    // The approach ladder, both clamp signs, on the Mobius pole's own column
+    // (y = +1 at lat = -90, y = -1 at lat = +90): finite, u homing on 0.75 at
+    // O(eps), v on the source-pole row at O(eps) -- and at the last rung the
+    // floor FIRES (raw d2 is 5e-17, floored to fround(1e-15)), which is the
+    // floor's actual deliverable and was pinned nowhere before. Past that
+    // rung v is floor-limited at ~6e-8 rather than O(eps), hence the looser
+    // bound there.
+    for (const [site, latDeg] of [[1, -90], [-1, 90]] as const) {
+      for (const [eps, vBound] of [[1e-3, 1e-3], [1e-6, 1e-6], [1e-8, 2e-7]] as const) {
+        const near = shaderPlanet(site, eps, latDeg)
+        expect(
+          Number.isFinite(near.u) && Number.isFinite(near.v),
+          `finite near the pole at (y=${site}) lat=${latDeg} eps=${eps}`
+        ).toBe(true)
+        expect(Math.abs(near.u - 0.75), `u homing on 0.75 at eps=${eps}`).toBeLessThan(4 * eps)
+        expect(Math.abs(near.v), `v at the source-pole row at eps=${eps}`).toBeLessThan(vBound)
+      }
+      expect(shaderPlanet(site, 1e-8, latDeg).d2, `the floor fired at (y=${site}) lat=${latDeg}`)
+        .toBe(Math.fround(1e-15))
+    }
+
+    // Exactly on the degenerate sites, all four (both clamps, both signs of
+    // y): u is NaN and v collapses to a source pole -- pinned as the
+    // documented residual, the same faithful-NaN class the lat = 0 centre
+    // pixel carries, not an accident. The d2 pins say which site is which:
+    // the Mobius pole's denominator zero is floored up from 0 (and the floor
+    // still cannot save theta, which is atan(0/0) one link downstream), while
+    // the tilt centre's own w' = 0 carries d2 = O(1) -- no d2 floor can ever
+    // reach that one.
+    const exactSites: Array<[number, number, 'pole' | 'centre']> = [
+      [1, -90, 'pole'],
+      [-1, 90, 'pole'],
+      [-1, -90, 'centre'],
+      [1, 90, 'centre']
+    ]
+    for (const [y, latDeg, kind] of exactSites) {
+      const hit = shaderPlanet(y, 0, latDeg)
+      expect(Number.isNaN(hit.u), `u NaN exactly on the ${kind} site (y=${y}) at lat=${latDeg}`).toBe(true)
+      expect(hit.v, `v collapses to a source pole on the ${kind} site (y=${y}) lat=${latDeg}`).toBe(1)
+      if (kind === 'pole') {
+        expect(hit.d2, `d2 floored up from 0 on the pole site (y=${y}) lat=${latDeg}`)
+          .toBe(Math.fround(1e-15))
+      } else {
+        // The analytic value is (2c)^2 with c the shared ct/st bits, about
+        // 1.9999999; the bound stays at half of it because the pin's job is
+        // telling the centre site (d2 = O(1)) from the pole site (d2 at the
+        // floor, nine orders below), not measuring the constant.
+        expect(hit.d2, `d2 is O(1) on the centre site (y=${y}) lat=${latDeg}`).toBeGreaterThan(1)
       }
     }
   })
