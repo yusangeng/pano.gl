@@ -16,6 +16,7 @@ import type { LabContext, LabViewer, SourceId } from './context'
 import { h } from './dom'
 import { mountStatusPanel } from './panels/status'
 import { mountCameraPanel } from './panels/camera'
+import { mountMediaPanel } from './panels/media'
 import './lab.css'
 
 const SOURCE_URLS: Readonly<Record<SourceId, string>> = {
@@ -157,6 +158,7 @@ async function boot (): Promise<void> {
   // state; a later mount would still receive the current viewer, because
   // subscribe fires the listener immediately.
   mountCameraPanel(required('#camera-panel'), ctx, stage)
+  mountMediaPanel(required('#media-panel'), ctx)
 
   const state = readUrlState()
   await installViewer(state.source, state.projection)
