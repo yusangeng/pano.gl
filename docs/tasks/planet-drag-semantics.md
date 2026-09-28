@@ -3,7 +3,7 @@ plan: docs/superpowers/plans/2026-09-28-planet-drag-semantics.md
 scope: [src/core/reference.ts, src/renderer/webgpu/shaders/panorama.wgsl, src/renderer/webgl2/shaders/panorama.glsl, test/unit/reference.test.ts, test/unit/webgl2-shaders.test.ts]
 verify: npm run typecheck && npm run lint && npm test
 layer: domain
-state: open
+state: doing
 createdAt: 2026-09-28T07:09:25.224Z
 ---
 # 任务：planet 拖拽语义：可驾驶中心
