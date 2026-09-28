@@ -107,4 +107,18 @@ createdAt: 2026-09-28T07:09:25.224Z
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve**（2026-09-28，superloop-verify 自动验收，四步全审）。
+
+1. **结构化 review**：全 diff 亲读（三处同步点 + 两测试文件 + plan + 卡）。Möbius 分量展开与 spec §2.1/勘误 `790920b` 三处逐项一致（`tilt = lat` 不取负、`numRe/numIm/denRe/denIm` 同形）；reference 无下限、两 shader 带 `max(d2, 1e-15)`，字面量两侧一致；`theta -= lng` 三处原样；cyl/pannini 零 hunk；uniform 零改动；文档注记按 spec §6 落齐。输入校验/竞态/枚举完备类目在本 diff 形态下无适用面（纯函数公式替换 + 测试）。
+2. **plan 红线逐条核对**：File Structure 恰为 plan 五文件，无越界文件；三处同步按 plan 轮次（reference 先行提交 → 两份 shader 同一提交）；plan diff 为 15 个纯勾选翻转，零内容改动；`gen:shaders` 不需要（generated.ts 未触）；spec §5 两次翻转（F5 表 planet 行移出、`/-\s*lat\b/` 循环 planet 移出）均落地。
+3. **门禁证据复核**：10/10 提交带 `task-planet-drag-semantics:` 前缀；diff 7 文件全在 scope + plan/卡自动放行内；完成报告五节齐（含验收方法与判读、五条语义验收的数值证据）；CR 结论四轮（三专家/红队/对抗校验/独立验证 subagent，后者 PASS 且 5 nit 已修）+ 三条例外条款（RT1 保留 / perf ×2 no-action / RT3 no-action）均带内容-原因-风险三元组；测试质量结论含必含覆盖陈述（四行路径表，无网部分给出层间边界理由）。留痕合规。
+4. **最重发现亲验**：
+   - **Möbius 公式三处亲验**：逐 hunk 对照 spec，分量展开、半角三角、下限有无，全部一致。
+   - **「−0→+0 hedge 镜像」亲验消解**：分支侧两份 shader 实读——hedge 是注释从句（`except a -0 -> +0 flip ... which no consumer distinguishes`），不是代码行；theta fixup 代码两份逐字节相同且未动。±0 在 `q < 0.0`/`q > 0.0` 比较中同假，符号零差异被 `mod/fract` 归一，门 A 构造性安全成立。台账第 4 条「各补一行 mirror hedge」的表述与实物不符（实物为注释），不构成缺陷，合并后由卡留档即可。
+   - **f32 复刻证人忠实性亲验**：复刻的 `v = 1 - phi/PI` 与 GLSL `to_uv` 逐字一致（`toUV`/`to_uv` 的 v 翻转差异为 diff 外既有遗留代码，两侧钉各自内部自洽）；三处 elision（lng=0、zoom=1、u 的 mod）声明成立；floor 生效档 + 四精确站点 + d2 站点判别与 RT1 裁决互证。
+   - **弦距等距块（review I-1）数学亲验**：旋转保弦距、球面点仅从公开输出恢复（避免回声室）、一致反射本身是等距——论证成立；两例分母符号 mutant 由该块杀灭，弥补 I1–I4 只钉原点的盲区。
+   - **atan 计数勘误接受**：`project_planet` 实有 2 处 atan（`atan(p/q)` + `atan(r/sqrt(...))`），plan Step 6 的「每 body 仍 1 处」是 plan 自身笔误，执行者按实测 GLSL==WGSL==2 钉住是正确处置。
+
+**例外条款与遗留风险逐条裁决：接受，不构成打回**——RT1（精确命中站点的 ≤2 NaN 纹元）与仓库既有 faithful-NaN 裁决同款，条件为测度零组合（门禁画布全偶数、CI 不触达），已有可执行证人钉住四站点行为；spec §2.3「floor=连续极限」表述的勘误属主分支 spec 文件、不在本卡白名单，留待后续 spec 维护（不阻塞）；perf ×2（ct/st 逐片段求值）受 spec §2.4 uniform 零改动与三处逐项转写纪律约束，no-action 成立；RT3（门 C 仲裁腿仅 cylindrical）有 token-for-token + f32 复刻 + 人工中心契约三方缓解，「扩门 C 仲裁到 planet」记为后续任务建议。九条偏离台账逐条过目：均属 plan 勘误修正、CR 轮整改或零足迹验收手段，无 scope 逃逸。
+
+合并安全性由 task-merge 六重保护收口（合并前后主分支 verify 双跑）。
