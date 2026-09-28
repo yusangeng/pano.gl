@@ -3,7 +3,7 @@
 // A line-by-line transcription of src/renderer/webgpu/shaders/panorama.wgsl as
 // it stands -- that is, including the latitude handling the non-linear
 // projections gained when latitude stopped being ignored (defect F5):
-// cylindrical and pannini subtract `- lat` from phi, and since 2026-09-28
+// cylindrical and pannini carry the `- lat` term in phi, and since 2026-09-28
 // planet consumes latitude as the tilt of a Mobius pre-transform (see
 // project_planet). Transcribing an earlier version of that file loses the
 // latitude handling, and gate C fails on every state whose povLatitude is not

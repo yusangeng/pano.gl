@@ -359,7 +359,9 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
    * projectPlanet rolls the source point at polar angle |lat| to the screen
    * centre, so the centre displays the pose (povLatitude, povLongitude).
    * The four blocks pin the spec's invariants I1-I4 in order; the fifth pins
-   * the transform's values away from the centre (review I-1).
+   * the transform's values away from the centre (review I-1); the sixth pins
+   * the Mobius pole the other blocks deliberately sample around (CR round 1,
+   * testing specialist).
    */
   const projection: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }
   const wrap = (x: number): number => {
@@ -496,6 +498,80 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
           const before = chord(toSphere(0, y1, z1), toSphere(0, y2, z2))
           const after = chord(toSphere(latDeg, y1, z1), toSphere(latDeg, y2, z2))
           expect(after, `chord at lat=${latDeg} for (${y1}, ${z1}) vs (${y2}, ${z2})`).toBeCloseTo(before, 12)
+        }
+      }
+    }
+  })
+
+  it('pins the Mobius pole the other blocks sample around', () => {
+    // The pole of the tilt denominator (d2 = 0 at yy = -cot(tilt/2), zz = 0)
+    // sits on the visible surface for |lat| >= ~53 degrees and povLatitude's
+    // clamp reaches +-90, so reachable camera states render through it. The
+    // blocks above deliberately sample around it; this one is the executable
+    // witness for the region the shaders' 1e-15 floor guards -- the
+    // continuous limit the floor claims to preserve, pinned here on the
+    // unfloored float64 arbiter, the exact point, and the whole tilted
+    // surface at the clamp extremes.
+    const epsLadder = [1e-3, 1e-6, 1e-7, 1e-8] as const
+    const approach = epsLadder.map((eps) => ({
+      eps,
+      plus: project(1, 1, eps, { povLatitude: -90, povLongitude: 0 }, projection),
+      minus: project(1, 1, -eps, { povLatitude: -90, povLongitude: 0 }, projection)
+    }))
+    // The pole is (y, z) = (1, 0) at lat = -90: approaching along y = 1 from
+    // either z side, v converges to 1 (the far pole) and u to 0.75 / 0.25
+    // per side. At 1e-3 the approach is still O(eps) away from the limit
+    // (~8e-5), so the limit assertions start one rung down; the 1e-3 rung
+    // still carries finiteness and the strict progression below.
+    for (const { eps, plus, minus } of approach) {
+      expect(Number.isFinite(plus.u) && Number.isFinite(plus.v), `finite above the pole at eps=${eps}`).toBe(true)
+      expect(Number.isFinite(minus.u) && Number.isFinite(minus.v), `finite below the pole at eps=${eps}`).toBe(true)
+    }
+    for (const { eps, plus, minus } of approach.slice(1)) {
+      expect(plus.u, `u above the pole at eps=${eps}`).toBeCloseTo(0.75, 6)
+      expect(minus.u, `u below the pole at eps=${eps}`).toBeCloseTo(0.25, 6)
+      expect(plus.v, `v at eps=${eps}`).toBeCloseTo(1, 6)
+      expect(minus.v, `v at eps=${eps}`).toBeCloseTo(1, 6)
+    }
+    // The approach is strict: v still rising and u still homing in on its
+    // per-side limit at every step. A floor on d2 -- the one thing the
+    // shaders carry and this arbiter must not -- caps |w'| and flattens both
+    // progressions, so these two lines are what kill a floor-adding mutant.
+    for (let i = 1; i < approach.length; i++) {
+      const cur = approach[i]!
+      const prev = approach[i - 1]!
+      expect(cur.plus.v, `v strictly rises from eps=${prev.eps} to ${cur.eps}`).toBeGreaterThan(prev.plus.v)
+      expect(Math.abs(cur.plus.u - 0.75), `u+ homing in from eps=${prev.eps} to ${cur.eps}`)
+        .toBeLessThan(Math.abs(prev.plus.u - 0.75))
+      expect(Math.abs(cur.minus.u - 0.25), `u- homing in from eps=${prev.eps} to ${cur.eps}`)
+        .toBeLessThan(Math.abs(prev.minus.u - 0.25))
+    }
+    // The exact pole: ct and st differ in the last ulp at tilt = -PI/2, so
+    // d2 is ~1e-34 rather than 0 and the point stays finite by float64
+    // rounding. Pinned so a change in that luck (an engine swap, a different
+    // half-angle path) is a visible, adjudicated failure rather than a
+    // silent one -- the same stance the module takes at its other
+    // degenerate points.
+    const exact = project(1, 1, 0, { povLatitude: -90, povLongitude: 0 }, projection)
+    expect(Number.isFinite(exact.u) && Number.isFinite(exact.v), 'finite exactly on the pole').toBe(true)
+    expect(exact.v).toBeCloseTo(1, 6)
+    const mirror = project(1, -1, 0, { povLatitude: 90, povLongitude: 0 }, projection)
+    expect(Number.isFinite(mirror.u) && Number.isFinite(mirror.v), 'finite on the +90 pole').toBe(true)
+    expect(mirror.v).toBeCloseTo(1, 6)
+    // The lat = 0 sweeps elsewhere in this file, extended to the tilts whose
+    // pole is on-screen. Two grid points land exactly on the pole ((0, 0.5)
+    // at lat = -90, (0, -0.5) at lat = +90) and stay finite by the same
+    // last-ulp luck -- they are part of the pin, not skipped.
+    for (const latDeg of [-90, -60, 60, 90]) {
+      for (let ndcY = -1; ndcY <= 1.0001; ndcY += 0.125) {
+        for (let ndcX = -1; ndcX <= 1.0001; ndcX += 0.125) {
+          const s = ndcToSurface(ndcX, ndcY, projection.extent)
+          const uv = project(s[0], s[1], s[2], { povLatitude: latDeg, povLongitude: 30 }, projection)
+          expect(Number.isFinite(uv.u) && Number.isFinite(uv.v), `finite at lat=${latDeg} ndc=(${ndcX},${ndcY})`).toBe(true)
+          expect(uv.u, `u in [0,1] at lat=${latDeg} ndc=(${ndcX},${ndcY})`).toBeGreaterThanOrEqual(0)
+          expect(uv.u, `u in [0,1] at lat=${latDeg} ndc=(${ndcX},${ndcY})`).toBeLessThanOrEqual(1)
+          expect(uv.v, `v in [0,1] at lat=${latDeg} ndc=(${ndcX},${ndcY})`).toBeGreaterThanOrEqual(0)
+          expect(uv.v, `v in [0,1] at lat=${latDeg} ndc=(${ndcX},${ndcY})`).toBeLessThanOrEqual(1)
         }
       }
     }

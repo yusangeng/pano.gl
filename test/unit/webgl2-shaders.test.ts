@@ -161,6 +161,18 @@ describe('WebGL2 shader source', () => {
     expect(body, 'the excluded-point floor is missing').toContain('1e-15')
   })
 
+  it('planet no longer carries the phi latitude offset the tilt replaced', () => {
+    // The pre-2026-09-28 body ended with 'atan(...) + HALF_PI - lat'. A merge
+    // that keeps that term alongside the Mobius tilt passes every parity test
+    // (both shaders edited identically) and every structural pin above (the
+    // tilt tokens are all present) -- only gate C on a real GPU would notice.
+    // The inverse of the cylindrical/pannini assertion above is the unit-level
+    // tripwire for exactly that stale term. 'tilt = lat' and '- st' do not
+    // match, and skeleton strips comments, so the assertion is exact.
+    expect(skeleton(glslBody('project_planet')), 'the stale phi offset survived next to the tilt')
+      .not.toMatch(/-\s*lat\b/)
+  })
+
   it('subtracts an honestly converted povLongitude, not / 4.0', () => {
     // v0.2.2 subtracted degrees from radians; the port carried that through as
     // the deliberate retention recorded in v1-design §11.4 (B1), corrected
