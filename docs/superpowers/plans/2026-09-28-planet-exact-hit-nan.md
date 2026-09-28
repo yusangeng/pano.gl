@@ -249,7 +249,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 The two shaders must be edited **identically** — the token-for-token parity test fails between the two edits, which is expected; do not run it as a checkpoint between them.
 
-- [ ] **Step 1: Add the failing structural pin**
+- [x] **Step 1: Add the failing structural pin**
 
 In `test/unit/webgl2-shaders.test.ts`, immediately after the `it('tilts planet through a Mobius pre-transform of the plane point', ...)` test, add:
 
@@ -271,12 +271,12 @@ In `test/unit/webgl2-shaders.test.ts`, immediately after the `it('tilts planet t
   })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run test/unit/webgl2-shaders.test.ts`
 Expected: FAIL — `assigns the canonical branch-point value` (the guard is absent). The token-for-token parity test still PASSES (neither shader edited yet).
 
-- [ ] **Step 3: Edit the WGSL — comment rewrite + guard**
+- [x] **Step 3: Edit the WGSL — comment rewrite + guard**
 
 In `src/renderer/webgpu/shaders/panorama.wgsl`, `project_planet`:
 
@@ -355,7 +355,7 @@ with:
 
 (`theta` is already `var`; `phi` changes from `let` to `var`.)
 
-- [ ] **Step 4: Edit the GLSL — the same two edits, token for token**
+- [x] **Step 4: Edit the GLSL — the same two edits, token for token**
 
 In `src/renderer/webgl2/shaders/panorama.glsl`, `project_planet`:
 
@@ -398,12 +398,12 @@ with:
 
 (GLSL locals are mutable, so `float phi` needs no keyword change; the guard text is byte-identical to the WGSL's.)
 
-- [ ] **Step 5: Run the shader tests green**
+- [x] **Step 5: Run the shader tests green**
 
 Run: `npx vitest run test/unit/webgl2-shaders.test.ts`
 Expected: PASS, all tests — the new structural pins, the token-for-token parity (the guard landed in both bodies), the literal multiset and atan-count checks (`1.5` and `0.0` added equally to both), the atan2 ban and the `- lat` tripwire (the guard mentions neither).
 
-- [ ] **Step 6: Flip the f32 witness in reference.test.ts**
+- [x] **Step 6: Flip the f32 witness in reference.test.ts**
 
 In `test/unit/reference.test.ts`, `it('witnesses the f32 floored path the shaders run: floor fires, atan(0/0) remains', ...)`:
 
@@ -520,12 +520,12 @@ with:
     expect(centre.d2).toBe(1)
 ```
 
-- [ ] **Step 7: Run the reference tests green**
+- [x] **Step 7: Run the reference tests green**
 
 Run: `npx vitest run test/unit/reference.test.ts`
 Expected: PASS, all tests — the near-site ladder pins are untouched (the guard is exact-zero and was measured not to perturb any rung; if a ladder pin fails, the guard condition or the transcription is wrong).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/renderer/webgpu/shaders/panorama.wgsl src/renderer/webgl2/shaders/panorama.glsl \
