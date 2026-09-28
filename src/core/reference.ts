@@ -187,9 +187,11 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
   // samples what was above it, the content-follows-the-finger convention the
   // other three cameras use. At lat = 0 this is the identity term for term
   // (sin 0 = 0, cos 0 = 1), so the default little planet does not move by one
-  // bit. The WGSL/GLSL twins carry a 1e-15 floor on d2 for the excluded
-  // point's viewport crossing; this float64 arbiter deliberately does not --
-  // its tests sample around the pole, never on it.
+  // bit -- except a -0 -> +0 flip of theta's sign of zero on the z = 0
+  // half-line, which no consumer distinguishes. The WGSL/GLSL twins carry a
+  // 1e-15 floor on d2 for the excluded point's viewport crossing; this
+  // float64 arbiter deliberately does not -- its tests sample around the
+  // pole, never on it.
   const tilt = lat
   const ct = Math.cos(tilt / 2)
   const st = Math.sin(tilt / 2)

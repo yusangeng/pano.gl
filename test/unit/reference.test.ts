@@ -358,7 +358,8 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
    * The planet latitude is a sphere rotation: the Mobius pre-transform of
    * projectPlanet rolls the source point at polar angle |lat| to the screen
    * centre, so the centre displays the pose (povLatitude, povLongitude).
-   * The four blocks pin the spec's invariants I1-I4 in order.
+   * The four blocks pin the spec's invariants I1-I4 in order; the fifth pins
+   * the transform's values away from the centre (review I-1).
    */
   const projection: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }
   const wrap = (x: number): number => {
@@ -422,7 +423,9 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     // Finiteness across the full tilt range on a grid that never lands on the
     // Mobius pole (|yy| = cot(|tilt|/2) with zz = 0, so |yy| >= 1 everywhere in
     // the clamp range; 0.75 dodges it). The reference deliberately carries no
-    // denominator floor -- it is the arbiter, not a pixel comparison.
+    // denominator floor -- it is the arbiter, not a pixel comparison. The
+    // centre loop above asserts only v; the centre's u finiteness away from
+    // lat = 0 is pinned by I2, whose closeness assertions a NaN u cannot pass.
     for (let latDeg = -90; latDeg <= 90; latDeg += 15) {
       for (const y of [-0.75, -0.5, 0.5, 0.75]) {
         for (const z of [-0.6, 0, 0.6]) {
@@ -450,5 +453,51 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     const up = project(1, 0, 0, { povLatitude: 30, povLongitude: 0 }, projection)
     expect(up.u).toBeCloseTo(mirror.u, 12)
     expect(up.v).toBeCloseTo(mirror.v, 12)
+  })
+
+  it('is a rotation away from the centre too: chordal distances survive the tilt (review I-1)', () => {
+    // I1-I4 pin the origin only: I1 is the tilt = 0 identity and I2-I4 all
+    // evaluate the centre, where w = 0 zeroes the very terms a flipped
+    // denominator sign lives in -- two one-token mutants of the Mobius
+    // denominator (the sign of denIm, the sign of the st * yy inside denRe)
+    // survived every test in this file before this block. It pins values
+    // instead: a tilt is a sphere rotation, and rotations preserve chordal
+    // distances on the sphere, so every pair of off-axis points must stay
+    // equidistant under the tilt. The sphere images are recovered from
+    // project's public output alone (u, v -> theta, phi -> unit vector),
+    // never through the Mobius code, which would only echo a mutant; the
+    // recovery reflects the sphere the same way for every point, and a
+    // consistent reflection is itself an isometry, so nothing needs to undo
+    // it. The true formula drifts ~1e-16 (float64 rounding); the two mutants
+    // above drift 4e-2 to 1.7e-1, five orders of margin.
+    const lngDeg = 30
+    const toSphere = (latDeg: number, y: number, z: number): readonly [number, number, number] => {
+      const uv = project(1, y, z, { povLatitude: latDeg, povLongitude: lngDeg }, projection)
+      // u already absorbed the lng subtraction; adding lng back recovers
+      // theta up to a full turn, which sin and cos cannot see.
+      const theta = uv.u * 2 * Math.PI + (lngDeg * Math.PI) / 180
+      const phi = uv.v * Math.PI
+      return [Math.sin(phi) * Math.sin(theta), Math.sin(phi) * Math.cos(theta), Math.cos(phi)]
+    }
+    const chord = (
+      a: readonly [number, number, number],
+      b: readonly [number, number, number]
+    ): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
+    // Off the y = 0 and z = 0 axes like I1, and |y| <= 0.75 stays below the
+    // closest the Mobius pole ever comes (|yy| = cot(|tilt| / 2) >= 1).
+    const points: Array<readonly [number, number]> = [
+      [0.3, 0.7], [-0.4, 0.2], [0.5, -0.6], [-0.25, -0.85], [0.75, 0.35], [-0.6, -0.45]
+    ]
+    for (const latDeg of [30, -30, 60, -60, 90]) {
+      for (let i = 0; i < points.length; i++) {
+        for (let j = i + 1; j < points.length; j++) {
+          const [y1, z1] = points[i]!
+          const [y2, z2] = points[j]!
+          const before = chord(toSphere(0, y1, z1), toSphere(0, y2, z2))
+          const after = chord(toSphere(latDeg, y1, z1), toSphere(latDeg, y2, z2))
+          expect(after, `chord at lat=${latDeg} for (${y1}, ${z1}) vs (${y2}, ${z2})`).toBeCloseTo(before, 12)
+        }
+      }
+    }
   })
 })
