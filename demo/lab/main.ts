@@ -73,16 +73,21 @@ function writeUrlState (current: LabViewer): void {
     params.set('zoom', projection.zoom.toFixed(2))
     params.set('extent', projection.extent[0].toFixed(2))
   }
-  window.history.replaceState(null, '', `?${params.toString()}`)
+  try {
+    window.history.replaceState(null, '', `?${params.toString()}`)
+  } catch {
+    // Safari throws past its replaceState rate cap. The URL is a convenience
+    // mirror, so a dropped write beats throwing out of an event listener,
+    // which would starve every listener registered after this one.
+  }
 }
 
-function showBanner (banner: HTMLElement, title: string, detail: string, fatal: boolean): void {
+function showBanner (banner: HTMLElement, title: string, detail: string): void {
   const card = h('div', { class: 'banner-card' }, h('h2', { text: title }), h('p', { text: detail }))
-  if (fatal) {
-    const reload = h('button', { type: 'button', text: 'Reload' })
-    reload.addEventListener('click', () => window.location.reload())
-    card.append(reload)
-  }
+  // Every lab banner is terminal: v1 has no in-page recovery, reload is the out.
+  const reload = h('button', { type: 'button', text: 'Reload' })
+  reload.addEventListener('click', () => window.location.reload())
+  card.append(reload)
   banner.replaceChildren(card)
   banner.hidden = false
 }
@@ -95,11 +100,29 @@ async function boot (): Promise<void> {
 
   if (selected.backend === 'none') {
     showBanner(banner, 'No rendering backend',
-      'Neither WebGPU nor WebGL2 is available in this browser, so there is nothing to render with. Try a browser with WebGPU (or at least WebGL2) enabled.', true)
+      'Neither WebGPU nor WebGL2 is available in this browser, so there is nothing to render with. Try a browser with WebGPU (or at least WebGL2) enabled.')
     return
   }
 
   const viewers = new ViewerBox()
+
+  let urlWriteTimer: ReturnType<typeof setTimeout> | null = null
+  /**
+   * Collapses high-frequency changes (wheel zoom, slider drags) into one
+   * trailing bookmark write. Browsers cap replaceState at roughly 100 calls
+   * per 30 seconds, and WebKit throws past its cap; one write per event
+   * both stalls at the cap and, there, throws out of the listener. The
+   * handle is re-read at flush time rather than captured, so a same-class
+   * source swap cannot leak a stale source id into the URL.
+   */
+  const scheduleUrlWrite = (): void => {
+    if (urlWriteTimer !== null) clearTimeout(urlWriteTimer)
+    urlWriteTimer = setTimeout(() => {
+      urlWriteTimer = null
+      const current = viewers.current
+      if (current !== null) writeUrlState(current)
+    }, 250)
+  }
 
   const installViewer = async (
     source: SourceId,
@@ -112,18 +135,17 @@ async function boot (): Promise<void> {
       : await FramelessImageViewer.create({ container: stage, src: SOURCE_URLS[source], camera })
     viewer.on('device-lost', (lost) => {
       // v1 has no automatic recovery; the lab says so instead of pretending.
+      // Dropping the handle also detaches the panels: the banner stops
+      // pointers, but keyboard focus can still reach their controls, and a
+      // panel edit would otherwise call into a dead viewer.
+      viewers.publish(null)
       required('#status-panel').classList.add('lost')
-      showBanner(banner, 'Device lost', `${lost.reason}: ${lost.message}. v1 has no automatic recovery -- reload to retry.`, true)
+      showBanner(banner, 'Device lost', `${lost.reason}: ${lost.message}. v1 has no automatic recovery -- reload to retry.`)
     })
     // Wheel zoom mutates the projection inside the library without passing
-    // through the shell, so the bookmark needs its own hook here. The current
-    // handle is read at event time, not captured: a same-class source swap
-    // reuses this viewer under a new handle, and the captured one would write
-    // a stale source id into the URL.
-    viewer.on('zoom', () => {
-      const current = viewers.current
-      if (current !== null) writeUrlState(current)
-    })
+    // through the shell, so the bookmark needs its own hook here. The write
+    // is debounced above and reads the handle at flush time.
+    viewer.on('zoom', scheduleUrlWrite)
     const handle: LabViewer = { viewer, mode: source === 'video' ? 'video' : 'image', source }
     viewers.publish(handle)
     writeUrlState(handle)
@@ -155,15 +177,15 @@ async function boot (): Promise<void> {
       const current = viewers.current
       if (current === null) return
       current.viewer.cameraOptions = { projection }
-      writeUrlState(current)
+      scheduleUrlWrite()
     },
     setSource: (source) => {
-      applySource(source).catch((error) => showBanner(banner, 'Source switch failed', String(error), true))
+      applySource(source).catch((error) => showBanner(banner, 'Source switch failed', String(error)))
     },
     onViewer: (listener) => viewers.subscribe(listener)
   }
 
-  // Panel mounts are added here by Tasks 3-6, BEFORE installViewer publishes
+  // Panel mounts happen here, BEFORE installViewer publishes
   // the first viewer, so panels observe the full lifecycle from the null
   // state; a later mount would still receive the current viewer, because
   // subscribe fires the listener immediately.
@@ -177,5 +199,11 @@ async function boot (): Promise<void> {
 
 await boot().catch((error) => {
   const banner = document.querySelector<HTMLElement>('#page-banner')
-  if (banner !== null) showBanner(banner, 'Viewer creation failed', String(error), true)
+  if (banner !== null) {
+    showBanner(banner, 'Viewer creation failed', String(error))
+  } else {
+    // A page without the banner element still owes the console the failure
+    // instead of a silently blank stage.
+    console.error(error)
+  }
 })

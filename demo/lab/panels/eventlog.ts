@@ -10,6 +10,9 @@ import type { LabContext } from '../context'
 import { h } from '../dom'
 import { formatPayload, formatStamp } from '../format'
 
+// Mirrors the channel names of the library's `channels` record
+// (src/diagnostics.ts). The public surface exports enableChannels but not
+// the names themselves, so a typo here would enable nothing, silently.
 const CHANNELS = ['viewer', 'renderer', 'gpu', 'camera', 'media', 'input'] as const
 const MAX_ROWS = 200
 
@@ -42,10 +45,18 @@ export function mountEventLogPanel (host: HTMLElement, ctx: LabContext): void {
   let undoChannels: (() => void) | null = null
   const applyChannels = (): void => {
     undoChannels?.()
+    undoChannels = null
     const namespaces = CHANNELS
       .filter(channel => boxState.get(channel) === true)
       .map(channel => `pano:${channel}`)
       .join(',')
+    if (namespaces === '') {
+      // Nothing checked: restoring the pre-panel baseline beats enabling the
+      // empty set -- enableChannels('') would clear the persisted debug key
+      // (debug's save() removes it on an empty pattern), taking the
+      // developer's saved channels with it.
+      return
+    }
     undoChannels = enableChannels(namespaces)
   }
   for (const channel of CHANNELS) {

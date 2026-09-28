@@ -112,6 +112,10 @@ html, body {
 .chip-error { color: var(--err); border-color: var(--err); }
 .chip.active { color: var(--accent); border-color: var(--accent); }
 
+/* The state readout borrows the chip look; unlike the button chips above it
+   is not clickable. */
+.chip-loading, .chip-loaded, .chip-error { cursor: default; }
+
 .chiprow { display: flex; flex-wrap: wrap; gap: 4px; }
 
 .transport { display: flex; align-items: center; gap: 6px; padding-top: 6px; }
@@ -125,6 +129,9 @@ html, body {
   cursor: pointer;
 }
 .transport .slider { flex: 1; }
+/* Author display beats the UA [hidden] rule, so hiding this row needs the
+   same explicit guard the page banner has. */
+.transport[hidden] { display: none; }
 
 .hint { margin: 4px 0 0; font-size: 11px; color: var(--muted); }
 

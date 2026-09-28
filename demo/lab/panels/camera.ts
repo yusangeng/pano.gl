@@ -17,12 +17,15 @@ const KINDS: ReadonlyArray<ProjectionKind> = ['linear', 'cylindrical', 'planet',
 /** zoom lives in [0.01, 1] -- two decades, so the slider is logarithmic. */
 const ZOOM_MIN = 0.01
 
+/** Log-slider resolution; the input's max is the same value. */
+const SLIDER_STEPS = 1000
+
 function zoomToSlider (zoom: number): number {
-  return Math.round((1000 * Math.log(zoom / ZOOM_MIN)) / Math.log(1 / ZOOM_MIN))
+  return Math.round((SLIDER_STEPS * Math.log(zoom / ZOOM_MIN)) / Math.log(1 / ZOOM_MIN))
 }
 
 function sliderToZoom (position: number): number {
-  return ZOOM_MIN * Math.pow(1 / ZOOM_MIN, position / 1000)
+  return ZOOM_MIN * Math.pow(1 / ZOOM_MIN, position / SLIDER_STEPS)
 }
 
 function sliderRow (
@@ -45,8 +48,10 @@ function sliderRow (
   const readout = h('span', { class: 'readout', text: format(value) })
   input.addEventListener('input', () => {
     const v = Number(input.value)
-    readout.textContent = format(v)
+    // Callback first: the linear fov path reads layout (surfaceAspect), and
+    // a write-then-read order would force one synchronous layout per tick.
     onInput(v)
+    readout.textContent = format(v)
   })
   return h('label', { class: 'slider-row' },
     h('span', { class: 'row-label', text: label }), input, readout)
@@ -111,7 +116,7 @@ export function mountCameraPanel (host: HTMLElement, ctx: LabContext, stage: HTM
       return
     }
     controls.append(
-      sliderRow('zoom', 0, 1000, 1, zoomToSlider(remembered.zoom),
+      sliderRow('zoom', 0, SLIDER_STEPS, 1, zoomToSlider(remembered.zoom),
         v => formatPlain(sliderToZoom(v)),
         v => {
           const current = memory.get(kind)

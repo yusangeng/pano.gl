@@ -19,6 +19,9 @@ const SOURCES: ReadonlyArray<{ readonly id: SourceId, readonly label: string }> 
   { id: 'video', label: 'Video' }
 ]
 
+/** Seek slider resolution; the input position is a fraction of duration. */
+const SEEK_STEPS = 1000
+
 export function mountMediaPanel (host: HTMLElement, ctx: LabContext): void {
   host.append(h('h3', { text: 'Media Source' }))
   const sourceBar = h('div', { class: 'segmented' })
@@ -46,7 +49,10 @@ export function mountMediaPanel (host: HTMLElement, ctx: LabContext): void {
   ctx.onViewer((current) => {
     cleanup?.()
     cleanup = null
+    // Hidden AND emptied: the row's controls are wired to the viewer being
+    // discarded, so they must not linger in the DOM behind the hidden flag.
     transport.hidden = true
+    transport.replaceChildren()
     playHint.hidden = true
     if (current === null) return
     for (const [id, button] of buttons) button.classList.toggle('active', id === current.source)
@@ -76,7 +82,7 @@ export function mountMediaPanel (host: HTMLElement, ctx: LabContext): void {
     }
 
     const play = h('button', { type: 'button', text: 'Play' })
-    const seek = h('input', { class: 'slider', type: 'range', min: '0', max: '1000', step: '1', value: '0' })
+    const seek = h('input', { class: 'slider', type: 'range', min: '0', max: String(SEEK_STEPS), step: '1', value: '0' })
     const time = h('span', { class: 'readout', text: '--:-- / --:--' })
     const mute = h('button', { type: 'button', text: 'Mute' })
     transport.replaceChildren(play, seek, time, mute)
@@ -94,7 +100,7 @@ export function mountMediaPanel (host: HTMLElement, ctx: LabContext): void {
       const duration = element.duration
       time.textContent = `${formatTimecode(element.currentTime)} / ${formatTimecode(duration)}`
       if (!scrubbing && Number.isFinite(duration) && duration > 0) {
-        seek.value = String(Math.round((element.currentTime / duration) * 1000))
+        seek.value = String(Math.round((element.currentTime / duration) * SEEK_STEPS))
       }
     }
 
@@ -120,7 +126,7 @@ export function mountMediaPanel (host: HTMLElement, ctx: LabContext): void {
       scrubbing = true
       const duration = element.duration
       if (Number.isFinite(duration) && duration > 0) {
-        element.currentTime = (Number(seek.value) / 1000) * duration
+        element.currentTime = (Number(seek.value) / SEEK_STEPS) * duration
       }
     })
     seek.addEventListener('change', () => { scrubbing = false })
