@@ -14,6 +14,7 @@ import type { CameraState, Projection, SelectedCapabilities } from '../../src/in
 import { ViewerBox, defaultProjection } from './context'
 import type { LabContext, LabViewer, SourceId } from './context'
 import { h } from './dom'
+import './lab.css'
 
 const SOURCE_URLS: Readonly<Record<SourceId, string>> = {
   '2k': '/image/2048x1024.jpg',
