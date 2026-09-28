@@ -3,7 +3,7 @@ plan: docs/superpowers/plans/2026-09-28-gate-c-planet-arbiter.md
 scope: [test/integration/gate-c-cross-backend.test.ts]
 verify: npm run build && npm test
 layer: foundation
-state: open
+state: doing
 createdAt: 2026-09-28T15:49:10.092Z
 ---
 # 任务：门 C planet 仲裁腿：lat=30 第三方裁判
