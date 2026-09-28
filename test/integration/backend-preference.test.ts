@@ -7,14 +7,15 @@ import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
 /**
  * How far the forced and default viewer paths may disagree, per channel.
  *
- * The harder evidence is gate A, not gate C: gate-a-pixels.test.ts holds
- * both backends against the v0.2.2 baseline at +-2 LSB per channel, and
- * measures their mutual deviation at about 5e-5 in float terms -- far
- * below one 8-bit step. Gate C's 2/255 (gate-c-cross-backend.test.ts)
- * covers a synthetic smooth source at camera states that do not include
- * this test's defaults (fov 70 deg here, 75/60/90 deg there), so the
- * shader half below is an allowance extrapolated from that neighbouring
- * configuration, not a measured bound at these states. The viewer paths
+ * Gate A anchors the WebGPU half: gate-a-pixels.test.ts holds that path to the
+ * v0.2.2 baseline at +-2 LSB per channel, with a measured old-vs-new deviation
+ * of about 5e-5 in float terms -- far below one 8-bit step. It renders WebGPU
+ * only. Gate C is the only pixel check on WebGL2, and it bounds the two
+ * hand-transcribed shaders at 2/255 (gate-c-cross-backend.test.ts) on a
+ * synthetic smooth source at camera states that do not include this test's
+ * defaults (fov 70 deg here, 75/60/90 deg there). The shader half below is
+ * therefore an allowance extrapolated from gate C's neighbouring configuration,
+ * not a measured bound at these states. The viewer paths
  * add canvas presentation on top of the shaders, and the 64x32 bilinear
  * downscale in readCanvas is a convex combination -- it cannot amplify a
  * per-channel difference. 4 = 2 (shaders) + 2 (presentation), and a read
