@@ -14,6 +14,7 @@ import type { CameraState, Projection, SelectedCapabilities } from '../../src/in
 import { ViewerBox, defaultProjection } from './context'
 import type { LabContext, LabViewer, SourceId } from './context'
 import { h } from './dom'
+import { mountStatusPanel } from './panels/status'
 import './lab.css'
 
 const SOURCE_URLS: Readonly<Record<SourceId, string>> = {
@@ -87,6 +88,7 @@ async function boot (): Promise<void> {
   const stage = required<HTMLElement>('#stage')
   const banner = required<HTMLElement>('#page-banner')
   const selected: SelectedCapabilities = await FramelessImageViewer.probe()
+  mountStatusPanel(required('#status-panel'), selected)
 
   if (selected.backend === 'none') {
     showBanner(banner, 'No rendering backend',
