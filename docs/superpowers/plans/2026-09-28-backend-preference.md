@@ -293,7 +293,7 @@ git commit -m "task-backend-preference: createBackend honours a forced preferenc
 
 No new unit tests: the threading adds no branch (an `undefined`-able argument into a defaulted parameter), and the behaviour it produces is Tasks 4 and 5's subject. The existing suites are the regression net for the default path.
 
-- [ ] **Step 1: Pass the validated option at both call sites**
+- [x] **Step 1: Pass the validated option at both call sites**
 
 `src/viewer/image-viewer.ts` line 90:
 
@@ -309,12 +309,12 @@ No new unit tests: the threading adds no branch (an `undefined`-able argument in
 
 `valid.backend` is `BackendPreference | undefined`; the default parameter turns `undefined` into `'auto'`, so both callers keep one path.
 
-- [ ] **Step 2: Run the unit suite and the typecheck**
+- [x] **Step 2: Run the unit suite and the typecheck**
 
 Run: `npm run test:unit && npm run typecheck`
 Expected: all PASS / clean.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/viewer/image-viewer.ts src/viewer/video-viewer.ts
