@@ -114,8 +114,9 @@ describe('gate C: WebGPU vs WebGL2', () => {
     // - measured: webgpu 1, webgl2 1, probe run of this file on this
     //   machine's GPU (2026-09-28); the pin is not a guess;
     // - derived: planet runs a longer per-fragment chain than cylindrical
-    //   (whose pin is <= 3 above) -- the Mobius complex division adds two
-    //   f32 divisions plus sqrt and atan per fragment, and the 4x4 extent
+    //   (whose pin is <= 3 above) -- the Mobius complex division and the
+    //   stereographic back-projection add a handful of f32 divisions plus
+    //   sqrt and a second atan per fragment, and the 4x4 extent
     //   samples a wider stretch of the surface, so a few ulps per link land
     //   a few channels apart after the shared bilinear fetch, whose hardware
     //   weights are quantized to sub-texel bits;
