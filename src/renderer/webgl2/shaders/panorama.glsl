@@ -1,10 +1,13 @@
 // pano.gl panorama shader, WebGL2 backend.
 //
 // A line-by-line transcription of src/renderer/webgpu/shaders/panorama.wgsl as
-// it stands AFTER P3's Task 8 -- that is, including the `- lat` term the three
-// non-linear projections gained when latitude stopped being ignored (defect
-// F5). Transcribing the earlier version of that file loses the latitude term,
-// and gate C fails on every state whose povLatitude is not zero.
+// it stands -- that is, including the latitude handling the non-linear
+// projections gained when latitude stopped being ignored (defect F5):
+// cylindrical and pannini subtract `- lat` from phi, and since 2026-09-28
+// planet consumes latitude as the tilt of a Mobius pre-transform (see
+// project_planet). Transcribing an earlier version of that file loses the
+// latitude handling, and gate C fails on every state whose povLatitude is not
+// zero.
 //
 // Transcribed by hand rather than generated: the two languages differ enough
 // that a translator would be a project of its own, and a translator that got
@@ -263,8 +266,7 @@ void main () {
   // 2026-09-28: planet no longer subtracts it from phi -- it is the tilt
   // angle of the Mobius pre-transform in project_planet (steerable-centre
   // semantics; docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md).
-  // Cylindrical and pannini still carry the `- lat` term; neither carries it
-  // alone.
+  // Cylindrical and pannini still subtract it.
   float lat = u_povLatitude * PI / 180.0;
 
   vec2 uv;

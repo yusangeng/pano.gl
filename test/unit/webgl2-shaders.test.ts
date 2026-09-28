@@ -141,7 +141,8 @@ describe('WebGL2 shader source', () => {
     // omission into the second backend would make the two backends disagree
     // only at non-zero latitude -- the hardest possible place to notice.
     // Planet left this table on 2026-09-28: its latitude is no longer a phi
-    // offset but the tilt of a Mobius pre-transform, pinned by the next test.
+    // offset but the tilt of a Mobius pre-transform, pinned by the 'tilts planet
+    // through a Mobius pre-transform of the plane point' test.
     for (const fn of ['project_cylindrical', 'project_pannini']) {
       expect(skeleton(glslBody(fn)), `${fn} ignores latitude`).toMatch(/-\s*lat\b/)
     }
@@ -151,8 +152,9 @@ describe('WebGL2 shader source', () => {
     // 2026-09-28 planet-drag-semantics spec section 2.1. The structural pins:
     // the half-angle trig of the tilt, the component-wise complex division,
     // and the denominator floor that keeps the excluded point's viewport
-    // crossing finite (section 2.3). The token-for-token test below holds the
-    // WGSL twin to the same shape, and gate C holds both to the reference.
+    // crossing finite (section 2.3). The 'transcribes the same formulas as
+    // the WGSL, token for token' test holds the WGSL twin to the same shape,
+    // and gate C holds both to the reference.
     const body = skeleton(glslBody('project_planet'))
     expect(body, 'half-angle trig of the tilt is missing').toContain('tilt * 0.5')
     expect(body, 'the complex division is not component-wise').toContain('den_re * den_re + den_im * den_im')

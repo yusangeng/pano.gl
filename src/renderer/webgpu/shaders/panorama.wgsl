@@ -121,12 +121,13 @@ fn to_uv(theta: f32, phi: f32) -> vec2f {
  *     `2 * atan(b/a)` and `atan2` then `* 2` land in different quadrants.
  *   - Nothing wraps `theta`. Wrapping is the sampler's job.
  *
- * One thing that is a departure rather than a transcription: the `- lat` term
- * in the three non-linear projections' `phi`. v0.2.2 read latitude nowhere on
- * these cameras -- the shader declared `u_CamPOVLatitude` and never read it,
- * and the viewer never uploaded it either (defect F5) -- so there is nothing
- * to transcribe. Making latitude work is v1's one deliberate behaviour change
- * here, pinned by gate B.
+ * One thing that is a departure rather than a transcription: latitude.
+ * v0.2.2 read latitude nowhere on these cameras -- the shader declared
+ * `u_CamPOVLatitude` and never read it, and the viewer never uploaded it
+ * either (defect F5) -- so there is nothing to transcribe. Cylindrical and
+ * pannini subtract it from `phi`; planet, since 2026-09-28, consumes it as
+ * the tilt of the Mobius pre-transform in project_planet. Making latitude
+ * work is v1's one deliberate behaviour change here, pinned by gate B.
  *
  * Keep all four in the same shape as the reference so the two can be read side
  * by side.

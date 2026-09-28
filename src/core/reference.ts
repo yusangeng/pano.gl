@@ -252,11 +252,12 @@ function projectPannini (x: number, y: number, z: number, zoom: number, lng: num
 /**
  * Projects a point on the camera's surface to an equirectangular coordinate.
  *
- * `state.povLatitude` is read by the three non-linear projections, as the `phi`
- * offset computed by `latOffset` -- the F5 fix, and this module's one
- * deliberate departure from v0.2.2 (which read latitude nowhere on those
- * cameras). The linear projection ignores it here because its latitude lives
- * in `buildViewMatrix` instead.
+ * `state.povLatitude` is read by the three non-linear projections through
+ * `latOffset` -- subtracted from `phi` by cylindrical and pannini, and
+ * consumed as the Mobius tilt angle by planet -- the F5 fix, and this
+ * module's one deliberate departure from v0.2.2 (which read latitude
+ * nowhere on those cameras). The linear projection ignores it here because
+ * its latitude lives in `buildViewMatrix` instead.
  *
  * @param x - Surface position. For the linear projection only the direction
  *   matters; for the others the magnitude is part of the projection.
