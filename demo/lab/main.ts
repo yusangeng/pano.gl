@@ -115,6 +115,7 @@ async function boot (): Promise<void> {
   // preference: pure URL reading, nothing here needs a viewer.
   const state = readUrlState()
   let backendPref: BackendPreference = state.backend
+  let pendingBackend: BackendPreference | null = null
   const viewers = new ViewerBox()
 
   // The control shows the preference; the badge above it shows the fact.
@@ -129,12 +130,17 @@ async function boot (): Promise<void> {
   // click cannot fire between this definition and that one, because there
   // is no await between them.
   const setBackend = (backend: BackendPreference): void => {
+    // A click inside the recreate window queues rather than mutates: the
+    // landing installViewer drains it, so the last click wins and the URL
+    // never names a backend the viewer is not running.
+    const current = viewers.current
+    if (current === null) {
+      pendingBackend = backend
+      return
+    }
     if (backend === backendPref) return
     backendPref = backend
-    const current = viewers.current
-    if (current === null) return
     const carried = current.viewer.cameraOptions
-    // The box holds null across the async recreate, so re-entrant clicks no-op.
     viewers.publish(null)
     current.viewer.dispose()
     installViewer(current.source, carried.projection, carried.pose)
@@ -194,6 +200,13 @@ async function boot (): Promise<void> {
     const handle: LabViewer = { viewer, mode: source === 'video' ? 'video' : 'image', source }
     viewers.publish(handle)
     writeUrlState(handle, backendPref)
+    // Drain a backend click that landed while this create was in flight. The
+    // read-and-clear must precede the call: setBackend may start another
+    // recreate, and a stale pending would replay a superseded click. Covers
+    // both entry paths -- a backend switch and a cross-class source swap.
+    const queued = pendingBackend
+    pendingBackend = null
+    if (queued !== null) setBackend(queued)
   }
 
   const applySource = async (target: SourceId): Promise<void> => {
