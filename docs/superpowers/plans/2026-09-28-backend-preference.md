@@ -871,7 +871,7 @@ git commit -m "task-backend-preference: lab status-panel switch with bookmark an
 **Files:**
 - Modify: `README.md:181-187`
 
-- [ ] **Step 1: One sentence in the demo paragraph**
+- [x] **Step 1: One sentence in the demo paragraph**
 
 In `README.md`, in the paragraph starting `` `npm run start` serves `demo/` `` (line 181), extend the enumeration. Replace:
 
