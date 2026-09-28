@@ -68,4 +68,18 @@ createdAt: 2026-09-28T15:49:10.092Z
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve**（2026-09-29，superloop-verify 自动验收，四步全审）。
+
+1. **结构化 review**：全 diff 亲读（测试文件 +30 行插入 + plan 勾选 + 卡填充）。插入位置与 plan 一致（cylindrical 仲裁腿之后、极点例外之前）；钉值块为 plan 模板逐字，仅填 M1=1/M2=1/BOUND=4 与 MINOR 1 措辞修正（已按偏离②记录并经 SDD 质量审查裁决）；cylindrical ≤3、pairwise ≤2、极点 <64 三处既有容差零触碰（diff 构造性确认）。容差注释四要素（实测/推导/有界/余量）齐备。
+2. **plan 红线逐条核对**：File Structure 恰为白名单单文件 + plan/卡自动放行，无越界文件；7/7 提交带 `task-gate-c-planet-arbiter:` 前缀；probe-then-pin 顺序按 spec §3（数值不预设）；plan diff 为纯勾选翻转零内容改动；偏离三条（verbose reporter 读探针 / 除法计数措辞 / 合并单提交）均属 plan 自身勘误或 plan 明示允许的形态。
+3. **门禁证据复核**：完成报告五节齐（含无法整改发现与遗留风险的逐条三元组）；CR 结论含手段/发现数/整改/轮数与对抗轮非发现清单；测试质量结论含四维复核与必含覆盖陈述（有网/无网/结构性抓不到，无网部分均给理由或在档 MINOR 编号）。留痕合规。
+4. **最重发现亲验**：
+   - **腿输入亲验**：`STATES[1]` 实读 = `{ povLatitude: 30, povLongitude: 45, zoom: 1 }`，`projectionFor('planet')` 经 `extentFor` 得 `{ kind: 'planet', zoom: 1, extent: [4,4] }`——与卡/spec 主张逐字段一致。
+   - **仲裁路由亲验**：`compareWithReference` 实读——`referenceImage`（f64 CPU）+ `renderOffscreen`（WebGPU）+ `renderOffscreenGLSL`（WebGL2）各渲一次，逐后端 `maxChannelDiff` 对 reference；projection 全程透传，kind 无关，无需改 support 的主张成立。
+   - **bound 规则亲验**：2×Mmax = 2×1 = 2，严格大于 2 的最小 2 的幂 = 4（与 plan 自带算例 Mmax=3→8、Mmax=4→16 同规则同方向）。
+   - **余量重算亲验（最重数学主张）**：门源 blue 通道实读为 `127·sin(16πu)·sin(16πv)`——u/v 双向 8 周期成立；theta 项独立复算 2⁻¹¹/(2π) × (127·16π) ≈ **0.50 通道**、phi 项 2⁻¹¹/π × (127·16π) ≈ **0.99 通道**，与卡内「≈0.5 / ≈1.0」逐位吻合；最坏合计 ≈1.5 对 bound 4 余量 ≈2.7×、最好 ≈8×——「≈2.7–8×」成立，旧值 "~60×" 的废弃裁决正确。
+   - **MINOR 2 计数亲验**：master 侧 WebGL 上下文 = 16（pairwise 4×4）+ 1（cylindrical 仲裁）+ 4（极点例外循环 4 kinds）= **21**，本腿 +1 = **22**——「~21 变 22」精确成立（旁证 19/19 用例数 = 16+1+1+1）。
+
+**例外条款与偏离逐条裁决：接受，不构成打回**——MINOR 2（cross-backend.ts "~21" 计数陈旧）：断言亲验成立，采纳卡内「合并时顺手更正」选项，由协调侧在合并后以纯注释提交更正（非业务代码，不越执行边界）；MINOR 3（expect 无诊断消息）：与 cylindrical 腿同形，vitest 失败打印实际值，留作后续改进成立；对抗轮 3/4/5（占位性质、实测值审计链、macOS CI=1 象限盲区）：均已在档或由 cylindrical 同形先例缓解；偏离①②③均为工具行为或 plan 勘误，无 scope 逃逸。实测 maxima 1/1 虽低于 spec「预期大于 cylindrical ≤3」的预判，属测量结果而非偏差——bound 4 > 3 的方向性仍成立，且「若真值为 2 则钉值偏紧（flake 方向误差）」的风险定性正确。
+
+合并安全性由 task-merge 六重保护收口（合并前后主分支 verify 双跑）。
