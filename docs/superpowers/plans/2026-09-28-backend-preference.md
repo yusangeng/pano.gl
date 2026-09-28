@@ -508,7 +508,7 @@ git commit -m "task-backend-preference: no-webgpu rejection twin for the forced 
 - Modify: `demo/lab/main.ts`
 - Modify: `demo/lab/panels/status.ts`
 
-- [ ] **Step 1: Widen `LabContext`**
+- [x] **Step 1: Widen `LabContext`**
 
 In `demo/lab/context.ts`, extend the type import (line 9) with `BackendPreference`:
 
@@ -523,7 +523,7 @@ Add to `LabContext` after `setSource`:
   readonly setBackend: (backend: BackendPreference) => void
 ```
 
-- [ ] **Step 2: Rework `main.ts`**
+- [x] **Step 2: Rework `main.ts`**
 
 Five edits to `demo/lab/main.ts`. First, the module doc comment (lines 1-11) — add the fourth swap path after the image↔video line:
 
@@ -760,7 +760,7 @@ await boot().catch((error) => {
 })
 ```
 
-- [ ] **Step 3: Add the control to the status panel**
+- [x] **Step 3: Add the control to the status panel**
 
 Replace `demo/lab/panels/status.ts` in full:
 
@@ -843,7 +843,7 @@ export function mountStatusPanel (
 }
 ```
 
-- [ ] **Step 4: Typecheck and lint**
+- [x] **Step 4: Typecheck and lint**
 
 Run: `npm run typecheck && npm run lint`
 Expected: clean.
@@ -857,7 +857,7 @@ Run `npm run start`, open the lab URL, and check:
 4. Reload with `?backend=vulkan` in the URL: boots silently as auto.
 5. The forced-unavailable banner itself is covered by the no-webgpu test project, not by this machine — note that in the completion report rather than trying to force it here.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add demo/lab/context.ts demo/lab/main.ts demo/lab/panels/status.ts
