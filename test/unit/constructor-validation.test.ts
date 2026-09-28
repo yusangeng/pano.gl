@@ -118,3 +118,34 @@ describe('image viewer options -- branches the plan leaves untested', () => {
       .toThrow(/container must be an HTMLElement/)
   })
 })
+
+describe('backend preference', () => {
+  const container = { nodeType: 1 } as unknown as HTMLElement
+
+  it('accepts each member of the union and the omitted case', () => {
+    // 'auto' is the spelled-out default; omitting the field must behave the
+    // same way, or the option would be mandatory in all but name.
+    for (const backend of ['auto', 'webgpu', 'webgl2'] as const) {
+      expect(() => validateImageOptions({ container, src: '/a.png', backend })).not.toThrow()
+    }
+    expect(() => validateImageOptions({ container, src: '/a.png' })).not.toThrow()
+  })
+
+  it('rejects a wrong union member with a message that lists the valid values', () => {
+    // TypeScript stops its own callers at compile time; this branch is for
+    // the JavaScript caller. The message names all three valid values so the
+    // fix needs no documentation lookup -- same reasoning as the projection
+    // misspelling message above.
+    expect(() => validateImageOptions({ container, src: '/a.png', backend: 'vulkan' } as never))
+      .toThrow(/'auto', 'webgpu', 'webgl2'/)
+  })
+
+  it('covers the video entry point through validateVideoOptions', () => {
+    // validateVideoOptions delegates to validateImageOptions; this pins that
+    // the delegation actually carries the new field rather than validating
+    // it in a video-only copy that could drift.
+    expect(() => validateVideoOptions({ container, src: '/a.mp4', backend: 'webgl2' })).not.toThrow()
+    expect(() => validateVideoOptions({ container, src: '/a.mp4', backend: 'directx' } as never))
+      .toThrow(/backend/)
+  })
+})

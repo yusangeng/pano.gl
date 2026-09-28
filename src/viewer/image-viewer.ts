@@ -74,8 +74,10 @@ export class FramelessImageViewer extends Viewer {
    * device -- a constructor that returned a promise would type as the class and
    * be a `Promise` at runtime.
    *
-   * @throws If the options are invalid, if no backend is available, or if the
-   *   shader fails to compile.
+   * @throws If the options are invalid, if the shader fails to compile, or if
+   *   no backend is available -- which, with a forced `backend` preference,
+   *   includes the requested backend being absent even while the other one
+   *   answers.
    */
   static async create (options: ImageViewerOptions): Promise<FramelessImageViewer> {
     const valid = validateImageOptions(options)
@@ -87,7 +89,7 @@ export class FramelessImageViewer extends Viewer {
     let backend: Backend | undefined
     let source: ImageSource | undefined
     try {
-      backend = await createBackend(canvas)
+      backend = await createBackend(canvas, valid.backend)
       source = new ImageSource(
         valid.src,
         imageSourceOptions(backend.capabilities.maxTextureDimension, valid.projection)

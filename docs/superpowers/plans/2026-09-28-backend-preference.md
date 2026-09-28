@@ -44,7 +44,7 @@ No CSS change: the `.segmented` styles already exist (`demo/lab/lab.css:72-83`).
 - Modify: `src/index.ts:11`
 - Test: `test/unit/constructor-validation.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `test/unit/constructor-validation.test.ts` (inside the file, after the last `describe`; nothing else in the file changes). The imports at the top already bring in both validate functions:
 
@@ -81,12 +81,12 @@ describe('backend preference', () => {
 })
 ```
 
-- [ ] **Step 2: Run them and verify the meaningful ones fail**
+- [x] **Step 2: Run them and verify the meaningful ones fail**
 
 Run: `npx vitest run --project unit test/unit/constructor-validation.test.ts`
 Expected: the two rejection tests FAIL (nothing throws yet). The acceptance tests may pass vacuously — there is no check to reject — which is exactly why the rejection tests are the red/green signal here.
 
-- [ ] **Step 3: Implement the type, the field and the assert**
+- [x] **Step 3: Implement the type, the field and the assert**
 
 In `src/viewer/options.ts`, add the type after `ImageProjection` (line 34):
 
@@ -146,14 +146,14 @@ In `src/index.ts` line 11, widen the export:
 export type { ImageViewerOptions, VideoViewerOptions, ImageProjection, BackendPreference } from './viewer/options'
 ```
 
-- [ ] **Step 4: Run the tests and the typecheck**
+- [x] **Step 4: Run the tests and the typecheck**
 
 Run: `npx vitest run --project unit test/unit/constructor-validation.test.ts`
 Expected: all PASS.
 Run: `npm run typecheck`
 Expected: clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer/options.ts src/index.ts test/unit/constructor-validation.test.ts
@@ -170,7 +170,7 @@ git commit -m "task-backend-preference: add the backend option and its validatio
 
 This is testable in the node project: `acquireDevice()` returns null when `navigator.gpu` is absent (`src/renderer/webgpu/device.ts:74`), and a stub canvas whose `getContext` yields null makes `WebGL2Backend.create` return null (`src/renderer/webgl2/backend.ts:170-171`) — so every branch here ends in a throw whose message is the thing under test. The success branches need a real GPU and live in Tasks 4 and 5.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `test/unit/backend-factory.test.ts`:
 
@@ -214,12 +214,12 @@ describe('createBackend with a preference', () => {
 })
 ```
 
-- [ ] **Step 2: Run them and verify they fail**
+- [x] **Step 2: Run them and verify they fail**
 
 Run: `npx vitest run --project unit test/unit/backend-factory.test.ts`
 Expected: the two forced-preference tests FAIL — the current one-parameter signature ignores the second argument, so no `'webgpu' was requested` message exists. The two auto tests PASS against the current code (that is the compatibility pin, not a vacuous pass).
 
-- [ ] **Step 3: Implement the branch**
+- [x] **Step 3: Implement the branch**
 
 Replace `createBackend` in `src/viewer/backend-factory.ts` (lines 65-87) with:
 
@@ -271,12 +271,12 @@ Add the import next to the existing ones at the top of the file:
 import type { BackendPreference } from './options'
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `npx vitest run --project unit test/unit/backend-factory.test.ts`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer/backend-factory.ts test/unit/backend-factory.test.ts
@@ -293,7 +293,7 @@ git commit -m "task-backend-preference: createBackend honours a forced preferenc
 
 No new unit tests: the threading adds no branch (an `undefined`-able argument into a defaulted parameter), and the behaviour it produces is Tasks 4 and 5's subject. The existing suites are the regression net for the default path.
 
-- [ ] **Step 1: Pass the validated option at both call sites**
+- [x] **Step 1: Pass the validated option at both call sites**
 
 `src/viewer/image-viewer.ts` line 90:
 
@@ -309,12 +309,12 @@ No new unit tests: the threading adds no branch (an `undefined`-able argument in
 
 `valid.backend` is `BackendPreference | undefined`; the default parameter turns `undefined` into `'auto'`, so both callers keep one path.
 
-- [ ] **Step 2: Run the unit suite and the typecheck**
+- [x] **Step 2: Run the unit suite and the typecheck**
 
 Run: `npm run test:unit && npm run typecheck`
 Expected: all PASS / clean.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/viewer/image-viewer.ts src/viewer/video-viewer.ts
@@ -329,7 +329,7 @@ git commit -m "task-backend-preference: thread the backend option into both crea
 - Modify: `test/integration/support/viewer.ts`
 - Test: `test/integration/backend-preference.test.ts` (new)
 
-- [ ] **Step 1: Extend the factories**
+- [x] **Step 1: Extend the factories**
 
 In `test/integration/support/viewer.ts`, add the type import (the factory stays on the public surface — `src/index.ts` — per this support file's own rule):
 
@@ -347,7 +347,7 @@ Add `backend?: BackendPreference` to both factory option objects, and one spread
 
 `videoViewer` — identical addition, after its `camera` spread.
 
-- [ ] **Step 2: Write the user story**
+- [x] **Step 2: Write the user story**
 
 Create `test/integration/backend-preference.test.ts`:
 
@@ -423,12 +423,12 @@ describe('create with a backend preference', () => {
 })
 ```
 
-- [ ] **Step 3: Run it in the integration project**
+- [x] **Step 3: Run it in the integration project**
 
 Run: `npx vitest run --project integration test/integration/backend-preference.test.ts`
 Expected: both PASS. If the cross-backend diff bound fails, follow the constant's comment: report with the measured worst diff, do not loosen it here.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/support/viewer.ts test/integration/backend-preference.test.ts
@@ -444,7 +444,7 @@ git commit -m "task-backend-preference: real-GPU user story for the forced backe
 
 This file is collected only by the `no-webgpu` project (per `vitest.config.ts` includes), whose setup asserts the adapter is null and WebGL2 answers — exactly the environment where forcing `'webgpu'` must reject.
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 Create `test/integration/fallback/backend-preference.test.ts`:
 
@@ -487,12 +487,12 @@ describe('forced backend preference without WebGPU', () => {
 })
 ```
 
-- [ ] **Step 2: Run it in the no-webgpu project**
+- [x] **Step 2: Run it in the no-webgpu project**
 
 Run: `npx vitest run --project no-webgpu test/integration/fallback/backend-preference.test.ts`
 Expected: both PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/integration/fallback/backend-preference.test.ts
@@ -508,7 +508,7 @@ git commit -m "task-backend-preference: no-webgpu rejection twin for the forced 
 - Modify: `demo/lab/main.ts`
 - Modify: `demo/lab/panels/status.ts`
 
-- [ ] **Step 1: Widen `LabContext`**
+- [x] **Step 1: Widen `LabContext`**
 
 In `demo/lab/context.ts`, extend the type import (line 9) with `BackendPreference`:
 
@@ -523,7 +523,7 @@ Add to `LabContext` after `setSource`:
   readonly setBackend: (backend: BackendPreference) => void
 ```
 
-- [ ] **Step 2: Rework `main.ts`**
+- [x] **Step 2: Rework `main.ts`**
 
 Five edits to `demo/lab/main.ts`. First, the module doc comment (lines 1-11) — add the fourth swap path after the image↔video line:
 
@@ -760,7 +760,7 @@ await boot().catch((error) => {
 })
 ```
 
-- [ ] **Step 3: Add the control to the status panel**
+- [x] **Step 3: Add the control to the status panel**
 
 Replace `demo/lab/panels/status.ts` in full:
 
@@ -843,12 +843,12 @@ export function mountStatusPanel (
 }
 ```
 
-- [ ] **Step 4: Typecheck and lint**
+- [x] **Step 4: Typecheck and lint**
 
 Run: `npm run typecheck && npm run lint`
 Expected: clean.
 
-- [ ] **Step 5: Browser QA (目检)**
+- [x] **Step 5: Browser QA (目检)**
 
 Run `npm run start`, open the lab URL, and check:
 1. The control renders under the badge; on a WebGPU machine `auto` is active while the badge reads WebGPU.
@@ -857,7 +857,7 @@ Run `npm run start`, open the lab URL, and check:
 4. Reload with `?backend=vulkan` in the URL: boots silently as auto.
 5. The forced-unavailable banner itself is covered by the no-webgpu test project, not by this machine — note that in the completion report rather than trying to force it here.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add demo/lab/context.ts demo/lab/main.ts demo/lab/panels/status.ts
@@ -871,7 +871,7 @@ git commit -m "task-backend-preference: lab status-panel switch with bookmark an
 **Files:**
 - Modify: `README.md:181-187`
 
-- [ ] **Step 1: One sentence in the demo paragraph**
+- [x] **Step 1: One sentence in the demo paragraph**
 
 In `README.md`, in the paragraph starting `` `npm run start` serves `demo/` `` (line 181), extend the enumeration. Replace:
 
@@ -892,7 +892,7 @@ diagnostics channels, plus an auto/WebGPU/WebGL2 switch that exercises the
 runnable page.
 ```
 
-- [ ] **Step 2: The full verify**
+- [x] **Step 2: The full verify**
 
 Run: `npm run typecheck && npm run lint && npm test`
 Expected: all green — three tsc programs, eslint, then unit + both browser projects (301+ tests; the two new files add 4 integration cases and 7 unit cases).
@@ -900,7 +900,7 @@ Expected: all green — three tsc programs, eslint, then unit + both browser pro
 Run: `npm run test:coverage`
 Expected: green at the 90% branch threshold (the new `src/` branches are the assert's four and the factory's three, all covered by Task 1/2 tests).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add README.md

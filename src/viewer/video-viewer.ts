@@ -64,8 +64,10 @@ export class FramelessVideoViewer extends Viewer {
    * `VideoSource`. Async because acquiring a GPU device is; throws rather than
    * returning a viewer that cannot draw.
    *
-   * @throws If the options are invalid, if no backend is available, or if the
-   *   shader fails to compile.
+   * @throws If the options are invalid, if the shader fails to compile, or if
+   *   no backend is available -- which, with a forced `backend` preference,
+   *   includes the requested backend being absent even while the other one
+   *   answers.
    */
   static async create (options: VideoViewerOptions): Promise<FramelessVideoViewer> {
     const valid = validateVideoOptions(options)
@@ -74,7 +76,7 @@ export class FramelessVideoViewer extends Viewer {
     let backend: Backend | undefined
     let source: VideoSource | undefined
     try {
-      backend = await createBackend(canvas)
+      backend = await createBackend(canvas, valid.backend)
       source = new VideoSource(
         valid.src,
         videoSourceOptions(backend.capabilities.maxTextureDimension, valid)

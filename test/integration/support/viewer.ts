@@ -8,6 +8,7 @@
  */
 
 import { FramelessImageViewer, FramelessVideoViewer } from '../../../src/index'
+import type { BackendPreference } from '../../../src/index'
 import type { Projection } from '../../../src/core/types'
 import { makeContainer } from './dom'
 
@@ -63,16 +64,24 @@ const VIDEO_FIXTURE = '/fixtures/clip.mp4'
  * No DPR stubbing and no backend stubbing: the project's `deviceScaleFactor`
  * already sets the density, and whether a WebGPU backend exists is the
  * environment's business -- `user-story-no-webgpu.test.ts` runs in the project
- * where it does not.
+ * where it does not. The `backend` option is forwarded to the public create
+ * and never simulated: strictness under a forced preference is the library's
+ * behaviour to prove, not the harness's to fake.
  */
 export async function imageViewer (
-  options: { src?: string, camera?: ProjectionName, size?: readonly [number, number] } = {}
+  options: {
+    src?: string
+    camera?: ProjectionName
+    size?: readonly [number, number]
+    readonly backend?: BackendPreference
+  } = {}
 ): Promise<Mounted<FramelessImageViewer>> {
   const container = makeContainer(...(options.size ?? []))
   const viewer = await FramelessImageViewer.create({
     container,
     src: options.src ?? IMAGE_FIXTURE,
-    ...(options.camera === undefined ? {} : { camera: { projection: PROJECTIONS[options.camera] } })
+    ...(options.camera === undefined ? {} : { camera: { projection: PROJECTIONS[options.camera] } }),
+    ...(options.backend === undefined ? {} : { backend: options.backend })
   })
   return { viewer, container }
 }
@@ -85,6 +94,7 @@ export async function videoViewer (
     size?: readonly [number, number]
     autoplay?: boolean
     loop?: boolean
+    readonly backend?: BackendPreference
   } = {}
 ): Promise<Mounted<FramelessVideoViewer>> {
   const container = makeContainer(...(options.size ?? []))
@@ -92,6 +102,7 @@ export async function videoViewer (
     container,
     src: options.src ?? VIDEO_FIXTURE,
     ...(options.camera === undefined ? {} : { camera: { projection: PROJECTIONS[options.camera] } }),
+    ...(options.backend === undefined ? {} : { backend: options.backend }),
     ...(options.autoplay === undefined ? {} : { autoplay: options.autoplay }),
     ...(options.loop === undefined ? {} : { loop: options.loop })
   })

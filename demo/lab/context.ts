@@ -6,7 +6,7 @@
  * current viewer through `ViewerBox`, so a panel wired once keeps working
  * after any recreation.
  */
-import type { FramelessImageViewer, FramelessVideoViewer, Projection, ProjectionKind } from '../../src/index'
+import type { FramelessImageViewer, FramelessVideoViewer, BackendPreference, Projection, ProjectionKind } from '../../src/index'
 
 export type SourceId = '2k' | '4k' | '8k' | 'video'
 
@@ -23,6 +23,8 @@ export interface LabContext {
   readonly setProjection: (projection: Projection) => void
   /** Applies a source change and syncs the URL. */
   readonly setSource: (source: SourceId) => void
+  /** Applies a backend preference (recreates the viewer, pose carried); the URL follows on success. */
+  readonly setBackend: (backend: BackendPreference) => void
   /** Viewer replacements; fires immediately with the current value. */
   readonly onViewer: (listener: (current: LabViewer | null) => void) => () => void
 }
