@@ -8,7 +8,7 @@
 
 export { FramelessImageViewer } from './viewer/image-viewer'
 export { FramelessVideoViewer } from './viewer/video-viewer'
-export type { ImageViewerOptions, VideoViewerOptions, ImageProjection } from './viewer/options'
+export type { ImageViewerOptions, VideoViewerOptions, ImageProjection, BackendPreference } from './viewer/options'
 export type { CameraOptions } from './viewer/types'
 export type { Capabilities } from './renderer/backend'
 export type { SelectedCapabilities } from './renderer/capabilities'

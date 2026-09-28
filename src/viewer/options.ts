@@ -33,6 +33,20 @@ import type { CameraOptions } from './types'
  */
 export type ImageProjection = TextureProjection
 
+/**
+ * Which rendering backend a viewer should be created with.
+ *
+ * `'auto'` -- and omitting the field -- keeps the selection the library has
+ * always made: WebGPU first, WebGL2 when no adapter appeared. `'webgpu'` and
+ * `'webgl2'` are strict requests: if that backend is unavailable, `create`
+ * rejects naming it rather than silently downgrading. The readback of what
+ * was actually selected is `viewer.capabilities.backend`, whose values are
+ * `'webgpu' | 'webgl2'` and deliberately NOT this union -- a preference is a
+ * request, a capability is a fact, and one type holding both would let
+ * `'auto'` appear as an answer to "what am I running on".
+ */
+export type BackendPreference = 'auto' | 'webgpu' | 'webgl2'
+
 export interface ImageViewerOptions {
   readonly container: HTMLElement
   readonly src: string
@@ -40,6 +54,8 @@ export interface ImageViewerOptions {
   readonly projection?: ImageProjection
   readonly camera?: CameraOptions
   readonly PTZ?: boolean
+  /** Strict create-time backend request. Omitted means 'auto'; never mutable after create. */
+  readonly backend?: BackendPreference
 }
 
 export interface VideoViewerOptions extends ImageViewerOptions {
@@ -101,6 +117,23 @@ function assertProjection (value: unknown): asserts value is ImageProjection | u
   }
 }
 
+/**
+ * Asserts a backend preference and narrows it for the caller.
+ *
+ * Same class of check as `assertProjection`: the type system stops a
+ * TypeScript caller, and what survives is the right-type-wrong-member value
+ * arriving through a cast or from JavaScript. `undefined` passes -- it means
+ * 'auto', which is the selection the library has always made.
+ */
+function assertBackend (value: unknown): asserts value is BackendPreference | undefined {
+  if (value === undefined) return
+  if (value !== 'auto' && value !== 'webgpu' && value !== 'webgl2') {
+    throw new TypeError(
+      `backend must be one of 'auto', 'webgpu', 'webgl2' (got ${String(value)})`
+    )
+  }
+}
+
 function assertNoRemoved (options: RemovedOptions): void {
   if (options.frameSize !== undefined) {
     throw new TypeError(
@@ -127,6 +160,7 @@ export function validateImageOptions (options: ImageViewerOptions & RemovedOptio
   assertContainer(options.container)
   assertSrc(options.src)
   assertProjection(options.projection)
+  assertBackend(options.backend)
   assertNoRemoved(options)
   return options
 }
