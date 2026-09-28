@@ -8,6 +8,7 @@
  */
 
 import { FramelessImageViewer, FramelessVideoViewer } from '../../../src/index'
+import type { BackendPreference } from '../../../src/index'
 import type { Projection } from '../../../src/core/types'
 import { makeContainer } from './dom'
 
@@ -66,13 +67,19 @@ const VIDEO_FIXTURE = '/fixtures/clip.mp4'
  * where it does not.
  */
 export async function imageViewer (
-  options: { src?: string, camera?: ProjectionName, size?: readonly [number, number] } = {}
+  options: {
+    src?: string
+    camera?: ProjectionName
+    size?: readonly [number, number]
+    readonly backend?: BackendPreference
+  } = {}
 ): Promise<Mounted<FramelessImageViewer>> {
   const container = makeContainer(...(options.size ?? []))
   const viewer = await FramelessImageViewer.create({
     container,
     src: options.src ?? IMAGE_FIXTURE,
-    ...(options.camera === undefined ? {} : { camera: { projection: PROJECTIONS[options.camera] } })
+    ...(options.camera === undefined ? {} : { camera: { projection: PROJECTIONS[options.camera] } }),
+    ...(options.backend === undefined ? {} : { backend: options.backend })
   })
   return { viewer, container }
 }
@@ -85,6 +92,7 @@ export async function videoViewer (
     size?: readonly [number, number]
     autoplay?: boolean
     loop?: boolean
+    readonly backend?: BackendPreference
   } = {}
 ): Promise<Mounted<FramelessVideoViewer>> {
   const container = makeContainer(...(options.size ?? []))
@@ -92,6 +100,7 @@ export async function videoViewer (
     container,
     src: options.src ?? VIDEO_FIXTURE,
     ...(options.camera === undefined ? {} : { camera: { projection: PROJECTIONS[options.camera] } }),
+    ...(options.backend === undefined ? {} : { backend: options.backend }),
     ...(options.autoplay === undefined ? {} : { autoplay: options.autoplay }),
     ...(options.loop === undefined ? {} : { loop: options.loop })
   })
