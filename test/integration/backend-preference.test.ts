@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { canvasOf } from './support/dom'
 import { countNonBlack, maxChannelDiff, nextFrames, readCanvas } from './support/canvas'
-import { imageViewer } from './support/viewer'
+import { imageViewer, videoViewer } from './support/viewer'
 import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
+import { skipIfVideoUploadUnavailable } from './support/upload-paths'
 
 /**
  * How far the forced and default viewer paths may disagree, per channel.
@@ -72,5 +73,24 @@ describe('create with a backend preference', () => {
 
     expect(backend).toBe('webgpu')
     expect(countNonBlack(image)).toBeGreaterThan(0)
+  })
+
+  it("forcing 'webgl2' on the video viewer selects WebGL2 through that entry", async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
+    await skipIfVideoUploadUnavailable(ctx)
+    // The two tests above prove the option through the image entry; the video
+    // entry threads its own copy of `valid.backend`, and nothing else executes
+    // it with a forced value. 'webgl2' is the member that proves it: on this
+    // machine 'auto' selects WebGPU, so a readback of 'webgl2' can only come
+    // from the forced value reaching createBackend. Whether a forced WebGL2
+    // actually draws video frames is the no-webgpu user stories' ground, not
+    // this pin's.
+    const { viewer } = await videoViewer({ backend: 'webgl2' })
+    await vi.waitFor(() => expect(viewer.element.readyState).toBeGreaterThanOrEqual(1), { timeout: 5000 })
+    await nextFrames(2)
+    const backend = viewer.capabilities.backend
+    viewer.dispose()
+
+    expect(backend).toBe('webgl2')
   })
 })

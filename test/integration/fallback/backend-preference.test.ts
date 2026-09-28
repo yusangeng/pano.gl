@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FramelessImageViewer } from '../../../src/index'
+import { FramelessImageViewer, FramelessVideoViewer } from '../../../src/index'
 import { makeContainer } from '../support/dom'
 
 /*
@@ -32,5 +32,18 @@ describe('forced backend preference without WebGPU', () => {
     const backend = viewer.capabilities.backend
     viewer.dispose()
     expect(backend).toBe('webgl2')
+  })
+
+  it("forcing 'webgpu' on the video viewer rejects, naming the requested backend", async () => {
+    // The image rejection above covers one entry point; the video entry has
+    // its own threading to lose, and this is the project where losing it
+    // shows: without the forced value the default would fall back to WebGL2
+    // and create would RESOLVE. The rejection fires in createBackend, before
+    // any media loads, so the fixture path is only a valid-looking string.
+    await expect(FramelessVideoViewer.create({
+      container: makeContainer(),
+      src: '/fixtures/clip.mp4',
+      backend: 'webgpu'
+    })).rejects.toThrow(/backend 'webgpu' was requested/i)
   })
 })
