@@ -848,7 +848,7 @@ export function mountStatusPanel (
 Run: `npm run typecheck && npm run lint`
 Expected: clean.
 
-- [ ] **Step 5: Browser QA (目检)**
+- [x] **Step 5: Browser QA (目检)**
 
 Run `npm run start`, open the lab URL, and check:
 1. The control renders under the badge; on a WebGPU machine `auto` is active while the badge reads WebGPU.
