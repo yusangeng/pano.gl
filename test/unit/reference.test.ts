@@ -642,10 +642,9 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     // project_planet -- the WGSL twin is token-identical, held by the shader
     // tests -- with Math.fround at every intermediate, and three deliberate
     // elisions: lng pinned at 0 (theta -= 0 changes no bit, before or
-    // after the guard), the zoom
-    // pre-multiplication (every pin runs zoom 1, an exact identity), and
-    // to_uv's mod on u (every pinned theta / TWO_PI sits in [0, 1) and mod of
-    // NaN stays NaN; the v flip is transcribed). One caveat the pins below
+    // after the guard), the zoom pre-multiplication (every pin runs zoom 1,
+    // an exact identity), and to_uv's mod on u (every pinned theta / TWO_PI
+    // sits in [0, 1); the v flip is transcribed). One caveat the pins below
     // carry: JS Math.sin/cos/atan/sqrt are f64-then-rounded, so a backend's
     // f32 transcendentals may differ by an ulp; the exact-hit behaviour
     // pinned here is the JS-rounding truth and documents the class, not
