@@ -135,14 +135,28 @@ describe('WebGL2 shader source', () => {
     expect(body).toContain('1.0 - phi / PI')
   })
 
-  it('applies the latitude term in all three non-linear projections', () => {
+  it('applies the latitude term in cylindrical and pannini', () => {
     // Defect F5. The legacy shader declared u_CamPOVLatitude and never read it,
     // and P3's Task 8 makes that a deliberate behaviour change. Copying the old
     // omission into the second backend would make the two backends disagree
     // only at non-zero latitude -- the hardest possible place to notice.
-    for (const fn of ['project_cylindrical', 'project_planet', 'project_pannini']) {
+    // Planet left this table on 2026-09-28: its latitude is no longer a phi
+    // offset but the tilt of a Mobius pre-transform, pinned by the next test.
+    for (const fn of ['project_cylindrical', 'project_pannini']) {
       expect(skeleton(glslBody(fn)), `${fn} ignores latitude`).toMatch(/-\s*lat\b/)
     }
+  })
+
+  it('tilts planet through a Mobius pre-transform of the plane point', () => {
+    // 2026-09-28 planet-drag-semantics spec section 2.1. The structural pins:
+    // the half-angle trig of the tilt, the component-wise complex division,
+    // and the denominator floor that keeps the excluded point's viewport
+    // crossing finite (section 2.3). The token-for-token test below holds the
+    // WGSL twin to the same shape, and gate C holds both to the reference.
+    const body = skeleton(glslBody('project_planet'))
+    expect(body, 'half-angle trig of the tilt is missing').toContain('tilt * 0.5')
+    expect(body, 'the complex division is not component-wise').toContain('den_re * den_re + den_im * den_im')
+    expect(body, 'the excluded-point floor is missing').toContain('1e-15')
   })
 
   it('subtracts an honestly converted povLongitude, not / 4.0', () => {

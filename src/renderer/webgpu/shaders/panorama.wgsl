@@ -174,10 +174,42 @@ fn project_planet(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
   // planet projection renders mirrored and inside out.
   let z = -(s.z * zoom);
 
-  let m = 1.0 + z * z + y * y;
+  // The tilt: a sphere rotation expressed as a Mobius transform of the plane
+  // point w = z + i*y, rolling the source point at polar angle |lat| along
+  // the screen-vertical meridian to the screen centre (2026-09-28
+  // planet-drag-semantics spec, section 2.1). The rotation axis is the
+  // horizontal screen axis (the fixed points are w = +-1) and the angle is
+  // lat itself, no negation: drag down (lat < 0) rolls the centre so it
+  // samples what was above it -- content follows the finger, the convention
+  // the other three cameras use. At lat = 0 this is the identity term for
+  // term, so the default little planet does not move by one bit -- except a
+  // -0 -> +0 flip of theta's sign of zero on the z = 0 half-line, which no
+  // consumer distinguishes.
+  let tilt = lat;
+  let ct = cos(tilt * 0.5);
+  let st = sin(tilt * 0.5);
 
-  let p = (2.0 * z) / m;
-  let q = (2.0 * y) / m;
+  // w' = (ct*w - i*st) / (-i*st*w + ct), expanded into real components:
+  // numerator (ct*z, ct*y - st), denominator (ct + st*y, -st*z).
+  let num_re = ct * z;
+  let num_im = ct * y - st;
+  let den_re = ct + st * y;
+  let den_im = -st * z;
+  // The excluded sphere point crosses the viewport at large tilts (spec
+  // section 2.3): exactly on its crossing the denominator is zero and the
+  // division would be 0/0 = NaN, a bad pixel. The floor keeps w' finite and
+  // the fragment at its continuous limit. The float64 reference deliberately
+  // carries no floor -- it is the arbiter, and its tests sample around the
+  // pole, never on it.
+  let d2 = max(den_re * den_re + den_im * den_im, 1e-15);
+
+  let zn = (num_re * den_re + num_im * den_im) / d2;
+  let yn = (num_im * den_re - num_re * den_im) / d2;
+
+  let m = 1.0 + zn * zn + yn * yn;
+
+  let p = (2.0 * zn) / m;
+  let q = (2.0 * yn) / m;
   let r = (m - 2.0) / m;
 
   var theta = atan(p / q);
@@ -190,7 +222,7 @@ fn project_planet(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
 
   theta -= lng;
 
-  let phi = atan(r / sqrt(p * p + q * q)) + HALF_PI - lat;
+  let phi = atan(r / sqrt(p * p + q * q)) + HALF_PI;
   return to_uv(theta, phi);
 }
 
@@ -253,6 +285,11 @@ fn panorama_uv(ndc: vec2f) -> vec2f {
   // and the viewer never uploaded it), so there is no legacy behaviour to
   // reproduce and the term was born with correct units rather than corrected
   // to them. Gate B pins the new behaviour.
+  // 2026-09-28: on planet this value is no longer subtracted from phi -- it is
+  // the tilt angle of the Mobius pre-transform in project_planet (the
+  // steerable-centre semantics,
+  // docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md).
+  // Cylindrical and pannini still subtract it.
   let lat = camera.povLatitude * PI / 180.0;
 
   var uv: vec2f;

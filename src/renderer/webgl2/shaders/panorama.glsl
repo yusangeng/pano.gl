@@ -147,10 +147,42 @@ vec2 project_planet (vec3 s, float zoom, float lng, float lat) {
   // drop. Without it the planet projection renders mirrored and inside out.
   float z = -(s.z * zoom);
 
-  float m = 1.0 + z * z + y * y;
+  // The tilt: a sphere rotation expressed as a Mobius transform of the plane
+  // point w = z + i*y, rolling the source point at polar angle |lat| along
+  // the screen-vertical meridian to the screen centre (2026-09-28
+  // planet-drag-semantics spec, section 2.1). The rotation axis is the
+  // horizontal screen axis (the fixed points are w = +-1) and the angle is
+  // lat itself, no negation: drag down (lat < 0) rolls the centre so it
+  // samples what was above it -- content follows the finger, the convention
+  // the other three cameras use. At lat = 0 this is the identity term for
+  // term, so the default little planet does not move by one bit -- except a
+  // -0 -> +0 flip of theta's sign of zero on the z = 0 half-line, which no
+  // consumer distinguishes.
+  float tilt = lat;
+  float ct = cos(tilt * 0.5);
+  float st = sin(tilt * 0.5);
 
-  float p = (2.0 * z) / m;
-  float q = (2.0 * y) / m;
+  // w' = (ct*w - i*st) / (-i*st*w + ct), expanded into real components:
+  // numerator (ct*z, ct*y - st), denominator (ct + st*y, -st*z).
+  float num_re = ct * z;
+  float num_im = ct * y - st;
+  float den_re = ct + st * y;
+  float den_im = -st * z;
+  // The excluded sphere point crosses the viewport at large tilts (spec
+  // section 2.3): exactly on its crossing the denominator is zero and the
+  // division would be 0/0 = NaN, a bad pixel. The floor keeps w' finite and
+  // the fragment at its continuous limit. The float64 reference deliberately
+  // carries no floor -- it is the arbiter, and its tests sample around the
+  // pole, never on it.
+  float d2 = max(den_re * den_re + den_im * den_im, 1e-15);
+
+  float zn = (num_re * den_re + num_im * den_im) / d2;
+  float yn = (num_im * den_re - num_re * den_im) / d2;
+
+  float m = 1.0 + zn * zn + yn * yn;
+
+  float p = (2.0 * zn) / m;
+  float q = (2.0 * yn) / m;
   float r = (m - 2.0) / m;
 
   float theta = atan(p / q);
@@ -163,7 +195,7 @@ vec2 project_planet (vec3 s, float zoom, float lng, float lat) {
 
   theta -= lng;
 
-  float phi = atan(r / sqrt(p * p + q * q)) + HALF_PI - lat;
+  float phi = atan(r / sqrt(p * p + q * q)) + HALF_PI;
   return to_uv(theta, phi);
 }
 
@@ -227,8 +259,12 @@ void main () {
   // the uniform was declared and never read, and the inner ortho camera was
   // built with latitude 0 and never updated). P3's Task 8 turned that into a
   // deliberate, separately tested behaviour change, in the WGSL and in the
-  // reference at the same time. Both shaders carry the `- lat` term; neither
-  // carries it alone.
+  // reference at the same time.
+  // 2026-09-28: planet no longer subtracts it from phi -- it is the tilt
+  // angle of the Mobius pre-transform in project_planet (steerable-centre
+  // semantics; docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md).
+  // Cylindrical and pannini still carry the `- lat` term; neither carries it
+  // alone.
   float lat = u_povLatitude * PI / 180.0;
 
   vec2 uv;
