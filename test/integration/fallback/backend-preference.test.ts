@@ -3,10 +3,12 @@ import { FramelessImageViewer, FramelessVideoViewer } from '../../../src/index'
 import { makeContainer } from '../support/dom'
 
 /*
- * The forced-preference rejections, in the project that exists to hold
+ * The forced-'webgpu' rejections, in the project that exists to hold
  * them: --disable-gpu took the WebGPU adapter away (this project's setup
  * asserts it), so 'webgpu' is a request this environment genuinely cannot
- * honour while WebGL2 still answers. The real-GPU twin
+ * honour while WebGL2 still answers. (A forced-'webgl2' rejection cannot
+ * happen here -- WebGL2 answers -- which is why that half lives in the node
+ * unit project instead.) The real-GPU twin
  * (test/integration/backend-preference.test.ts) holds the success half.
  */
 describe('forced backend preference without WebGPU', () => {
