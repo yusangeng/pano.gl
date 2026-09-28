@@ -581,24 +581,24 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Typecheck and lint**
+- [x] **Step 1: Typecheck and lint**
 
 Run: `npm run typecheck && npm run lint`
 Expected: both clean (three tsc programs; eslint over src, test, scripts, demo).
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `npm run build`
 Expected: clean (`dist/` ESM + CJS + `.d.ts`).
 
-- [ ] **Step 3: The card verify — unit then integration**
+- [x] **Step 3: The card verify — unit then integration**
 
 Run: `npm test`
 Expected: ALL green. In particular:
 - Gates A/B/C pass with **zero pixel change** — every gate canvas is even-sized, so no gate fragment lands on a branch point and the guard never fires under test. A gate failure means the guard fired somewhere it must not (or a transcription typo changed ordinary pixels): fix before finishing, do not touch baselines.
 - The `no-webgpu` project's fallback tests are unaffected (no shader-pipeline change beyond the formula text).
 
-- [ ] **Step 4: Write the completion report and finish**
+- [x] **Step 4: Write the completion report and finish**
 
 Append to the task card's「完成报告」section: what was done (guard in three places, pin flips, erratum), self-test results (the commands above with outcomes), deviations from this plan (none expected), residual risks (none expected — if any gate behaved unexpectedly and was resolved, record it). Then run the superloop finish gate per the executor contract.
 
