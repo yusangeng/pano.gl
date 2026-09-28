@@ -55,4 +55,13 @@ createdAt: 2026-09-24T08:49:29.827Z
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve**（2026-09-28，superloop-verify 自动验收，四步全审）。
+
+1. **结构化 review**：主审按清单逐类过全 diff（输入校验/错误一致性/竞态/枚举完备；SQL 与 LLM 信任边界不适用）——parseNumber 夹持回退（main.ts:59）、横幅三态与 chip 状态机、`publish(null)`→`dispose()` 顺序、KINDS/CHANNELS 枚举，未见新问题。
+2. **plan 红线逐条核对**：12 个 File Structure 文件一一存在；`minimal.html` 与 master 旧 `index.html` sha 逐字节一致（e8f40f39…）；硬约束全守住——零裸导入/零新依赖、demo/lab 全部 8 条 src 引用止于公开面 `src/index`（深度偏离 D2/D11 属已裁决台账）、`src/`、`vite.config.ts`、`package.json` 零触碰；README 改动与 plan Task 7 Step 1 逐字一致。
+3. **门禁证据复核**：15 提交全部 `task-demo-lab:` 前缀；diff 14 文件全在 `[demo/**, README.md]` + 卡/plan 自动放行内；CR 结论含手段/各级发现数（32）/整改（12 修复 771e1de）/轮数与 20 条记录项的内容-原因-风险三元组；测试质量结论含必含覆盖陈述（库侧零改动全绿、demo 侧 spec §7 豁免 + 浏览器验收替代保障）。留痕合规。
+4. **最重发现亲验**：红队 CRITICAL（`.transport{display:flex}` 压过 UA `[hidden]`）修复亲验落地——lab.css:132-134 `.transport[hidden]{display:none}` 带 why 注释 + media.ts:53-56 清理路径清空死控件；终审 I-1 亲验——main.ts:145-148 `viewer.on('zoom', scheduleUrlWrite)` + 250ms 去抖（:111）；D10 亲验——main.ts:21 `import './lab.css'`。
+
+**20 条记录级发现与遗留风险逐条裁决：接受，不构成打回**——测试类 T-1~T-4 落 spec §7 用户明裁豁免；F5 为平台现象（本机 GPUAdapterInfo 对 Object.entries 不可见）非代码缺陷，留真机测量；F6/F7/F8、P-1/P-2、M-2~M-7、D-1~D-6 均为记录在案的设计取舍，风险自评成立且影响面限于示例页自身；device-lost 残余异常在 fatal 横幅之后、键盘主径已由 publish(null) 封堵，属可接受残余。附注②两条 gstack 提示（升级、routing 注入会越 scope 写 CLAUDE.md）不处理是正确判断。
+
+合并安全性由 task-merge 六重保护收口（合并前后主分支 verify 双跑）。
