@@ -5,7 +5,7 @@
  *  - projection change -> `viewer.cameraOptions = { projection }` (pose kept)
  *  - same-class source  -> `viewer.src = url` (pose and projection kept)
  *  - image <-> video    -> dispose + recreate the other class, pose carried over
- *  - backend preference -> dispose + recreate with the `backend` option (pose carried)
+ *  - backend preference -> dispose + recreate with the `backend` option (pose carried, video playback restarts)
  *
  * The URL query (`?projection=planet&zoom=0.5&source=video`) is lab state as
  * a bookmark: read once at boot, written back on every change.
@@ -269,8 +269,11 @@ await boot().catch((error) => {
   const params = new URLSearchParams(window.location.search)
   if (params.get('backend') !== null) {
     params.delete('backend')
+    // An emptied query writes the bare path, not a trailing '?' -- the other
+    // URL writers in this file never leave a bare question mark behind.
+    const query = params.toString()
     try {
-      window.history.replaceState(null, '', `?${params.toString()}`)
+      window.history.replaceState(null, '', query === '' ? window.location.pathname : `?${query}`)
     } catch {
       // Same guard as writeUrlState: a history API that throws (a sandboxed
       // iframe, an opaque origin) must not preempt the banner below -- an
