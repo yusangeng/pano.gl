@@ -103,6 +103,36 @@ describe('gate C: WebGPU vs WebGL2', () => {
     expect(r.webgl2).toBeLessThanOrEqual(3)
   })
 
+  it('the CPU reference arbitrates planet too, at a tilted pose', async () => {
+    // 2026-09-28 planet-review-followups spec, section 3: gate C's arbiter leg
+    // covered cylindrical only, so a pair of shaders agreeing on a wrong
+    // planet transcription had no third opinion. State 1 (lat 30) keeps the
+    // pole off-screen and the 128 even canvas never lands a fragment centre
+    // on a branch point.
+    //
+    // Tolerance, per the spec's four requirements:
+    // - measured: webgpu 1, webgl2 1, probe run of this file on this
+    //   machine's GPU (2026-09-28); the pin is not a guess;
+    // - derived: planet runs a longer per-fragment chain than cylindrical
+    //   (whose pin is <= 3 above) -- the Mobius complex division and the
+    //   stereographic back-projection add a handful of f32 divisions plus
+    //   sqrt and a second atan per fragment, and the 4x4 extent
+    //   samples a wider stretch of the surface, so a few ulps per link land
+    //   a few channels apart after the shared bilinear fetch, whose hardware
+    //   weights are quantized to sub-texel bits;
+    // - bounded: 4, the smallest power of two strictly above twice the
+    //   larger measured maximum;
+    // - headroom: the 2x factor plus the power-of-two step absorb a
+    //   different f32 transcendental implementation (CI runs SwiftShader,
+    //   this machine ran hardware) without masking a real break, which
+    //   shows up as a frame-wide uniform difference far above this bound.
+    const s = STATES[1]!
+    const r = await compareWithReference(state(s), projectionFor('planet', s))
+
+    expect(r.webgpu).toBeLessThanOrEqual(4)
+    expect(r.webgl2).toBeLessThanOrEqual(4)
+  })
+
   it('the poles are the documented exception', async () => {
     // Near latitude +/-90 the equirectangular mapping compresses the entire
     // longitude range into a few pixels, so a tiny difference in the computation

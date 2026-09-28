@@ -29,7 +29,7 @@
 **Files:**
 - Modify: `test/integration/gate-c-cross-backend.test.ts` (insert after the cylindrical arbiter `it`, which ends with the `expect(r.webgl2).toBeLessThanOrEqual(3)` line, before `it('the poles are the documented exception', ...)`)
 
-- [ ] **Step 1: Insert the probe test**
+- [x] **Step 1: Insert the probe test**
 
 ```ts
   it('the CPU reference arbitrates planet too, at a tilted pose', async () => {
@@ -50,16 +50,16 @@
   })
 ```
 
-- [ ] **Step 2: Run the integration project on this file**
+- [x] **Step 2: Run the integration project on this file**
 
 Run: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`
 Expected: ALL green (the probe bounds are deliberately loose). Note the `planet arbiter probe: webgpu=… webgl2=…` line in the output — those two numbers are the measured maxima. This needs a machine with WebGPU; the project's setup file fails loudly without one (that is by design — do not weaken it).
 
-- [ ] **Step 3: Record the measured maxima**
+- [x] **Step 3: Record the measured maxima**
 
 Write the two numbers down (e.g. in the completion report draft): `webgpu = M1`, `webgl2 = M2`. Sanity-check them against the derivation in Task 2's comment: both should be single-digit to low-double-digit channel differences (cylindrical's pin is 3; planet's chain is a few links longer). **If either is near or above 64, stop and investigate before pinning** — that is not accumulated ulps, that is a real disagreement the pairwise legs cannot see, and pinning a bound under it would paper over exactly the defect this leg exists to catch. Investigate with the CPU reference arbiter in `src/core/reference.ts` (it is the arbiter by design; run the three-way comparison and find the odd one out).
 
-- [ ] **Step 4: Commit the probe (only if Task 2's pin lands in the same working session)**
+- [x] **Step 4: Commit the probe (only if Task 2's pin lands in the same working session)**
 
 Skip this step if pinning follows immediately — one commit for the pinned leg is cleaner. If the probe must be committed alone (session break), commit it as:
 
@@ -77,11 +77,11 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 **Files:**
 - Modify: `test/integration/gate-c-cross-backend.test.ts` (the test added in Task 1)
 
-- [ ] **Step 1: Compute the bound from the measured maxima**
+- [x] **Step 1: Compute the bound from the measured maxima**
 
 With `Mmax = max(M1, M2)` from Task 1's run: the bound is the smallest power of two strictly greater than `2 × Mmax`. Examples of the rule: Mmax = 3 → 2×3 = 6 → bound 8; Mmax = 9 → 18 → bound 32; Mmax = 17 → 34 → bound 64.
 
-- [ ] **Step 2: Replace the probe with the pinned test**
+- [x] **Step 2: Replace the probe with the pinned test**
 
 Replace the whole `it('the CPU reference arbitrates planet too, at a tilted pose', ...)` block from Task 1 with (fill `M1`, `M2` and `BOUND` with the measured values and the computed bound — every other placeholder-looking token is literal):
 
@@ -116,12 +116,12 @@ Replace the whole `it('the CPU reference arbitrates planet too, at a tilted pose
   })
 ```
 
-- [ ] **Step 3: Run the file green**
+- [x] **Step 3: Run the file green**
 
 Run: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`
 Expected: ALL green — the new leg comfortably inside BOUND, the cylindrical arbiter still ≤3, the pairwise legs still ≤2, the poles exception untouched.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/gate-c-cross-backend.test.ts
@@ -144,17 +144,17 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Typecheck and lint**
+- [x] **Step 1: Typecheck and lint**
 
 Run: `npm run typecheck && npm run lint`
 Expected: both clean (the integration tests sit in their own tsc program; the edit adds no imports).
 
-- [ ] **Step 2: The card verify**
+- [x] **Step 2: The card verify**
 
 Run: `npm run build && npm test`
 Expected: ALL green — unit, integration, and the no-webgpu project (whose fallback tests never run gate C; the `no-webgpu` include list does not collect this file).
 
-- [ ] **Step 3: Write the completion report and finish**
+- [x] **Step 3: Write the completion report and finish**
 
 Append to the task card's「完成报告」section: the measured maxima M1/M2 and the machine context (hardware GPU vs SwiftShader), the bound and the rule arithmetic, self-test results, deviations from this plan (none expected), residual risks (the bound is machine-measured; if a later machine exceeds it, re-measure rather than raise it blindly). Then run the superloop finish gate per the executor contract.
 
