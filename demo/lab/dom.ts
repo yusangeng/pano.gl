@@ -23,6 +23,9 @@ export function h<K extends keyof HTMLElementTagNameMap> (
     } else if (key === 'value') {
       const input = el as HTMLInputElement
       input.value = String(value)
+    } else if (typeof value === 'boolean') {
+      // Presence attributes (disabled/hidden): present means true, so 'false' as a string would invert the intent.
+      if (value) el.setAttribute(key, '')
     } else {
       el.setAttribute(key, String(value))
     }

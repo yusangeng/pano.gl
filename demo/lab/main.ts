@@ -31,7 +31,7 @@ function required<E extends Element> (selector: string): E {
 }
 
 function parseNumber (raw: string | null, min: number, max: number, fallback: number): number {
-  const value = raw === null ? Number.NaN : Number(raw)
+  const value = raw === null || raw.trim() === '' ? Number.NaN : Number(raw)
   return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 }
 
@@ -129,6 +129,8 @@ async function boot (): Promise<void> {
     // Cross class: the one migration v1 leaves to the application. Carry the
     // pose over by hand, then rebuild the other viewer from scratch.
     const carried = current.viewer.cameraOptions
+    // The box holds null across the async recreate, so re-entrant clicks no-op and panels drop their dead viewer instead of calling into it.
+    viewers.publish(null)
     current.viewer.dispose()
     await installViewer(target, carried.projection, carried.pose)
   }
@@ -150,7 +152,9 @@ async function boot (): Promise<void> {
   }
 
   // Panel mounts are added here by Tasks 3-6, BEFORE installViewer publishes
-  // the first viewer: a panel mounted after the publish would miss it.
+  // the first viewer, so panels observe the full lifecycle from the null
+  // state; a later mount would still receive the current viewer, because
+  // subscribe fires the listener immediately.
 
   const state = readUrlState()
   await installViewer(state.source, state.projection)
