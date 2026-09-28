@@ -115,6 +115,15 @@ async function boot (): Promise<void> {
       required('#status-panel').classList.add('lost')
       showBanner(banner, 'Device lost', `${lost.reason}: ${lost.message}. v1 has no automatic recovery -- reload to retry.`, true)
     })
+    // Wheel zoom mutates the projection inside the library without passing
+    // through the shell, so the bookmark needs its own hook here. The current
+    // handle is read at event time, not captured: a same-class source swap
+    // reuses this viewer under a new handle, and the captured one would write
+    // a stale source id into the URL.
+    viewer.on('zoom', () => {
+      const current = viewers.current
+      if (current !== null) writeUrlState(current)
+    })
     const handle: LabViewer = { viewer, mode: source === 'video' ? 'video' : 'image', source }
     viewers.publish(handle)
     writeUrlState(handle)
