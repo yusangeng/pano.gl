@@ -10,6 +10,7 @@ import type { Backend } from '../renderer/backend'
 import { describeCapabilities, type ProbeInput, type SelectedCapabilities } from '../renderer/capabilities'
 import { WebGL2Backend } from '../renderer/webgl2/backend'
 import { WebGPUBackend } from '../renderer/webgpu/backend'
+import type { BackendPreference } from './options'
 
 /**
  * Probes the device without constructing a viewer.
@@ -65,12 +66,28 @@ export async function probe (): Promise<SelectedCapabilities> {
 /**
  * Creates a backend for the given canvas.
  *
- * @throws If neither backend is available. Constructing a viewer that can never
- *   draw is what the legacy `createProgram` did -- it logged and returned null,
- *   and the viewer reported success. A viewer that cannot render is not a
- *   viewer.
+ * A forced preference is strict: exactly the named backend is tried, and a
+ * null result rejects naming it. Falling back anyway would be the silent
+ * downgrade this option exists to make impossible -- a caller who wants the
+ * fallback passes 'auto' or nothing.
+ *
+ * @throws If the requested backend is unavailable, or (on 'auto') if neither
+ *   backend is. Constructing a viewer that can never draw is what the legacy
+ *   `createProgram` did -- it logged and returned null, and the viewer
+ *   reported success. A viewer that cannot render is not a viewer.
  */
-export async function createBackend (canvas: HTMLCanvasElement): Promise<Backend> {
+export async function createBackend (
+  canvas: HTMLCanvasElement,
+  preference: BackendPreference = 'auto'
+): Promise<Backend> {
+  if (preference !== 'auto') {
+    const forced = preference === 'webgpu'
+      ? await WebGPUBackend.create(canvas)
+      : WebGL2Backend.create(canvas)
+    if (forced) return forced
+    throw new Error(`backend '${preference}' was requested but is unavailable in this browser`)
+  }
+
   const webgpu = await WebGPUBackend.create(canvas)
   if (webgpu) return webgpu
 
