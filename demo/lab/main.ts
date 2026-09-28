@@ -5,12 +5,13 @@
  *  - projection change -> `viewer.cameraOptions = { projection }` (pose kept)
  *  - same-class source  -> `viewer.src = url` (pose and projection kept)
  *  - image <-> video    -> dispose + recreate the other class, pose carried over
+ *  - backend preference -> dispose + recreate with the `backend` option (pose carried)
  *
  * The URL query (`?projection=planet&zoom=0.5&source=video`) is lab state as
  * a bookmark: read once at boot, written back on every change.
  */
 import { FramelessImageViewer, FramelessVideoViewer } from '../../src/index'
-import type { CameraState, Projection, SelectedCapabilities } from '../../src/index'
+import type { BackendPreference, CameraState, Projection, SelectedCapabilities } from '../../src/index'
 import { assetUrl } from '../asset-url'
 import { ViewerBox, defaultProjection } from './context'
 import type { LabContext, LabViewer, SourceId } from './context'
@@ -44,16 +45,24 @@ function parseNumber (raw: string | null, min: number, max: number, fallback: nu
 }
 
 /** Bookmark in: invalid values silently fall back (a bookmark is a convenience, not an interface). */
-function readUrlState (): { projection: Projection, source: SourceId } {
+function readUrlState (): { projection: Projection, source: SourceId, backend: BackendPreference } {
   const params = new URLSearchParams(window.location.search)
   const kindParam = params.get('projection')
   const sourceParam = params.get('source')
   const source = SOURCE_IDS.find(s => s === sourceParam) ?? '2k'
+  // The preference, never the capability: a bookmark taken on a WebGPU
+  // machine must not pin a WebGL2-only machine to 'webgpu' (spec §3).
+  const backend: BackendPreference =
+    (['auto', 'webgpu', 'webgl2'] as const).find(b => b === params.get('backend')) ?? 'auto'
   const fallback = defaultProjection(
     (['linear', 'cylindrical', 'planet', 'pannini'] as const).find(k => k === kindParam) ?? 'linear')
   if (fallback.kind === 'linear') {
     const fovDeg = parseNumber(params.get('fov'), 15, 110, (fallback.fov * 180) / Math.PI)
-    return { projection: { kind: 'linear', fov: (fovDeg * Math.PI) / 180, aspect: fallback.aspect }, source }
+    return {
+      projection: { kind: 'linear', fov: (fovDeg * Math.PI) / 180, aspect: fallback.aspect },
+      source,
+      backend
+    }
   }
   const extent = parseNumber(params.get('extent'), 0.5, 8, fallback.extent[0])
   return {
@@ -62,14 +71,17 @@ function readUrlState (): { projection: Projection, source: SourceId } {
       zoom: parseNumber(params.get('zoom'), 0.01, 1, fallback.zoom),
       extent: [extent, extent]
     },
-    source
+    source,
+    backend
   }
 }
 
 /** Bookmark out: the URL always mirrors what is on screen. */
-function writeUrlState (current: LabViewer): void {
+function writeUrlState (current: LabViewer, backend: BackendPreference): void {
   const projection = current.viewer.cameraOptions.projection
-  const params = new URLSearchParams({ projection: projection.kind, source: current.source })
+  // 'backend' mirrors the shell's PREFERENCE, not viewer.capabilities.backend
+  // -- the same reasoning as readUrlState's parse above.
+  const params = new URLSearchParams({ projection: projection.kind, source: current.source, backend })
   if (projection.kind === 'linear') {
     params.set('fov', String(Math.round((projection.fov * 180) / Math.PI)))
   } else {
@@ -99,15 +111,43 @@ async function boot (): Promise<void> {
   const stage = required<HTMLElement>('#stage')
   const banner = required<HTMLElement>('#page-banner')
   const selected: SelectedCapabilities = await FramelessImageViewer.probe()
-  mountStatusPanel(required('#status-panel'), selected)
+  // Hoisted above the panel mounts so the status switch knows the initial
+  // preference: pure URL reading, nothing here needs a viewer.
+  const state = readUrlState()
+  let backendPref: BackendPreference = state.backend
+  const viewers = new ViewerBox()
+
+  // The control shows the preference; the badge above it shows the fact.
+  // Switching backends is the cross-class swap's machine again -- the
+  // backend binds to the canvas and the device at create time, so there is
+  // nothing to mutate -- with one addition the other swaps do not have: the
+  // URL must follow only on success, because the lab's banners are terminal
+  // and Reload is their only recovery. writeUrlState runs inside
+  // installViewer, i.e. after a successful create, so a failed force leaves
+  // the bookmark on the last working state and Reload is a way out, not a
+  // loop (spec §3). installViewer is referenced before its definition; a
+  // click cannot fire between this definition and that one, because there
+  // is no await between them.
+  const setBackend = (backend: BackendPreference): void => {
+    if (backend === backendPref) return
+    backendPref = backend
+    const current = viewers.current
+    if (current === null) return
+    const carried = current.viewer.cameraOptions
+    // The box holds null across the async recreate, so re-entrant clicks no-op.
+    viewers.publish(null)
+    current.viewer.dispose()
+    installViewer(current.source, carried.projection, carried.pose)
+      .catch((error) => showBanner(banner, 'Backend switch failed', String(error)))
+  }
+
+  mountStatusPanel(required('#status-panel'), selected, backendPref, setBackend)
 
   if (selected.backend === 'none') {
     showBanner(banner, 'No rendering backend',
       'Neither WebGPU nor WebGL2 is available in this browser, so there is nothing to render with. Try a browser with WebGPU (or at least WebGL2) enabled.')
     return
   }
-
-  const viewers = new ViewerBox()
 
   let urlWriteTimer: ReturnType<typeof setTimeout> | null = null
   /**
@@ -123,7 +163,7 @@ async function boot (): Promise<void> {
     urlWriteTimer = setTimeout(() => {
       urlWriteTimer = null
       const current = viewers.current
-      if (current !== null) writeUrlState(current)
+      if (current !== null) writeUrlState(current, backendPref)
     }, 250)
   }
 
@@ -133,9 +173,11 @@ async function boot (): Promise<void> {
     pose?: Partial<CameraState>
   ): Promise<void> => {
     const camera = pose === undefined ? { projection } : { projection, pose }
+    // 'auto' is a member of the union, so the preference passes through
+    // unconditionally -- no spread dance for the default case.
     const viewer = source === 'video'
-      ? await FramelessVideoViewer.create({ container: stage, src: SOURCE_URLS[source], camera })
-      : await FramelessImageViewer.create({ container: stage, src: SOURCE_URLS[source], camera })
+      ? await FramelessVideoViewer.create({ container: stage, src: SOURCE_URLS[source], camera, backend: backendPref })
+      : await FramelessImageViewer.create({ container: stage, src: SOURCE_URLS[source], camera, backend: backendPref })
     viewer.on('device-lost', (lost) => {
       // v1 has no automatic recovery; the lab says so instead of pretending.
       // Dropping the handle also detaches the panels: the banner stops
@@ -151,7 +193,7 @@ async function boot (): Promise<void> {
     viewer.on('zoom', scheduleUrlWrite)
     const handle: LabViewer = { viewer, mode: source === 'video' ? 'video' : 'image', source }
     viewers.publish(handle)
-    writeUrlState(handle)
+    writeUrlState(handle, backendPref)
   }
 
   const applySource = async (target: SourceId): Promise<void> => {
@@ -163,7 +205,7 @@ async function boot (): Promise<void> {
       current.viewer.src = SOURCE_URLS[target]
       const handle = { viewer: current.viewer, mode: current.mode, source: target }
       viewers.publish(handle)
-      writeUrlState(handle)
+      writeUrlState(handle, backendPref)
       return
     }
     // Cross class: the one migration v1 leaves to the application. Carry the
@@ -185,6 +227,7 @@ async function boot (): Promise<void> {
     setSource: (source) => {
       applySource(source).catch((error) => showBanner(banner, 'Source switch failed', String(error)))
     },
+    setBackend,
     onViewer: (listener) => viewers.subscribe(listener)
   }
 
@@ -196,11 +239,20 @@ async function boot (): Promise<void> {
   mountMediaPanel(required('#media-panel'), ctx)
   mountEventLogPanel(required('#eventlog-panel'), ctx)
 
-  const state = readUrlState()
   await installViewer(state.source, state.projection)
 }
 
 await boot().catch((error) => {
+  // A boot that died with a backend param in the URL would come back to the
+  // same death on Reload -- and Reload is the banner's only recovery. Drop
+  // the param so a reload retries in 'auto'; on a machine where the forced
+  // backend does work, auto selects the same one anyway, so the strip costs
+  // nothing (spec §3/§4).
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('backend') !== null) {
+    params.delete('backend')
+    window.history.replaceState(null, '', `?${params.toString()}`)
+  }
   const banner = document.querySelector<HTMLElement>('#page-banner')
   if (banner !== null) {
     showBanner(banner, 'Viewer creation failed', String(error))
