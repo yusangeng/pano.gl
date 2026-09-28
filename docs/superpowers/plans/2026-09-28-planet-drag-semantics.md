@@ -84,7 +84,7 @@ yn = (numIm·denRe − numRe·denIm) / d2      // 进入原有的 m/p/q/r/theta/
 - Modify: `src/core/reference.ts:168-192`（projectPlanet）、`:27-41`（头注 departure）、`:91-104`（latOffset doc）
 - Test: `test/unit/reference.test.ts`（F5 describe :313-351 翻转 + 追加新 describe）
 
-- [ ] **Step 1: 翻转 F5 表 + 写新的 planet-tilt 测试（先红）**
+- [x] **Step 1: 翻转 F5 表 + 写新的 planet-tilt 测试（先红）**
 
 `test/unit/reference.test.ts` :322-326 的 `nonLinear` 表删掉 planet 行（cyl/pannini 留下），describe 块注释补一行去向说明。改后：
 
@@ -211,12 +211,12 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认先红**
+- [x] **Step 2: 跑测试确认先红**
 
 Run: `npx vitest run test/unit/reference.test.ts`
 Expected: **3 红 1 绿**——I2/I3/I4 红（旧公式中心 u 是 `atan(0/0)=NaN`、v 随 lat 单调**下降**、方向不符），I1 绿（旧公式在 lat=0 本来就是 legacy 闭式——这条钉的是「恒等必须存活改动」，全程要保持绿）。cyl/pannini 的 F5 行与文件其余全部保持绿。
 
-- [ ] **Step 3: 重写 projectPlanet + 两处文档注记**
+- [x] **Step 3: 重写 projectPlanet + 两处文档注记**
 
 `src/core/reference.ts` :168-192 整个函数体替换为（`phi` 行的 `- lat` 删除；**reference 故意不带 1e-15 下限**，注释里说明）：
 
@@ -305,7 +305,7 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
 
 （其余段落原样保留。）
 
-- [ ] **Step 4: 跑测试确认全绿 + 机械验证**
+- [x] **Step 4: 跑测试确认全绿 + 机械验证**
 
 Run: `npx vitest run test/unit/reference.test.ts`
 Expected: 全 PASS（新 4 条 + F5 翻转后 2 行 + 全文件其余）。
@@ -313,7 +313,7 @@ Expected: 全 PASS（新 4 条 + F5 翻转后 2 行 + 全文件其余）。
 Run: `npm run typecheck && npm run lint`
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/core/reference.ts test/unit/reference.test.ts
@@ -337,7 +337,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `src/renderer/webgl2/shaders/panorama.glsl:144-168`（project_planet）、`:225-232`（lat 来源注记）
 - Test: `test/unit/webgl2-shaders.test.ts:138-146`
 
-- [ ] **Step 1: 翻转 shader 结构断言（先红）**
+- [x] **Step 1: 翻转 shader 结构断言（先红）**
 
 `test/unit/webgl2-shaders.test.ts` :138-146 整个 `it` 替换为两个：
 
@@ -367,12 +367,12 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
   })
 ```
 
-- [ ] **Step 2: 跑测试确认先红**
+- [x] **Step 2: 跑测试确认先红**
 
 Run: `npx vitest run test/unit/webgl2-shaders.test.ts`
 Expected: 新 planet 断言红（`tilt * 0.5` 不存在）；其余全绿——含 token-for-token（两份 shader 都还没改，仍然互相同形）。
 
-- [ ] **Step 3: 改 WGSL `project_planet`**
+- [x] **Step 3: 改 WGSL `project_planet`**
 
 `src/renderer/webgpu/shaders/panorama.wgsl` :171-195 整个函数替换为：
 
@@ -434,7 +434,7 @@ fn project_planet(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
 }
 ```
 
-- [ ] **Step 4: 改 GLSL `project_planet`（与 WGSL 逐 token 同形）**
+- [x] **Step 4: 改 GLSL `project_planet`（与 WGSL 逐 token 同形）**
 
 `src/renderer/webgl2/shaders/panorama.glsl` :144-168 整个函数替换为（仅声明关键字 `let`→`float`、既有 negation 注释差异保留——两者都被 skeleton 归一化/剥离，token-for-token 测试不受影响；**字面量必须与 WGSL 完全一致**：`0.5`、`1.0`、`2.0`、`1e-15`）：
 
@@ -496,7 +496,7 @@ vec2 project_planet (vec3 s, float zoom, float lng, float lat) {
 }
 ```
 
-- [ ] **Step 5: 两处 lat 来源注记各加指向（注释，不进 token 测试）**
+- [x] **Step 5: 两处 lat 来源注记各加指向（注释，不进 token 测试）**
 
 WGSL `panorama_uv` 内 :250-256 的 lat 注释块末尾（`let lat = ...` 之前）追加一段：
 
@@ -518,7 +518,7 @@ GLSL `main()` 内 :225-232 的 lat 注释块：末句 `Both shaders carry the \`
   // alone.
 ```
 
-- [ ] **Step 6: 跑 shader 单测确认全绿 + 机械验证**
+- [x] **Step 6: 跑 shader 单测确认全绿 + 机械验证**
 
 Run: `npx vitest run test/unit/webgl2-shaders.test.ts test/unit/shaders.test.ts`
 Expected: 全 PASS——含 token-for-token（`bodyTokens` 归一化 `let`/`float` 后两份 body 逐 token 相等）、字面量多重集（`0.5`/`1.0`/`2.0` 两侧同集；`1e-15` 无小数点不进多重集但 token 序列相等）、atan 计数（每 body 仍 1 处）、cyl/pannini 的 `/-\s*lat\b/` 循环。
@@ -526,7 +526,7 @@ Expected: 全 PASS——含 token-for-token（`bodyTokens` 归一化 `let`/`floa
 Run: `npm run typecheck && npm run lint`
 Expected: PASS。
 
-- [ ] **Step 7: Commit（两份 shader + 测试 + 注记，一个提交，完成三处同步）**
+- [x] **Step 7: Commit（两份 shader + 测试 + 注记，一个提交，完成三处同步）**
 
 ```bash
 git add src/renderer/webgpu/shaders/panorama.wgsl src/renderer/webgl2/shaders/panorama.glsl test/unit/webgl2-shaders.test.ts
@@ -546,7 +546,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 **Files:** 无新改动（本任务只验证；发现缺陷回到对应 Task 修，重跑本任务）。
 
-- [ ] **Step 1: 全量机器验证（卡片 verify）**
+- [x] **Step 1: 全量机器验证（卡片 verify）**
 
 Run: `npm run typecheck && npm run lint && npm test`
 Expected: 三段全 PASS。重点看：
@@ -557,7 +557,7 @@ Expected: 三段全 PASS。重点看：
 - **门 B**（gate-b-projection）照绿：lat=0 vs 45 画面仍不同（现在是旋转），`maxChannelDiff > 2` 与公式无关；
 - **门 C**（gate-c-cross-backend）照绿：两份 shader 同一提交改的同形代码，CPU reference 是 tiebreaker。
 
-- [ ] **Step 2: 人工语义验收（`npm run start` → 右栏切 planet）**
+- [x] **Step 2: 人工语义验收（`npm run start` → 右栏切 planet）**
 
 逐条过（spec §7）：
 
@@ -569,7 +569,7 @@ Expected: 三段全 PASS。重点看：
 
 Expected: 五条全过。任何一条不过 → 回 Task 1/2 修 → 重跑 Step 1 与本步。
 
-- [ ] **Step 3: 收尾**
+- [x] **Step 3: 收尾**
 
 按卡头执行约定走 superloop 的 task-finish（完成报告、自审记录落卡），禁用 finishing-a-development-branch。
 
