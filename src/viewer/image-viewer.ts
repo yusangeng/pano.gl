@@ -87,7 +87,7 @@ export class FramelessImageViewer extends Viewer {
     let backend: Backend | undefined
     let source: ImageSource | undefined
     try {
-      backend = await createBackend(canvas)
+      backend = await createBackend(canvas, valid.backend)
       source = new ImageSource(
         valid.src,
         imageSourceOptions(backend.capabilities.maxTextureDimension, valid.projection)

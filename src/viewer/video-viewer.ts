@@ -74,7 +74,7 @@ export class FramelessVideoViewer extends Viewer {
     let backend: Backend | undefined
     let source: VideoSource | undefined
     try {
-      backend = await createBackend(canvas)
+      backend = await createBackend(canvas, valid.backend)
       source = new VideoSource(
         valid.src,
         videoSourceOptions(backend.capabilities.maxTextureDimension, valid)
