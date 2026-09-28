@@ -329,7 +329,7 @@ git commit -m "task-backend-preference: thread the backend option into both crea
 - Modify: `test/integration/support/viewer.ts`
 - Test: `test/integration/backend-preference.test.ts` (new)
 
-- [ ] **Step 1: Extend the factories**
+- [x] **Step 1: Extend the factories**
 
 In `test/integration/support/viewer.ts`, add the type import (the factory stays on the public surface — `src/index.ts` — per this support file's own rule):
 
@@ -347,7 +347,7 @@ Add `backend?: BackendPreference` to both factory option objects, and one spread
 
 `videoViewer` — identical addition, after its `camera` spread.
 
-- [ ] **Step 2: Write the user story**
+- [x] **Step 2: Write the user story**
 
 Create `test/integration/backend-preference.test.ts`:
 
@@ -423,12 +423,12 @@ describe('create with a backend preference', () => {
 })
 ```
 
-- [ ] **Step 3: Run it in the integration project**
+- [x] **Step 3: Run it in the integration project**
 
 Run: `npx vitest run --project integration test/integration/backend-preference.test.ts`
 Expected: both PASS. If the cross-backend diff bound fails, follow the constant's comment: report with the measured worst diff, do not loosen it here.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/support/viewer.ts test/integration/backend-preference.test.ts
