@@ -258,14 +258,25 @@ async function boot (): Promise<void> {
 await boot().catch((error) => {
   // A boot that failed because of a backend param in the URL would come back
   // to the same failure on Reload -- and Reload is the banner's only
-  // recovery. The strip is unconditional rather than cause-sorted: on a
-  // machine where the forced backend does work, auto selects the same one
-  // anyway, so dropping the param after any failure costs nothing (spec
-  // §3/§4).
+  // recovery. The strip is unconditional rather than cause-sorted, so it also
+  // fires after failures the param had nothing to do with, and its cost is
+  // asymmetric by member: auto agrees with a working 'webgpu' force
+  // (selection is WebGPU-first), but a working 'webgl2' force on a
+  // dual-capable machine reloads onto WebGPU. That downgrade after an
+  // unrelated failure is the accepted price of not cause-sorting; matching
+  // error text to the param would be brittler than the state it protects
+  // (spec §3/§4).
   const params = new URLSearchParams(window.location.search)
   if (params.get('backend') !== null) {
     params.delete('backend')
-    window.history.replaceState(null, '', `?${params.toString()}`)
+    try {
+      window.history.replaceState(null, '', `?${params.toString()}`)
+    } catch {
+      // Same guard as writeUrlState: a history API that throws (a sandboxed
+      // iframe, an opaque origin) must not preempt the banner below -- an
+      // unstripped param costs a retry in 'auto', a preempted banner costs
+      // the page's only explanation.
+    }
   }
   const banner = document.querySelector<HTMLElement>('#page-banner')
   if (banner !== null) {
