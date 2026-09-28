@@ -156,7 +156,7 @@ async function boot (): Promise<void> {
   // the first viewer, so panels observe the full lifecycle from the null
   // state; a later mount would still receive the current viewer, because
   // subscribe fires the listener immediately.
-  mountCameraPanel(required('#camera-panel'), ctx)
+  mountCameraPanel(required('#camera-panel'), ctx, stage)
 
   const state = readUrlState()
   await installViewer(state.source, state.projection)

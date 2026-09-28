@@ -52,7 +52,7 @@ function sliderRow (
     h('span', { class: 'row-label', text: label }), input, readout)
 }
 
-export function mountCameraPanel (host: HTMLElement, ctx: LabContext): void {
+export function mountCameraPanel (host: HTMLElement, ctx: LabContext, stage: HTMLElement): void {
   host.append(h('h3', { text: 'Camera / Projection' }))
   const kindBar = h('div', { class: 'segmented' })
   const controls = h('div')
@@ -62,8 +62,18 @@ export function mountCameraPanel (host: HTMLElement, ctx: LabContext): void {
 
   /** Per-kind memory, so switching away and back restores what was tuned. */
   const memory = new Map<ProjectionKind, Projection>(KINDS.map(kind => [kind, defaultProjection(kind)]))
-  /** The linear aspect is container-derived; preserved verbatim, never tuned. */
-  let aspect = 1
+  /**
+   * The linear aspect is the stage's live width/height ratio -- the same value
+   * the viewer's own resize handler feeds setAspect -- measured at every write
+   * so no cached value can go stale across a resize.
+   */
+  const surfaceAspect = (): number => {
+    const width = stage.clientWidth
+    const height = stage.clientHeight
+    // Collapsed layout: fall back to square rather than NaN/Infinity (same
+    // rationale as the viewer's own zero-size guard in its resize handler).
+    return width > 0 && height > 0 ? width / height : 1
+  }
 
   const currentKind = (): ProjectionKind => {
     const active = kindBar.querySelector('button.active')
@@ -72,7 +82,12 @@ export function mountCameraPanel (host: HTMLElement, ctx: LabContext): void {
 
   const apply = (): void => {
     const remembered = memory.get(currentKind())
-    if (remembered !== undefined) ctx.setProjection(remembered)
+    if (remembered === undefined) return
+    if (remembered.kind === 'linear') {
+      ctx.setProjection({ ...remembered, aspect: surfaceAspect() })
+      return
+    }
+    ctx.setProjection(remembered)
   }
 
   function renderKind (kind: ProjectionKind): void {
@@ -87,12 +102,12 @@ export function mountCameraPanel (host: HTMLElement, ctx: LabContext): void {
         sliderRow('fov', 15, 110, 1, Math.round((remembered.fov * 180) / Math.PI),
           v => `${v}°`,
           v => {
-            memory.set('linear', { kind: 'linear', fov: (v * Math.PI) / 180, aspect })
+            memory.set('linear', { kind: 'linear', fov: (v * Math.PI) / 180, aspect: surfaceAspect() })
             apply()
           }),
         h('div', { class: 'row' },
           h('span', { class: 'row-label', text: 'aspect' }),
-          h('span', { class: 'row-value', text: aspect.toFixed(2) })))
+          h('span', { class: 'row-value', text: surfaceAspect().toFixed(2) })))
       return
     }
     controls.append(
@@ -116,7 +131,6 @@ export function mountCameraPanel (host: HTMLElement, ctx: LabContext): void {
 
   /** Adopt the viewer's authoritative (possibly clamped) projection. */
   function refreshFromViewer (projection: Projection): void {
-    if (projection.kind === 'linear') aspect = projection.aspect
     memory.set(projection.kind, projection)
     renderKind(projection.kind)
   }
