@@ -170,7 +170,7 @@ git commit -m "task-backend-preference: add the backend option and its validatio
 
 This is testable in the node project: `acquireDevice()` returns null when `navigator.gpu` is absent (`src/renderer/webgpu/device.ts:74`), and a stub canvas whose `getContext` yields null makes `WebGL2Backend.create` return null (`src/renderer/webgl2/backend.ts:170-171`) — so every branch here ends in a throw whose message is the thing under test. The success branches need a real GPU and live in Tasks 4 and 5.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `test/unit/backend-factory.test.ts`:
 
@@ -214,12 +214,12 @@ describe('createBackend with a preference', () => {
 })
 ```
 
-- [ ] **Step 2: Run them and verify they fail**
+- [x] **Step 2: Run them and verify they fail**
 
 Run: `npx vitest run --project unit test/unit/backend-factory.test.ts`
 Expected: the two forced-preference tests FAIL — the current one-parameter signature ignores the second argument, so no `'webgpu' was requested` message exists. The two auto tests PASS against the current code (that is the compatibility pin, not a vacuous pass).
 
-- [ ] **Step 3: Implement the branch**
+- [x] **Step 3: Implement the branch**
 
 Replace `createBackend` in `src/viewer/backend-factory.ts` (lines 65-87) with:
 
@@ -271,12 +271,12 @@ Add the import next to the existing ones at the top of the file:
 import type { BackendPreference } from './options'
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `npx vitest run --project unit test/unit/backend-factory.test.ts`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer/backend-factory.ts test/unit/backend-factory.test.ts
