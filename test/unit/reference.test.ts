@@ -670,7 +670,7 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
         // The analytic value is (2c)^2 with c the shared ct/st bits, about
         // 1.9999999; the bound stays at half of it because the pin's job is
         // telling the centre site (d2 = O(1)) from the pole site (d2 at the
-        // floor, nine orders below), not measuring the constant.
+        // floor, fifteen orders below), not measuring the constant.
         expect(hit.d2, `d2 is O(1) on the centre site (y=${y}) lat=${latDeg}`).toBeGreaterThan(1)
       }
     }
