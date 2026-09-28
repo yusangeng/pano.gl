@@ -47,7 +47,7 @@ Reference f64 at A with `povLongitude: 90`: u = 0.5 exactly (`(1.5π − π/2)/2
 - Modify: `src/core/reference.ts` (`projectPlanet`, ~lines 206–228)
 - Test: `test/unit/reference.test.ts`
 
-- [ ] **Step 1: Add the failing canonical-value test**
+- [x] **Step 1: Add the failing canonical-value test**
 
 In `test/unit/reference.test.ts`, inside `describe('planet tilt (the steerable centre, 2026-09-28 spec)', ...)`, insert this `it` **after** the `it('pins the Mobius pole the other blocks sample around', ...)` block (ends ~line 583) and **before** the `it('witnesses the f32 floored path...')` block:
 
@@ -99,12 +99,12 @@ In `test/unit/reference.test.ts`, inside `describe('planet tilt (the steerable c
 
 (`projection` is the describe-level `const projection: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }` — reuse it, do not redeclare.)
 
-- [ ] **Step 2: Run to verify the new test fails**
+- [x] **Step 2: Run to verify the new test fails**
 
 Run: `npx vitest run test/unit/reference.test.ts`
 Expected: FAIL — `takes the canonical branch-point value` reports `expected NaN to be 0.75` (the centre's u is the faithful NaN). Every other test in the file passes.
 
-- [ ] **Step 3: Add the guard to projectPlanet in src/core/reference.ts**
+- [x] **Step 3: Add the guard to projectPlanet in src/core/reference.ts**
 
 Replace the tail of `projectPlanet` (currently `let theta = Math.atan(p / q)` through `return toUV(theta, phi)`) with:
 
@@ -145,12 +145,12 @@ Replace the tail of `projectPlanet` (currently `let theta = Math.atan(p / q)` th
 
 Two changes beyond the insertion: `const phi` becomes `let phi`, and `theta -= lng` moves from before phi's line to after the guard (no data dependency; the canonical theta must receive the same longitude subtraction as every other fragment's).
 
-- [ ] **Step 4: Run — one expected failure remains**
+- [x] **Step 4: Run — one expected failure remains**
 
 Run: `npx vitest run test/unit/reference.test.ts`
 Expected: the new canonical test PASSES. `keeps the NaNs the legacy shader produced at the degenerate points` now FAILS on its planet line (`expected 0.75 to be NaN`) — that pin is the old stance this task removes. Everything else passes.
 
-- [ ] **Step 5: Flip the three planet-departure edits in reference.test.ts**
+- [x] **Step 5: Flip the three planet-departure edits in reference.test.ts**
 
 5a. The file-header comment above `isDegenerate` becomes:
 
@@ -216,12 +216,12 @@ and extend the leading comment with the departure note, so the test reads:
   })
 ```
 
-- [ ] **Step 6: Run the whole file green**
+- [x] **Step 6: Run the whole file green**
 
 Run: `npx vitest run test/unit/reference.test.ts`
 Expected: PASS, all tests. (The range/no-NaN sweeps now include planet (0, 0): the guarded value u = 0.75, v = 0 is inside [0, 1] and finite — if a sweep fails, the guard's values are wrong, not the sweep.)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/core/reference.ts test/unit/reference.test.ts
