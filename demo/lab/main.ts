@@ -11,6 +11,7 @@
  */
 import { FramelessImageViewer, FramelessVideoViewer } from '../../src/index'
 import type { CameraState, Projection, SelectedCapabilities } from '../../src/index'
+import { assetUrl } from '../asset-url'
 import { ViewerBox, defaultProjection } from './context'
 import type { LabContext, LabViewer, SourceId } from './context'
 import { h } from './dom'
@@ -20,11 +21,13 @@ import { mountMediaPanel } from './panels/media'
 import { mountEventLogPanel } from './panels/eventlog'
 import './lab.css'
 
+// assetUrl: the deployed demo lives under /pano.gl/ on GitHub Pages, so
+// root-absolute media paths must resolve against the page's real base.
 const SOURCE_URLS: Readonly<Record<SourceId, string>> = {
-  '2k': '/image/2048x1024.jpg',
-  '4k': '/image/4096x2048.jpg',
-  '8k': '/image/8192x4096.jpg',
-  video: '/video/city.mp4'
+  '2k': assetUrl('/image/2048x1024.jpg'),
+  '4k': assetUrl('/image/4096x2048.jpg'),
+  '8k': assetUrl('/image/8192x4096.jpg'),
+  video: assetUrl('/video/city.mp4')
 }
 
 const SOURCE_IDS: ReadonlyArray<SourceId> = ['2k', '4k', '8k', 'video']

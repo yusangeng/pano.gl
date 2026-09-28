@@ -59,6 +59,8 @@ tools/baseline/node_modules
 **/__traces__/
 # Library build output (produced since Task 4; never committed)
 dist
+# Demo site build output (input to the GitHub Pages workflow; never committed)
+demo-dist
 
 # Brainstorming visual companion session files
 .superpowers/

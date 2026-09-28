@@ -7,5 +7,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["scripts/**/*.mjs", "vite.config.ts", "vitest.config.ts"]
+  "include": ["scripts/**/*.mjs", "vite.config.ts", "vite.demo.config.ts", "vitest.config.ts"]
 }

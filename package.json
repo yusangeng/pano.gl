@@ -38,6 +38,7 @@
   },
   "scripts": {
     "build": "vite build",
+    "build:demo": "vite build --config vite.demo.config.ts",
     "prepublishOnly": "npm run build",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run --project unit",
