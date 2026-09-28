@@ -83,6 +83,7 @@ export function mountMediaPanel (host: HTMLElement, ctx: LabContext): void {
     transport.hidden = false
 
     let scrubbing = false
+    let alive = true
     const refreshPlay = (): void => {
       play.textContent = element.paused ? 'Play' : 'Pause'
     }
@@ -103,6 +104,11 @@ export function mountMediaPanel (host: HTMLElement, ctx: LabContext): void {
         // refused by the browser's autoplay policy, and the lab exists to
         // make that visible.
         video.play().catch((error) => {
+          // The wiring may already be dead: a source switch disposes the viewer,
+          // which pauses the element and rejects a still-pending play(). A
+          // refusal from a dead viewer is not a message for the panel now on
+          // screen.
+          if (!alive) return
           playHint.hidden = false
           playHint.textContent = `play() refused: ${String(error)}`
         })
@@ -127,7 +133,13 @@ export function mountMediaPanel (host: HTMLElement, ctx: LabContext): void {
     listen('durationchange', refreshTime)
     listen('loadedmetadata', refreshTime)
     offs.push(
-      video.on('media-play', refreshPlay),
+      // Resumed playback retracts the refusal message (a later play() can
+      // succeed after an earlier one was refused). media-play is also the
+      // only play-start signal for the button label, so the refresh stays.
+      video.on('media-play', () => {
+        playHint.hidden = true
+        refreshPlay()
+      }),
       video.on('media-pause', refreshPlay),
       video.on('media-ended', refreshPlay))
 
@@ -135,6 +147,7 @@ export function mountMediaPanel (host: HTMLElement, ctx: LabContext): void {
     refreshMute()
     refreshTime()
     return () => {
+      alive = false
       ac.abort()
       for (const off of offs) off()
     }
