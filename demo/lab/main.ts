@@ -15,6 +15,7 @@ import { ViewerBox, defaultProjection } from './context'
 import type { LabContext, LabViewer, SourceId } from './context'
 import { h } from './dom'
 import { mountStatusPanel } from './panels/status'
+import { mountCameraPanel } from './panels/camera'
 import './lab.css'
 
 const SOURCE_URLS: Readonly<Record<SourceId, string>> = {
@@ -138,9 +139,6 @@ async function boot (): Promise<void> {
     await installViewer(target, carried.projection, carried.pose)
   }
 
-  // ctx has no consumer until the camera panel mounts (Task 4); the
-  // directive is removed there.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const ctx: LabContext = {
     setProjection: (projection) => {
       const current = viewers.current
@@ -158,6 +156,7 @@ async function boot (): Promise<void> {
   // the first viewer, so panels observe the full lifecycle from the null
   // state; a later mount would still receive the current viewer, because
   // subscribe fires the listener immediately.
+  mountCameraPanel(required('#camera-panel'), ctx)
 
   const state = readUrlState()
   await installViewer(state.source, state.projection)
