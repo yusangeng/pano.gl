@@ -892,7 +892,7 @@ diagnostics channels, plus an auto/WebGPU/WebGL2 switch that exercises the
 runnable page.
 ```
 
-- [ ] **Step 2: The full verify**
+- [x] **Step 2: The full verify**
 
 Run: `npm run typecheck && npm run lint && npm test`
 Expected: all green — three tsc programs, eslint, then unit + both browser projects (301+ tests; the two new files add 4 integration cases and 7 unit cases).
@@ -900,7 +900,7 @@ Expected: all green — three tsc programs, eslint, then unit + both browser pro
 Run: `npm run test:coverage`
 Expected: green at the 90% branch threshold (the new `src/` branches are the assert's four and the factory's three, all covered by Task 1/2 tests).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add README.md
