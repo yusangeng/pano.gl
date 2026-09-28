@@ -3,7 +3,7 @@ plan: docs/superpowers/plans/2026-09-24-demo-lab.md
 scope: [demo/**, README.md]
 verify: npm run typecheck && npm run lint && npm test
 layer: tool
-state: reported
+state: merged
 createdAt: 2026-09-24T08:49:29.827Z
 ---
 # 任务：demo: 交互实验室（lab 主入口 + minimal 双页）
