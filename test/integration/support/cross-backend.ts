@@ -164,7 +164,7 @@ export async function renderOffscreenGLSL (request: RenderRequest): Promise<Rend
   gl.deleteProgram(program)
 
   // Release the context now rather than at GC time: one is created per call
-  // and the suite runs ~21 of them, past Chrome's ~16-active-context LRU
+  // and the suite runs ~22 of them, past Chrome's ~16-active-context LRU
   // threshold -- exactly the accumulation defect L5's dispose fix exists to
   // prevent (see WebGL2Backend.dispose). The WebGPU half already disposes
   // its backend per call.
