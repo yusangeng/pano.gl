@@ -15,13 +15,13 @@ import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
  * a synthetic smooth source at camera states that do not include this test's
  * defaults (fov 70 deg here, 75/60/90 deg there). The shader half below is
  * therefore an allowance extrapolated from gate C's neighbouring configuration,
- * not a measured bound at these states. The viewer paths
- * add canvas presentation on top of the shaders, and the 64x32 bilinear
- * downscale in readCanvas is a convex combination -- it cannot amplify a
- * per-channel difference. 4 = 2 (shaders) + 2 (presentation), and a read
- * above it means the forced path changed projection semantics, not backend.
- * If this ever fails with everything else green, report it -- do not loosen
- * the bound silently.
+ * not a measured bound at these states. The viewer paths add canvas
+ * presentation on top of the shaders, and the 64x32 bilinear downscale in
+ * readCanvas is a convex combination -- it cannot amplify a per-channel
+ * difference. 4 = 2 (shaders) + 2 (presentation), and a read above it means
+ * the forced path changed projection semantics, not backend. If this ever
+ * fails with everything else green, report it -- do not loosen the bound
+ * silently.
  */
 const MAX_CROSS_BACKEND_DIFF = 4
 
