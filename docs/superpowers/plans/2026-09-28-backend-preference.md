@@ -44,7 +44,7 @@ No CSS change: the `.segmented` styles already exist (`demo/lab/lab.css:72-83`).
 - Modify: `src/index.ts:11`
 - Test: `test/unit/constructor-validation.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `test/unit/constructor-validation.test.ts` (inside the file, after the last `describe`; nothing else in the file changes). The imports at the top already bring in both validate functions:
 
@@ -81,12 +81,12 @@ describe('backend preference', () => {
 })
 ```
 
-- [ ] **Step 2: Run them and verify the meaningful ones fail**
+- [x] **Step 2: Run them and verify the meaningful ones fail**
 
 Run: `npx vitest run --project unit test/unit/constructor-validation.test.ts`
 Expected: the two rejection tests FAIL (nothing throws yet). The acceptance tests may pass vacuously — there is no check to reject — which is exactly why the rejection tests are the red/green signal here.
 
-- [ ] **Step 3: Implement the type, the field and the assert**
+- [x] **Step 3: Implement the type, the field and the assert**
 
 In `src/viewer/options.ts`, add the type after `ImageProjection` (line 34):
 
@@ -146,14 +146,14 @@ In `src/index.ts` line 11, widen the export:
 export type { ImageViewerOptions, VideoViewerOptions, ImageProjection, BackendPreference } from './viewer/options'
 ```
 
-- [ ] **Step 4: Run the tests and the typecheck**
+- [x] **Step 4: Run the tests and the typecheck**
 
 Run: `npx vitest run --project unit test/unit/constructor-validation.test.ts`
 Expected: all PASS.
 Run: `npm run typecheck`
 Expected: clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer/options.ts src/index.ts test/unit/constructor-validation.test.ts
