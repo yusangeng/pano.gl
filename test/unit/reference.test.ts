@@ -366,8 +366,9 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
    * The four blocks pin the spec's invariants I1-I4 in order; the fifth pins
    * the transform's values away from the centre (review I-1); the sixth pins
    * the Mobius pole the other blocks deliberately sample around (CR round 1,
-   * testing specialist); the seventh witnesses the f32 floored arithmetic
-   * the shaders actually run (CR round 2, red team).
+   * testing specialist); the seventh pins the canonical branch-point value
+   * (planet-review-followups spec 2.2); the eighth witnesses the f32 floored
+   * arithmetic the shaders actually run (CR round 2, red team).
    */
   const projection: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }
   const wrap = (x: number): number => {
@@ -618,7 +619,10 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     // (which take 0.75 at every site, witnessed in the f32 block below).
     // A change to them is an engine or half-angle change and must be seen.
     const artifacts: Array<[number, number, number, number]> = [
-      // [y, lat, u, v] -- Mobius pole sites first, then tilt centres.
+      // [y, lat, u, v] -- Mobius pole sites first, then tilt centres. The
+      // -0 in the first row is deliberate and load-bearing (toBe is
+      // Object.is): the pole site carries zz = -0 through num into p, and
+      // theta stays -0 to the wrap.
       [1, -90, -0, 1],
       [-1, 90, 0.5, 1],
       [-1, -90, 0.5, 0],

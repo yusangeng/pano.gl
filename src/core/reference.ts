@@ -234,6 +234,11 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
   // sin and cos of the half-angle differ by one ulp, num and den stay
   // nonzero, and the formula's own finite values stand (pinned, as
   // non-normative artifacts, in test/unit/reference.test.ts).
+  // The phi = PI arm never wins in float64 -- only the lat = 0 centre
+  // fires this guard, and its numerator is exactly zero -- but it is
+  // load-bearing, not dead: the WGSL and GLSL twins DO reach the pole arm
+  // in f32, and the spec's three-place same-rule requires the same guard
+  // statements here.
   if (p === 0 && q === 0) {
     theta = 1.5 * PI
     phi = PI
