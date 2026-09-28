@@ -64,7 +64,9 @@ const VIDEO_FIXTURE = '/fixtures/clip.mp4'
  * No DPR stubbing and no backend stubbing: the project's `deviceScaleFactor`
  * already sets the density, and whether a WebGPU backend exists is the
  * environment's business -- `user-story-no-webgpu.test.ts` runs in the project
- * where it does not.
+ * where it does not. The `backend` option is forwarded to the public create
+ * and never simulated: strictness under a forced preference is the library's
+ * behaviour to prove, not the harness's to fake.
  */
 export async function imageViewer (
   options: {

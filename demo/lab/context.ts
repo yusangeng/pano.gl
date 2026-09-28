@@ -23,7 +23,7 @@ export interface LabContext {
   readonly setProjection: (projection: Projection) => void
   /** Applies a source change and syncs the URL. */
   readonly setSource: (source: SourceId) => void
-  /** Applies a backend preference (recreates the viewer, pose carried) and syncs the URL. */
+  /** Applies a backend preference (recreates the viewer, pose carried); the URL follows on success. */
   readonly setBackend: (backend: BackendPreference) => void
   /** Viewer replacements; fires immediately with the current value. */
   readonly onViewer: (listener: (current: LabViewer | null) => void) => () => void

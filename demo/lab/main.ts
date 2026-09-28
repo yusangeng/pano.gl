@@ -256,11 +256,12 @@ async function boot (): Promise<void> {
 }
 
 await boot().catch((error) => {
-  // A boot that died with a backend param in the URL would come back to the
-  // same death on Reload -- and Reload is the banner's only recovery. Drop
-  // the param so a reload retries in 'auto'; on a machine where the forced
-  // backend does work, auto selects the same one anyway, so the strip costs
-  // nothing (spec §3/§4).
+  // A boot that failed because of a backend param in the URL would come back
+  // to the same failure on Reload -- and Reload is the banner's only
+  // recovery. The strip is unconditional rather than cause-sorted: on a
+  // machine where the forced backend does work, auto selects the same one
+  // anyway, so dropping the param after any failure costs nothing (spec
+  // §3/§4).
   const params = new URLSearchParams(window.location.search)
   if (params.get('backend') !== null) {
     params.delete('backend')
