@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`pano.gl` is a dependency-light viewer for equirectangular (360°) images and video. Two public entry points — `FramelessImageViewer` and `FramelessVideoViewer`, both re-exported from `src/index.ts` — render a full-screen panorama into a container element, with four camera models (`linear`, `cylindrical`, `planet`, `pannini`) and built-in pan-tilt-zoom.
+`pano.gl` is a dependency-light viewer for equirectangular (360°) images and video. Two public entry points — `FramelessImageViewer` and `FramelessVideoViewer`, both re-exported from `src/index.ts` — render a full-screen panorama into a container element, with five camera models (`linear`, `cylindrical`, `planet`, `pannini`, `mercator`) and built-in pan-tilt-zoom.
 
 TypeScript 5, strict. Two rendering backends behind one interface: WebGPU (primary) and WebGL2 (fallback, for browsers that have no WebGPU).
 
@@ -26,7 +26,7 @@ npm run gen:shaders        # regenerate src/renderer/shaders/generated.ts
 npm run doc                # typedoc -> docs/api (generated, gitignored)
 ```
 
-Run a single unit test: `npx vitest run test/unit/events.test.ts`. Run a single integration test: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`. The gates have no fallback twin — the `no-webgpu` project collects only `test/integration/fallback/` and the four user-story files, per its `include` in `vitest.config.ts`.
+Run a single unit test: `npx vitest run test/unit/events.test.ts`. Run a single integration test: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`. The gates have no fallback twin — the `no-webgpu` project collects only `test/integration/fallback/` and the five user-story files, per its `include` in `vitest.config.ts`.
 
 Integration tests need a real GPU to be meaningful. The `integration` project launches Chromium with `channel: 'chromium'` from `launchOptions` in `vitest.config.ts` — launch flags cannot come from an environment variable — and its setup file asserts a non-null adapter precisely so that a machine without WebGPU fails loudly instead of silently re-testing nothing. Under `CI=1` the same project adds the SwiftShader flags so software WebGPU exists; the `no-webgpu` project's setup file asserts the adapter **is** null, which is what proves `--disable-gpu` actually took effect.
 
@@ -46,7 +46,7 @@ Key files:
 
 - `src/core/types.ts` — `CameraState`, `Projection`, `SourceState`
 - `src/core/matrix.ts` — `buildViewMatrix` / `buildProjection` / `buildCameraTransform` / `DepthRange`
-- `src/core/reference.ts` — the four projections in CPU float64
+- `src/core/reference.ts` — the five projections in CPU float64
 - `src/core/projection-kinds.json` — the source of truth for the projection type constants
 - `src/renderer/backend.ts` — the `Backend` interface, `Capabilities`, `RenderableSource`, `DeviceLost`
 - `src/renderer/capabilities.ts` — `describeCapabilities`, the one place capability rules live
@@ -61,7 +61,7 @@ Key files:
 
 Both backends draw three vertices covering the viewport, with no vertex buffer and no attributes; the vertex stage derives its position from `gl_VertexID` / `vertex_index`. The fragment stage takes the interpolated ndc position, multiplies it by `u_invClip` (`invClip * vec4(ndc, 1.0, 1.0)`), and divides by w to recover the point on the surface the old rasteriser would have interpolated. It then converts that point to equirectangular UVs.
 
-This is why there is no geometry subsystem: the four camera models differ only in a per-fragment formula, and the surface size each one is evaluated on (`extent`, 1×1 for cylindrical and 4×4 for planet/pannini) is a property of the `Projection`, not of any mesh.
+This is why there is no geometry subsystem: the five camera models differ only in a per-fragment formula, and the surface size each one is evaluated on (`extent`, 1×1 for cylindrical and mercator, 4×4 for planet/pannini) is a property of the `Projection`, not of any mesh.
 
 ### Depth range is the backends' only matrix difference
 
@@ -71,9 +71,9 @@ The shaders need to know nothing about this: both conventions put the far plane 
 
 ### The CPU reference is the arbiter
 
-`src/core/reference.ts` implements the same four projections in float64 and is the executable specification for them. When the two backends disagree, or a backend disagrees with the captured baseline, running all three and finding the odd one out is what turns "they differ" into "this one is wrong". It is deliberately independent: it inverts ndc to a surface point itself rather than reusing the camera matrix, because an arbiter that shares the shaders' precision and their matrix would agree with a wrong matrix by construction.
+`src/core/reference.ts` implements the same five projections in float64 and is the executable specification for them. When the two backends disagree, or a backend disagrees with the captured baseline, running all three and finding the odd one out is what turns "they differ" into "this one is wrong". It is deliberately independent: it inverts ndc to a surface point itself rather than reusing the camera matrix, because an arbiter that shares the shaders' precision and their matrix would agree with a wrong matrix by construction.
 
-It also reproduces v0.2.2 behaviour **including that version's bugs**, because the acceptance criterion is "renders what v0.2.2 rendered" — with three adjudicated exceptions, all listed with their spec citations in the module header of `reference.ts` itself: `lngOffset` used to subtract `povLongitude / 4`, degrees subtracted from a radian angle (~14.3× oversensitive panning), a v0.2.2 defect corrected 2026-09-23 by user adjudication in the pan-zoom-semantics spec (§1), superseding v1-design §11.4 B1; `latOffset` (the non-linear cameras never read latitude in v0.2.2 — defect F5 — so the latitude term is v1's own); and planet's branch points, which since 2026-09-28 take the canonical value of the planet-review-followups spec §2.1–2.2 instead of the faithful `atan(0/0)` NaN.
+It also reproduces v0.2.2 behaviour **including that version's bugs**, because the acceptance criterion is "renders what v0.2.2 rendered" — with three adjudicated exceptions, all listed with their spec citations in the module header of `reference.ts` itself: `lngOffset` used to subtract `povLongitude / 4`, degrees subtracted from a radian angle (~14.3× oversensitive panning), a v0.2.2 defect corrected 2026-09-23 by user adjudication in the pan-zoom-semantics spec (§1), superseding v1-design §11.4 B1; `latOffset` (the non-linear cameras never read latitude in v0.2.2 — defect F5 — so the latitude term is v1's own); and planet's branch points, which since 2026-09-28 take the canonical value of the planet-review-followups spec §2.1–2.2 instead of the faithful `atan(0/0)` NaN. Mercator is exempt from transcription itself: it has no v0.2.2 original, so its authority is the mercator spec's invariants plus gate C three-way agreement, as recorded in the same module header.
 
 ### Projection constants have exactly one source of truth
 
@@ -83,13 +83,13 @@ Never write a numeric literal for a projection kind, in TypeScript or in a shade
 
 ### The two shaders are hand-transcribed, and gate C holds them together
 
-`src/renderer/webgpu/shaders/panorama.wgsl` and `src/renderer/webgl2/shaders/panorama.glsl` contain the same four projection formulas, written twice. Nothing in the type system or the build connects them — the constants they share come from the generator, but the formulas do not.
+`src/renderer/webgpu/shaders/panorama.wgsl` and `src/renderer/webgl2/shaders/panorama.glsl` contain the same five projection formulas, written twice. Nothing in the type system or the build connects them — the constants they share come from the generator, but the formulas do not.
 
 `test/integration/gate-c-cross-backend.test.ts` is what keeps them from drifting: it renders every camera state through both shaders and compares the pixels, with the CPU reference as the tiebreaker. **Changing a projection formula means changing both files.** A change made in one of them is the failure this gate exists to catch.
 
 ### Camera state is pose only
 
-`CameraState` is `{ povLatitude, povLongitude }`, in degrees. Field of view, zoom and extent belong to the `Projection`, which is a discriminated union over the four kinds. Putting `zoom` on the camera state is a type error, and that is intentional.
+`CameraState` is `{ povLatitude, povLongitude }`, in degrees. Field of view, zoom and extent belong to the `Projection`, which is a discriminated union over the five kinds. Putting `zoom` on the camera state is a type error, and that is intentional.
 
 Camera state is memoised per render behind a dirty flag: a setter that changes what the GPU sees must mark it dirty, or the change never reaches a frame.
 
