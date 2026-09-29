@@ -111,12 +111,36 @@ export class CameraController {
   }
 
   /**
+   * Pans the Mercator camera: `deltaM` in the map's metre metric, `deltaLng`
+   * in degrees.
+   *
+   * The latitude update inverts the projection's own latitude term --
+   * `lat' = asin(tanh(atanh(sin lat) + deltaM))` -- so the content under the
+   * finger stays under the finger at every latitude and zoom (spec section 4;
+   * the metre formula lives in `classifyDragMercator`). Programmatic rotation
+   * keeps its degree-linear shape; this is the gesture path only.
+   */
+  panMercator (deltaM: number, deltaLng: number): void {
+    assertFinite(deltaM, 'deltaM')
+    assertFinite(deltaLng, 'deltaLng')
+    if (deltaM === 0 && deltaLng === 0) return
+    // A purely horizontal pan must not touch latitude: the atanh/tanh/asin
+    // round trip is exact in real arithmetic but only ~1 ulp in float64
+    // (measured 7.1e-15deg at lat 45, 1.4e-14 at lat 80), and every jitter
+    // dirties a full-redraw frame.
+    const lat = deltaM === 0
+      ? this.#state.povLatitude
+      : Math.asin(Math.tanh(Math.atanh(Math.sin(this.#state.povLatitude * Math.PI / 180)) + deltaM)) * 180 / Math.PI
+    this.#apply(lat, this.#state.povLongitude + deltaLng)
+  }
+
+  /**
    * Zooms by a relative magnification: a positive delta magnifies the picture
    * by (1 + delta), a negative one shrinks it by the same factor.
    *
    * Both parameterisations divide by (1 + delta) -- fov for the linear camera,
    * zoom for the others -- because in both a smaller parameter is a narrower
-   * field, so ONE formula serves four cameras and the wheel step feels the
+   * field, so ONE formula serves five cameras and the wheel step feels the
    * same on each. v1 multiplied instead, reading the "positive is zoom in"
    * wheel contract backwards and inverting wheel and pinch; corrected by user
    * adjudication, pan-zoom-semantics spec §2-3.
@@ -162,7 +186,7 @@ export class CameraController {
    * The surface size is knowledge only the viewer's resize handler has, and for
    * the linear camera the projection's aspect IS the surface's -- rendering a
    * 16:9 container with the default square aspect stretches the image. The
-   * other three cameras take their shape from the projection's `extent`, which
+   * other four cameras take their shape from the projection's `extent`, which
    * the shader reads, so they have no aspect field to write.
    *
    * @param aspect - width / height of the drawing surface. Must be positive.
