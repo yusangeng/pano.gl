@@ -110,6 +110,18 @@ describe('WebGL2 shader source', () => {
     expect(PANORAMA_GLSL_FRAGMENT).not.toMatch(/projKind\s*==\s*\d/)
   })
 
+  it('dispatches every projection kind through the generated constants', () => {
+    // The bare CAMERA_PROJECTION_* pins above are satisfied by the #define
+    // block prepended from GLSL_CONSTANTS alone -- a deleted dispatch arm
+    // passed the whole suite with exactly that hole. This pins the arms
+    // themselves, and loops all five kinds because the four pre-existing
+    // arms shared the identical blindness.
+    const src = skeleton(PANORAMA_GLSL_FRAGMENT)
+    for (const kind of ['LINEAR', 'CYLINDRICAL', 'PLANET', 'PANNINI', 'MERCATOR']) {
+      expect(src, kind).toContain(`u_projKind == CAMERA_PROJECTION_${kind}`)
+    }
+  })
+
   it('does not use WGSL syntax', () => {
     for (const pattern of [/@fragment/, /@vertex/, /@builtin/, /vec4f/, /mat4x4/, /\bfn\s+\w+\s*\(/]) {
       expect(PANORAMA_GLSL_FRAGMENT).not.toMatch(pattern)
@@ -276,7 +288,7 @@ describe('WebGL2 shader source', () => {
     // poles where the exp form overflows). The token comparison above already
     // proves the two files agree with each other; this pins what they agree
     // ON.
-    for (const body of [glslBody('project_mercator'), wgslBody('project_mercator')]) {
+    for (const body of [skeleton(glslBody('project_mercator')), skeleton(wgslBody('project_mercator'))]) {
       expect(body).toContain('- atanh(sin(lat))')
       expect(body).toContain('asin(tanh(m))')
     }
