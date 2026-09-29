@@ -92,6 +92,7 @@ describe('panorama WGSL', () => {
     expect(STRIPPED).toContain('case CAMERA_PROJECTION_CYLINDRICAL:')
     expect(STRIPPED).toContain('case CAMERA_PROJECTION_PLANET:')
     expect(STRIPPED).toContain('case CAMERA_PROJECTION_PANNINI:')
+    expect(STRIPPED).toContain('case CAMERA_PROJECTION_MERCATOR:')
     // A bare `TEXTURE_PROJECTION_EQUIRECTANGULAR` token check cannot catch a
     // numeric-literal comparison: the generated constants block is prepended
     // as code, so its `const TEXTURE_PROJECTION_EQUIRECTANGULAR` declaration

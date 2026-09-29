@@ -361,7 +361,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `src/renderer/webgpu/shaders/panorama.wgsl`
 - Modify: `test/unit/shaders.test.ts`
 
-- [ ] **Step 1: 先写失败的 dispatch pin**
+- [x] **Step 1: 先写失败的 dispatch pin**
 
 `test/unit/shaders.test.ts` 的 dispatch pin 组（现有 `case CAMERA_PROJECTION_PANNINI:` 断言之后，约 :91-94）加：
 
@@ -372,7 +372,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 Run: `npx vitest run --project unit test/unit/shaders.test.ts`
 Expected: FAIL——`case CAMERA_PROJECTION_MERCATOR:` 不存在。
 
-- [ ] **Step 2: panorama.wgsl 加公式**
+- [x] **Step 2: panorama.wgsl 加公式**
 
 `project_pannini` 结束（`:270`）与 `panorama_uv` 之间插入：
 
@@ -400,7 +400,7 @@ fn project_mercator(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
 }
 ```
 
-- [ ] **Step 3: dispatch 加 case**
+- [x] **Step 3: dispatch 加 case**
 
 switch 里 `CAMERA_PROJECTION_PANNINI` case 之后、`default` 之前加：
 
@@ -408,19 +408,19 @@ switch 里 `CAMERA_PROJECTION_PANNINI` case 之后、`default` 之前加：
     case CAMERA_PROJECTION_MERCATOR: { uv = project_mercator(surface, camera.zoom, lng, lat); }
 ```
 
-- [ ] **Step 4: 四处注释更新**
+- [x] **Step 4: 四处注释更新**
 
 1. 文件头 `:7-8`：`the non-linear three read it as the quad point` → `the non-linear four read it as the quad point`。
 2. 转写块注释 `:97-117`：`The four projections are transcribed statement for statement from the v0.2.2 shader` → 改为「五个中的四个是逐句转写；mercator（2026-09-29）是 v1 自有——cylindrical 的保角孪生，无 v0.2.2 原件」的表述（英文），并保留原有两个"看似转写错误其实不是"的要点；结尾 `Keep all four in the same shape` → `Keep all five in the same shape`。
 3. `:135-140`：`The three non-linear projections below` → `The four non-linear projections below`。
 4. `panorama_uv` 的 lat 注释 `:294-302`：在"cylindrical and pannini still subtract it"处补 mercator——它减的是 `atanh(sin(lat))`，`- lat` 的保角对应项。
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 Run: `npx vitest run --project unit test/unit/shaders.test.ts`
 Expected: 全绿（含 Step 1 的新 pin）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/renderer/webgpu/shaders/panorama.wgsl test/unit/shaders.test.ts
