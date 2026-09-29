@@ -8,8 +8,6 @@ createdAt: 2026-09-29T09:01:03.219Z
 ---
 # 任务：Mercator 相机（第五投影）
 
-
-
 ## 完成报告
 
 给 pano.gl 增加第五个相机投影 `mercator`——cylindrical 的保角版（全图均匀比例尺、两极推到无穷远），全栈一次到位：常量管线、CPU float64 仲裁、双 shader 公式、拖拽语义、三门测试、demo lab、README 与截图。plan 14 个 task 全部完成，fb3378e..1367d49 共 20 个提交。
