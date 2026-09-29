@@ -116,7 +116,7 @@ keep the handler around for `off()`. `on('*', handler)` receives everything as
 | `media-play` / `media-pause` / `media-ended` | `{ target }` | Playback state changes (video). |
 | `media-seeking` / `media-seeked` | `{ target }` | Seeking (video). |
 | `media-progress` | `{ target }` | Playback advances (video). |
-| `rotate` | `{ lat, lng }` | After a drag. |
+| `rotate` | `{ lat, lng }` | After a drag. `lng` is the requested turn on every camera, unwrapped (`-72`, not `288`). `lat` is the applied delta on `mercator` (what the pan actually moved) and the requested one on the other cameras. |
 | `zoom` | `{ delta }` | After wheel or pinch. |
 | `device-lost` | `{ reason, message }` | The GPU device or WebGL context went away. The viewer cleans itself up; render nothing until you rebuild. |
 

@@ -55,20 +55,25 @@ describe('mercator drag (user story)', () => {
     const viewer = await FramelessImageViewer.create({
       container,
       src: '/fixtures/panorama.png',
-      camera: { projection: { kind: 'mercator', zoom: 1, extent: [1, 1] } }
+      camera: {
+        projection: { kind: 'mercator', zoom: 1, extent: [1, 1] },
+        pose: { povLatitude: 45 }
+      }
     })
     try {
       await nextFrames(3)
 
       // 80px of 400px width rightward: lng = -(80/400)*360 = -72, wrapped to
       // 288. deltaY is 0, so the deltaM === 0 shortcut keeps latitude at
-      // exactly 0 -- this exercises the no-jitter path through the whole
-      // stack.
+      // exactly 45. Mounted at 45, not 0, on purpose: the atanh/tanh/asin
+      // round trip is exact at lat 0 and one ulp short here, so removing the
+      // shortcut fails THIS test -- at lat 0 the title's bit-exactness claim
+      // was only trivially exercised.
       await drag(canvasOf(container), { from: { x: 100, y: 100 }, to: { x: 180, y: 100 } })
       await nextFrames(2)
 
       const pose = viewer.cameraOptions.pose
-      expect(pose?.povLatitude).toBe(0)
+      expect(pose?.povLatitude).toBe(45)
       expect(pose?.povLongitude).toBe(288)
     } finally {
       viewer.dispose()

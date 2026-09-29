@@ -50,6 +50,24 @@ describe('CameraController', () => {
     expect(() => new CameraController({ povLatitude: 0, povLongitude: NaN }, linear())).toThrow(/finite/i)
   })
 
+  it('validates the projection it is constructed with', () => {
+    // The pose twin above validates the other half of the `camera` option.
+    // The projection is stored as given, so a NaN parameter reaches
+    // buildProjection and draws a black frame with nothing reported -- the
+    // same failure as the pose, pinned the same way. Direct literals, each
+    // naming its kind: a spread of the Projection union applies the override
+    // to all five variants and stops typechecking. Range is deliberately NOT
+    // asserted: `setProjection` below accepts zoom 5 on purpose, and what
+    // range a caller may set is a separate question from finiteness.
+    expect(() => new CameraController(undefined, { kind: 'mercator', zoom: NaN, extent: [1, 1] })).toThrow(/finite/i)
+    expect(() => new CameraController(undefined, { kind: 'cylindrical', zoom: Infinity, extent: [1, 1] })).toThrow(/finite/i)
+    expect(() => new CameraController(undefined, { kind: 'mercator', zoom: 1, extent: [NaN, 1] })).toThrow(/finite/i)
+    expect(() => new CameraController(undefined, { kind: 'linear', fov: NaN, aspect: 1 })).toThrow(/finite/i)
+    // aspect mirrors setAspect's own guard: a ratio must be positive, and a
+    // finite zero is still a degenerate matrix.
+    expect(() => new CameraController(undefined, { kind: 'linear', fov: Math.PI / 2, aspect: 0 })).toThrow(/greater than 0/i)
+  })
+
   it('clamps latitude instead of wrapping it', () => {
     // Latitude 100 must NOT become -80. Wrapping at the poles puts the viewer
     // past the point where the equirectangular mapping is defined and the
@@ -392,6 +410,21 @@ describe('CameraController', () => {
     c.setProjection(cylindrical())
     expect(c.state).toEqual({ povLatitude: 30, povLongitude: 60 })
     expect(c.consumeDirty()).toBe(true)
+  })
+
+  it('validates the projection setProjection receives, without adopting it', () => {
+    // cameraOptions' setter is the public door to setProjection. A rejected
+    // projection must leave the controller on the old one: the assert runs
+    // before the assignment, so nothing is half-applied and no frame is
+    // dirtied by a projection that was never stored.
+    const c = new CameraController(undefined, linear())
+    c.consumeDirty()
+
+    expect(() => c.setProjection({ kind: 'mercator', zoom: NaN, extent: [1, 1] })).toThrow(/finite/i)
+    expect(() => c.setProjection({ kind: 'linear', fov: Infinity, aspect: 1 })).toThrow(/finite/i)
+
+    expect(c.projection).toEqual(linear())
+    expect(c.consumeDirty()).toBe(false)
   })
 
   it('notifies subscribers on change but not on a no-op', () => {

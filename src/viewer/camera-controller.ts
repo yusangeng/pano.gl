@@ -39,6 +39,32 @@ export const DEFAULT_PROJECTION: Projection = {
 const MIN_FOV = (15 * Math.PI) / 180
 const MAX_FOV = (110 * Math.PI) / 180
 
+/**
+ * Asserts a projection's numeric state is finite where it enters the
+ * controller -- the constructor and `setProjection`, both of which store what
+ * they are handed.
+ *
+ * The pose gained this guard when `param-check` was deleted; the projection
+ * outlived it, and a NaN `zoom` reaches `buildProjection` just as silently as
+ * a NaN latitude and draws the same unreported black frame. `aspect` is
+ * positive-asserted rather than merely finite, mirroring `setAspect`'s own
+ * guard: the same quantity must not be validated on the resize path and
+ * unvalidated on this one. Range is deliberately not asserted -- `setProjection`
+ * stores `zoom: 5` on purpose in the tests; finiteness is the boundary.
+ *
+ * @throws If a projection parameter is not finite (`aspect`: not positive).
+ */
+function assertProjectionFinite (projection: Projection): void {
+  if (projection.kind === 'linear') {
+    assertFinite(projection.fov, 'fov')
+    assertPositive(projection.aspect, 'aspect')
+  } else {
+    assertFinite(projection.zoom, 'zoom')
+    assertFinite(projection.extent[0], 'extent[0]')
+    assertFinite(projection.extent[1], 'extent[1]')
+  }
+}
+
 export class CameraController {
   #state: CameraState
   #projection: Projection
@@ -48,16 +74,18 @@ export class CameraController {
   /**
    * @param pose - Initial pose in degrees. Defaults to the origin.
    * @param projection - Initial projection.
-   * @throws If a supplied angle is not finite. The pose arrives straight from a
-   *   caller's `camera.pose` option, so this is a public boundary and not an
-   *   internal one -- a NaN let through here reaches the matrix and draws a
-   *   black frame with nothing reported.
+   * @throws If a supplied angle is not finite, or if a projection parameter
+   *   (`fov`, `zoom`, `extent`) is not finite (`aspect`: not positive). Both
+   *   arrive straight from a caller's `camera` option, so this is a public
+   *   boundary and not an internal one -- a NaN let through here reaches the
+   *   matrix and draws a black frame with nothing reported.
    */
   constructor (pose: Partial<CameraState> | undefined, projection: Projection) {
     this.#state = {
       povLatitude: clampLatitude(pose?.povLatitude ?? 0),
       povLongitude: wrapLongitude(pose?.povLongitude ?? 0)
     }
+    assertProjectionFinite(projection)
     this.#projection = projection
   }
 
@@ -172,8 +200,13 @@ export class CameraController {
   /**
    * Replaces the projection, keeping the pose -- the legacy setter rebuilt the
    * whole camera and silently threw away where the user was looking.
+   *
+   * @throws If a projection parameter is not finite (`aspect`: not positive).
+   *   The throw comes before the assignment, so a rejected projection leaves
+   *   the controller on the one it held.
    */
   setProjection (projection: Projection): void {
+    assertProjectionFinite(projection)
     this.#projection = projection
     this.#dirty = true
     this.#notify()
