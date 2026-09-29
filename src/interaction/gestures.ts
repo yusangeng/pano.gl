@@ -106,3 +106,31 @@ export function classifyDrag (delta: DragInput, surface: SurfaceSize): { lat: nu
     lat: -(delta.deltaY / surface.height) * 180
   }
 }
+
+/** The Mercator twin of `classifyDrag`'s return: metres of map latitude, degrees of longitude. */
+export interface MercatorDrag {
+  readonly meters: number
+  readonly lng: number
+}
+
+/**
+ * Classifies a drag for the Mercator camera: vertical motion as a translation
+ * in the map's metre metric, horizontal as degrees of longitude.
+ *
+ * The metre formula is the vertical twin of `classifyDrag`'s longitude: one
+ * screen height spans `2*pi*zoom` metres, so the same pixels span half the
+ * metres at zoom 0.5 (spec section 4). The sign follows the same
+ * scene-follows-hand inversion as `classifyDrag` -- drag up, and the content
+ * that was below centre comes to centre.
+ *
+ * A non-positive surface dimension yields zero metres and zero degrees, the
+ * same guard `classifyDrag` has: a collapsed container must not turn the
+ * division into infinity or NaN.
+ */
+export function classifyDragMercator (delta: DragInput, surface: SurfaceSize, zoom: number): MercatorDrag {
+  if (surface.width <= 0 || surface.height <= 0) return { meters: 0, lng: 0 }
+  return {
+    lng: -(delta.deltaX / surface.width) * 360,
+    meters: -(delta.deltaY / surface.height) * 2 * Math.PI * zoom
+  }
+}
