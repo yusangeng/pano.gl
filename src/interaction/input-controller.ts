@@ -21,7 +21,7 @@
  */
 
 import { Disposable, EventEmitter, type EventMap } from '../core/events'
-import { classifyDrag, classifyPinch, classifyWheel, type SurfaceSize } from './gestures'
+import { classifyDrag, classifyDragMercator, classifyPinch, classifyWheel, type MercatorDrag, type SurfaceSize } from './gestures'
 
 export interface InputEvents extends EventMap {
   pan: { deltaX: number, deltaY: number }
@@ -134,6 +134,11 @@ export class InputController extends Disposable {
   /** Converts a drag to a rotation. Exposed so the viewer can apply its own scaling. */
   dragToRotation (deltaX: number, deltaY: number, surface: SurfaceSize): { lat: number, lng: number } {
     return classifyDrag({ deltaX, deltaY }, surface)
+  }
+
+  /** Classifies a pan event for the Mercator camera. See {@link classifyDragMercator}. */
+  dragToMercatorPan (deltaX: number, deltaY: number, surface: SurfaceSize, zoom: number): MercatorDrag {
+    return classifyDragMercator({ deltaX, deltaY }, surface, zoom)
   }
 
   override dispose (): void {
