@@ -56,7 +56,7 @@ function readUrlState (): { projection: Projection, source: SourceId, backend: B
   const backend: BackendPreference =
     (['auto', 'webgpu', 'webgl2'] as const).find(b => b === params.get('backend')) ?? 'auto'
   const fallback = defaultProjection(
-    (['linear', 'cylindrical', 'planet', 'pannini'] as const).find(k => k === kindParam) ?? 'linear')
+    (['linear', 'cylindrical', 'planet', 'pannini', 'mercator'] as const).find(k => k === kindParam) ?? 'linear')
   if (fallback.kind === 'linear') {
     const fovDeg = parseNumber(params.get('fov'), 15, 110, (fallback.fov * 180) / Math.PI)
     return {

@@ -52,11 +52,12 @@ export class ViewerBox {
 
 /**
  * Lab defaults per kind. fov is radians on the public boundary; the
- * non-linear defaults keep the legacy surface sizes (1x1 cylindrical,
- * 4x4 planet/pannini).
+ * non-linear defaults keep the legacy surface sizes (1x1 cylindrical and
+ * mercator -- mercator's 1x1 per the 2026-09-29 mercator-camera spec §2.3 --
+ * and 4x4 planet/pannini).
  */
 export function defaultProjection (kind: ProjectionKind): Projection {
   if (kind === 'linear') return { kind, fov: (70 * Math.PI) / 180, aspect: 1 }
-  const extent = kind === 'cylindrical' ? 1 : 4
+  const extent = kind === 'cylindrical' || kind === 'mercator' ? 1 : 4
   return { kind, zoom: 1, extent: [extent, extent] }
 }
