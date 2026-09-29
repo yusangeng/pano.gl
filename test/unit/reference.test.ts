@@ -32,9 +32,12 @@ function isDegenerate (kind: Projection['kind'], x: number, y: number, z: number
       // Nothing it divides by can be zero.
       return false
     case 'mercator':
-      // tanh saturates, asin's domain is closed: nothing here can produce
-      // NaN at any finite input, and the pole poses stay finite by design
-      // (spec 2.5).
+      // NaN needs an infinity in yy * TWO_PI or zz * TWO_PI (Inf - Inf in M,
+      // or an Inf theta), and the reachable surface cannot produce one: the
+      // 1x1 extent pins |y|, |z| <= 0.5 and the zoom clamp tops out at 1,
+      // so both stay <= pi. An exact pole pose's atanh(+-1) is +-Infinity
+      // but meets only a finite partner, and tanh's saturation plus asin's
+      // closed domain read it back finite (spec 2.5).
       return false
   }
 }
@@ -334,7 +337,10 @@ describe('latitude on the non-linear cameras (the F5 fix)', () => {
    *
    * Planet left this table on 2026-09-28: its latitude is no longer a phi
    * offset but the tilt of a Mobius pre-transform -- see the planet-tilt
-   * describe below.
+   * describe below. Mercator is not in it either: its latitude enters as
+   * `atanh(sin(lat))` inside the Gudermannian, so the v shift is not the
+   * constant these rows pin -- the 2026-09-29 mercator-camera spec owns
+   * its latitude invariants.
    */
   const nonLinear: Array<[string, Projection]> = [
     ['cylindrical', { kind: 'cylindrical', zoom: 1, extent: [1, 1] }],

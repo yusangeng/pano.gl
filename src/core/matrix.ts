@@ -24,7 +24,7 @@ const FAR = 1000
  * The `-sin(theta)` in the target's X is the captured handedness; flipping it
  * mirrors the panorama horizontally.
  *
- * **Linear projection only.** The three non-linear cameras rotate the *surface
+ * **Linear projection only.** The four non-linear cameras rotate the *surface
  * coordinate* in the fragment shader via `u_CamPOVLongitude`; applying this view
  * to them would rotate twice. See `LEGACY_QUAD_VIEW`.
  *
@@ -44,7 +44,7 @@ export function buildViewMatrix (state: CameraState, out: mat4): mat4 {
 }
 
 /**
- * The fixed view for the three non-linear projections: camera at the origin
+ * The fixed view for the four non-linear projections: camera at the origin
  * looking straight down +X, world up = +Y.
  *
  * The projection formulas expect the surface point in local coordinates: `z`
