@@ -13,6 +13,7 @@
  */
 import { FramelessImageViewer, FramelessVideoViewer } from '../../src/index'
 import type { BackendPreference, CameraState, Projection, SelectedCapabilities } from '../../src/index'
+import { PROJECTION_KINDS } from '../../src/core/constants'
 import { assetUrl } from '../asset-url'
 import { ViewerBox, defaultProjection } from './context'
 import type { LabContext, LabViewer, SourceId } from './context'
@@ -55,8 +56,9 @@ function readUrlState (): { projection: Projection, source: SourceId, backend: B
   // machine must not pin a WebGL2-only machine to 'webgpu' (spec §3).
   const backend: BackendPreference =
     (['auto', 'webgpu', 'webgl2'] as const).find(b => b === params.get('backend')) ?? 'auto'
-  const fallback = defaultProjection(
-    (['linear', 'cylindrical', 'planet', 'pannini', 'mercator'] as const).find(k => k === kindParam) ?? 'linear')
+  // Whitelist from the single source, so a sixth projection is bookmarkable
+  // the moment it lands -- a literal here would silently fall back to linear.
+  const fallback = defaultProjection(PROJECTION_KINDS.find(k => k === kindParam) ?? 'linear')
   if (fallback.kind === 'linear') {
     const fovDeg = parseNumber(params.get('fov'), 15, 110, (fallback.fov * 180) / Math.PI)
     return {
