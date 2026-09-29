@@ -206,14 +206,21 @@ fn project_planet(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
   // half-angle round to the same bits, den_re cancels to +0, the floor then
   // yields zn = yn = +-0, and atan(p / q) becomes atan(0 / 0) = NaN. The
   // tilt's own centre w' = 0 (y = tan(tilt / 2), exactly +-1 at those same
-  // clamps) is a second NaN site with d2 = 2, beyond any floor. Both need
+  // clamps) is a second such site with d2 = 2, beyond any floor. Both need
   // lat exactly at the clamp and a fragment centre landing exactly on them:
   // at zoom 1 that is odd width with height = 2 mod 4, and other zoom
-  // values reach the same y = +-1 through other rational rows; both are
-  // the single-NaN-texel class the lat = 0 centre pixel has always carried,
-  // kept rather than normalised per the reference's faithful-NaN stance. The
-  // float64 reference deliberately carries no floor -- it is the arbiter, and
-  // its tests sample around the pole, never on it.
+  // values reach the same y = +-1 through other rational rows. Since
+  // 2026-09-28 these branch points take the canonical value instead of the
+  // NaN this comment used to record as kept (planet-review-followups spec,
+  // section 2.2, superseding the faithful-NaN stance): the guard after
+  // phi's formula below assigns theta and phi their +z-side one-sided
+  // limits, measured identical at every branch point on the float64
+  // arbiter. The float64 reference still carries no floor -- it is the
+  // arbiter -- but it carries the same guard, which float64 reaches only
+  // at exact tilt-centre hits whose ct * y - st cancels bit for bit:
+  // the lat = 0 centre always, most other tilts per rounding luck, never
+  // the +-90 sites (one ulp short there, their finite artifacts pinned
+  // on the arbiter).
   let d2 = max(den_re * den_re + den_im * den_im, 1e-15);
 
   let zn = (num_re * den_re + num_im * den_im) / d2;
@@ -233,9 +240,26 @@ fn project_planet(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
     theta = TWO_PI + theta;
   }
 
-  theta -= lng;
+  var phi = atan(r / sqrt(p * p + q * q)) + HALF_PI;
 
-  let phi = atan(r / sqrt(p * p + q * q)) + HALF_PI;
+  // The Mobius reduction's branch points: p and q both exactly zero make
+  // the atan above atan(0/0) and collapse phi's argument to -1/0. The
+  // canonical values are the +z-side one-sided limits, measured identical
+  // at every branch point on the float64 arbiter (2026-09-28
+  // planet-review-followups spec, section 2.2): theta = 1.5*PI, and
+  // phi = PI where the denominator is the zero factor (the Mobius pole,
+  // num nonzero) versus 0 where the numerator is wholly zero. The lng
+  // subtraction runs after the guard so the canonical theta receives it
+  // like every other fragment's.
+  if (p == 0.0 && q == 0.0) {
+    theta = 1.5 * PI;
+    phi = PI;
+    if (num_re == 0.0 && num_im == 0.0) {
+      phi = 0.0;
+    }
+  }
+
+  theta -= lng;
   return to_uv(theta, phi);
 }
 

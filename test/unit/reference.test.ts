@@ -8,9 +8,13 @@ const state: CameraState = { povLatitude: 0, povLongitude: 0 }
  * The transcribed formulas divide by zero at a handful of exactly-degenerate
  * points, and a faithful transcription must keep producing NaN there (the
  * legacy GPU computed atan(0.0 / 0.0) just the same; see the "faithful NaNs"
- * test). This predicate names those points so the finiteness and range sweeps
- * can step around them without silently weakening themselves: anything not
- * listed here that produces a NaN is a real bug and fails the sweep.
+ * test). Planet left that class on 2026-09-28: the planet-review-followups
+ * spec, section 2.2, adjudicated a canonical value at its Mobius branch
+ * points, so projectPlanet is finite everywhere and its case below returns
+ * false. This predicate names the remaining points so the finiteness and
+ * range sweeps can step around them without silently weakening themselves:
+ * anything not listed here that produces a NaN is a real bug and fails the
+ * sweep.
  */
 function isDegenerate (kind: Projection['kind'], x: number, y: number, z: number): boolean {
   switch (kind) {
@@ -20,9 +24,10 @@ function isDegenerate (kind: Projection['kind'], x: number, y: number, z: number
       // when both operands are zero.
       return x === 0 && z === 0
     case 'planet':
-      // atan(P / Q) hits 0/0 when y and z are both zero; the formula never
-      // reads x.
-      return y === 0 && z === 0
+      // The Mobius branch points (p = q = 0, including y = z = 0 at lat 0)
+      // take a canonical value since 2026-09-28, so nothing here is
+      // degenerate any more -- the sweeps below now cover (0, 0) too.
+      return false
     case 'cylindrical':
       // Nothing it divides by can be zero.
       return false
@@ -234,11 +239,11 @@ describe('output range', () => {
     // the single NaN texel, but the formula is the formula. Normalising the
     // NaN away here would be a silent spec change: gate B compares against
     // this module, not against an idealised sphere.
-    const planet: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }
-    // The planet centre is the one degenerate point that lies ON the surface
-    // itself (x is never read, so the x = 1 plane does not save it).
-    expect(project(1, 0, 0, state, planet).u).toBeNaN()
-
+    //
+    // Planet's centre pixel left this class on 2026-09-28, by adjudication
+    // rather than silently: the planet-review-followups spec, section 2.2,
+    // defines the canonical value and pins it in the planet-tilt describe.
+    //
     // The zero vector never arises from ndcToSurface, which pins x to 1; these
     // are pinned only to keep the transcription honest about its own domain.
     const linear: Projection = { kind: 'linear', fov: 1, aspect: 1 }
@@ -361,8 +366,9 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
    * The four blocks pin the spec's invariants I1-I4 in order; the fifth pins
    * the transform's values away from the centre (review I-1); the sixth pins
    * the Mobius pole the other blocks deliberately sample around (CR round 1,
-   * testing specialist); the seventh witnesses the f32 floored arithmetic
-   * the shaders actually run (CR round 2, red team).
+   * testing specialist); the seventh pins the canonical branch-point value
+   * (planet-review-followups spec 2.2); the eighth witnesses the f32 floored
+   * arithmetic the shaders actually run (CR round 2, red team).
    */
   const projection: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }
   const wrap = (x: number): number => {
@@ -582,16 +588,83 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     }
   })
 
-  it('witnesses the f32 floored path the shaders run: floor fires, atan(0/0) remains', () => {
+  it('takes the canonical branch-point value where p and q are both zero', () => {
+    // 2026-09-28 planet-review-followups spec, section 2.2, by user
+    // adjudication -- this departs, openly, from the faithful-NaN stance the
+    // "keeps the NaNs" test above still pins for linear and pannini. The
+    // Mobius reduction reaches p = q = 0 at five sites: the lat = 0 centre
+    // (the numerator is the zero factor, in float64 too) and, in f32 only,
+    // the four exact-hit sites at the +-90 clamps. The canonical values are
+    // the +z-side one-sided limits, measured identical at every site:
+    // theta = 1.5*PI, and phi = PI where the denominator is the zero factor
+    // versus 0 where the numerator is. Bit-exact by construction, hence
+    // toBe: 1.5*PI / TWO_PI is exact in float64, and a tolerance here would
+    // hide a changed constant.
+    const centre = project(1, 0, 0, { povLatitude: 0, povLongitude: 0 }, projection)
+    expect(centre.u).toBe(0.75)
+    expect(centre.v).toBe(0)
+
+    // The lng subtraction runs after the guard, so the canonical theta
+    // receives it like any other fragment's. This is the pin for the
+    // statement order: a guard placed after `theta -= lng` fails it.
+    const rotated = project(1, 0, 0, { povLatitude: 0, povLongitude: 90 }, projection)
+    expect(rotated.u).toBe(0.5)
+
+    // The four B-class sites in float64: sin and cos of the half-angle
+    // differ by one ulp here, so numIm and denRe stay nonzero and keep q
+    // off zero (numRe is -0, denIm is +-0, and p is exactly +-0 -- the q
+    // conjunct alone holds the guard off at all four sites), so the guard
+    // does NOT fire and the formula's own finite values stand. They are
+    // mid-jump artifacts of that one ulp -- each artifact u is exactly 0
+    // or 0.5 (theta exactly 0 or PI), the midpoint position of the
+    // half-turn jump between the 0.25 and 0.75 one-sided limits -- pinned
+    // as the documented, non-normative divergence between this arbiter
+    // and the f32 shaders (which take 0.75 at every site, witnessed in
+    // the f32 block below). A change to them is an engine or half-angle
+    // change and must be seen.
+    const artifacts: Array<[number, number, number, number]> = [
+      // [y, lat, u, v] -- Mobius pole sites first, then tilt centres. The
+      // -0 in the first row is deliberate and load-bearing (toBe is
+      // Object.is): the pole site carries zz = -0 through num into p, and
+      // theta stays -0 to the wrap.
+      [1, -90, -0, 1],
+      [-1, 90, 0.5, 1],
+      [-1, -90, 0.5, 0],
+      [1, 90, 0, 0]
+    ]
+    for (const [y, latDeg, u, v] of artifacts) {
+      const hit = project(1, y, 0, { povLatitude: latDeg, povLongitude: 0 }, projection)
+      expect(hit.u, `u at (y=${y}) lat=${latDeg}`).toBe(u)
+      expect(hit.v, `v at (y=${y}) lat=${latDeg}`).toBe(v)
+    }
+
+    // The guard's other conjunct. On the whole y = 0 line at lat 0, q is
+    // exactly +0 while p stays nonzero (the tilt is the identity there, so
+    // w' is real -- not a branch point), so the q === 0 half must NOT fire.
+    // Every artifact row above has p = 0 with q != 0 -- they pin the p
+    // conjunct only -- and a guard widened to q === 0 alone survives every
+    // other test in this file and every gate (verified by mutation: it
+    // passed all 311 unit tests before these pins). Each pin kills one
+    // side of such a mutant: its v collapses to 1 at z = +0.25, its u
+    // homogenises to 0.75 at z = -0.25. The v literal is atan-derived, so
+    // toBeCloseTo per this file's convention; u = 0.25 is exact by
+    // construction ((PI/2) / TWO_PI quarters the turn bit for bit).
+    const axisPos = project(1, 0, 0.25, { povLatitude: 0, povLongitude: 0 }, projection)
+    expect(axisPos.v).toBeCloseTo(0.15595826075473862, 12)
+    const axisNeg = project(1, 0, -0.25, { povLatitude: 0, povLongitude: 0 }, projection)
+    expect(axisNeg.u).toBe(0.25)
+  })
+
+  it('witnesses the f32 floored path the shaders run: floor fires, branch points take the canonical value', () => {
     // The blocks above run the float64 arbiter; the shaders run f32 with the
     // 1e-15 floor, and until this block nothing executed that arithmetic (CR
     // round 2, red team). This replica transcribes panorama.glsl's
     // project_planet -- the WGSL twin is token-identical, held by the shader
     // tests -- with Math.fround at every intermediate, and three deliberate
-    // elisions: lng pinned at 0 (theta -= 0 changes no bit), the zoom
-    // pre-multiplication (every pin runs zoom 1, an exact identity), and
-    // to_uv's mod on u (every pinned theta / TWO_PI sits in [0, 1) and mod of
-    // NaN stays NaN; the v flip is transcribed). One caveat the pins below
+    // elisions: lng pinned at 0 (theta -= 0 changes no bit, before or
+    // after the guard), the zoom pre-multiplication (every pin runs zoom 1,
+    // an exact identity), and to_uv's mod on u (every pinned theta / TWO_PI
+    // sits in [0, 1); the v flip is transcribed). One caveat the pins below
     // carry: JS Math.sin/cos/atan/sqrt are f64-then-rounded, so a backend's
     // f32 transcendentals may differ by an ulp; the exact-hit behaviour
     // pinned here is the JS-rounding truth and documents the class, not
@@ -618,7 +691,17 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
       let theta = Math.atan(f(p / q))
       if (q < 0) theta = f(f(Math.PI) + theta)
       else if (q > 0 && p < 0) theta = f(f(f(2) * F32_PI) + theta)
-      const phi = f(f(Math.atan(f(r / f(Math.sqrt(f(f(p * p) + f(q * q))))))) + f(F32_PI / f(2)))
+      let phi = f(f(Math.atan(f(r / f(Math.sqrt(f(f(p * p) + f(q * q))))))) + f(F32_PI / f(2)))
+      // The shaders' branch-point guard, transcribed: f32(f32(1.5) * PI)
+      // then divides by f32(2) * PI exactly, so u is the canonical 0.75
+      // bit for bit, and phi takes the site's own limit.
+      if (p === 0 && q === 0) {
+        theta = f(f(1.5) * F32_PI)
+        phi = F32_PI
+        if (numRe === 0 && numIm === 0) {
+          phi = 0
+        }
+      }
       const u = f(theta / f(f(2) * F32_PI))
       const v = f(1 - f(phi / f(Math.PI)))
       return { u, v, d2 }
@@ -645,14 +728,15 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
         .toBe(Math.fround(1e-15))
     }
 
-    // Exactly on the degenerate sites, all four (both clamps, both signs of
-    // y): u is NaN and v collapses to a source pole -- pinned as the
-    // documented residual, the same faithful-NaN class the lat = 0 centre
-    // pixel carries, not an accident. The d2 pins say which site is which:
-    // the Mobius pole's denominator zero is floored up from 0 (and the floor
-    // still cannot save theta, which is atan(0/0) one link downstream), while
-    // the tilt centre's own w' = 0 carries d2 = O(1) -- no d2 floor can ever
-    // reach that one.
+    // Exactly on the branch points, all four (both clamps, both signs of
+    // y): the guard fires and u is the canonical 0.75 bit for bit
+    // (f32(f32(1.5) * PI) / (f32(2) * PI) is exact), while v takes the phi
+    // limit of its site -- 0 on the Mobius pole (num survives the
+    // cancellation, phi = PI), 1 on the tilt centre (num is the zero
+    // factor, phi = 0, flipped by to_uv). The d2 pins still say which site
+    // is which: the pole's denominator zero is floored up from 0, the
+    // centre's own w' = 0 carries d2 = O(1) -- no floor can ever reach
+    // that one.
     const exactSites: Array<[number, number, 'pole' | 'centre']> = [
       [1, -90, 'pole'],
       [-1, 90, 'pole'],
@@ -661,8 +745,8 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     ]
     for (const [y, latDeg, kind] of exactSites) {
       const hit = shaderPlanet(y, 0, latDeg)
-      expect(Number.isNaN(hit.u), `u NaN exactly on the ${kind} site (y=${y}) at lat=${latDeg}`).toBe(true)
-      expect(hit.v, `v collapses to a source pole on the ${kind} site (y=${y}) lat=${latDeg}`).toBe(1)
+      expect(hit.u, `u canonical on the ${kind} site (y=${y}) at lat=${latDeg}`).toBe(0.75)
+      expect(hit.v, `v at the ${kind} limit on (y=${y}) lat=${latDeg}`).toBe(kind === 'pole' ? 0 : 1)
       if (kind === 'pole') {
         expect(hit.d2, `d2 floored up from 0 on the pole site (y=${y}) lat=${latDeg}`)
           .toBe(Math.fround(1e-15))
@@ -674,5 +758,13 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
         expect(hit.d2, `d2 is O(1) on the centre site (y=${y}) lat=${latDeg}`).toBeGreaterThan(1)
       }
     }
+
+    // The lat = 0 centre (the A-class site) through the same f32 path: the
+    // guard fires here too, with d2 = 1 -- an ordinary division, the floor
+    // nowhere near firing -- u canonical, v at the phi = 0 limit.
+    const centre = shaderPlanet(0, 0, 0)
+    expect(centre.u).toBe(0.75)
+    expect(centre.v).toBe(1)
+    expect(centre.d2).toBe(1)
   })
 })

@@ -161,6 +161,37 @@ describe('WebGL2 shader source', () => {
     expect(body, 'the excluded-point floor is missing').toContain('1e-15')
   })
 
+  it('assigns the canonical branch-point value where p and q are both zero', () => {
+    // 2026-09-28 planet-review-followups spec, section 2.2. Structural pins
+    // for the guard: its condition, the canonical theta, and the num-based
+    // phi discrimination (statement form, no ternary -- WGSL has none, and
+    // the token-for-token test below compares the two bodies as sequences).
+    // The 'transcribes the same formulas as the WGSL, token for token' test
+    // holds the WGSL twin to the same statements; the f32 witness in
+    // test/unit/reference.test.ts pins the values.
+    const body = skeleton(glslBody('project_planet'))
+    expect(body, 'the guard condition is missing').toContain('p == 0.0 && q == 0.0')
+    expect(body, 'the canonical theta is missing').toContain('theta = 1.5 * PI')
+    expect(body, 'the phi discrimination is missing').toContain('num_re == 0.0 && num_im == 0.0')
+    expect(body, 'the phi pole value is missing').toContain('phi = PI')
+    expect(body, 'the phi zero value is missing').toContain('phi = 0.0')
+
+    // Ordered pin, the role and position net. The five pins above are
+    // diagnostics only: the ordered string below contains all five
+    // substrings, so they add no killing power beyond it -- their value is
+    // naming which piece went missing when one of them fails. The token
+    // parity is symmetric under an edit made to both files at once: swap
+    // the phi arms, or hoist theta -= lng back above the guard (where
+    // cylindrical and pannini carry it), and every other test in the repo
+    // stays green -- the f32 witness pins lng at 0, and gate C's even
+    // canvas never rasterises a guarded texel. The whole collapsed guard
+    // plus its tail, one string.
+    expect(body, 'the guard arms or position changed').toContain(
+      'if (p == 0.0 && q == 0.0) { theta = 1.5 * PI; phi = PI; ' +
+        'if (num_re == 0.0 && num_im == 0.0) { phi = 0.0; } } theta -= lng; return to_uv'
+    )
+  })
+
   it('planet no longer carries the phi latitude offset the tilt replaced', () => {
     // The pre-2026-09-28 body ended with 'atan(...) + HALF_PI - lat'. A merge
     // that keeps that term alongside the Mobius tilt passes every parity test

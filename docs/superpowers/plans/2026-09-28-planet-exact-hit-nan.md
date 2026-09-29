@@ -47,7 +47,7 @@ Reference f64 at A with `povLongitude: 90`: u = 0.5 exactly (`(1.5π − π/2)/2
 - Modify: `src/core/reference.ts` (`projectPlanet`, ~lines 206–228)
 - Test: `test/unit/reference.test.ts`
 
-- [ ] **Step 1: Add the failing canonical-value test**
+- [x] **Step 1: Add the failing canonical-value test**
 
 In `test/unit/reference.test.ts`, inside `describe('planet tilt (the steerable centre, 2026-09-28 spec)', ...)`, insert this `it` **after** the `it('pins the Mobius pole the other blocks sample around', ...)` block (ends ~line 583) and **before** the `it('witnesses the f32 floored path...')` block:
 
@@ -99,12 +99,12 @@ In `test/unit/reference.test.ts`, inside `describe('planet tilt (the steerable c
 
 (`projection` is the describe-level `const projection: Projection = { kind: 'planet', zoom: 1, extent: [4, 4] }` — reuse it, do not redeclare.)
 
-- [ ] **Step 2: Run to verify the new test fails**
+- [x] **Step 2: Run to verify the new test fails**
 
 Run: `npx vitest run test/unit/reference.test.ts`
 Expected: FAIL — `takes the canonical branch-point value` reports `expected NaN to be 0.75` (the centre's u is the faithful NaN). Every other test in the file passes.
 
-- [ ] **Step 3: Add the guard to projectPlanet in src/core/reference.ts**
+- [x] **Step 3: Add the guard to projectPlanet in src/core/reference.ts**
 
 Replace the tail of `projectPlanet` (currently `let theta = Math.atan(p / q)` through `return toUV(theta, phi)`) with:
 
@@ -145,12 +145,12 @@ Replace the tail of `projectPlanet` (currently `let theta = Math.atan(p / q)` th
 
 Two changes beyond the insertion: `const phi` becomes `let phi`, and `theta -= lng` moves from before phi's line to after the guard (no data dependency; the canonical theta must receive the same longitude subtraction as every other fragment's).
 
-- [ ] **Step 4: Run — one expected failure remains**
+- [x] **Step 4: Run — one expected failure remains**
 
 Run: `npx vitest run test/unit/reference.test.ts`
 Expected: the new canonical test PASSES. `keeps the NaNs the legacy shader produced at the degenerate points` now FAILS on its planet line (`expected 0.75 to be NaN`) — that pin is the old stance this task removes. Everything else passes.
 
-- [ ] **Step 5: Flip the three planet-departure edits in reference.test.ts**
+- [x] **Step 5: Flip the three planet-departure edits in reference.test.ts**
 
 5a. The file-header comment above `isDegenerate` becomes:
 
@@ -216,12 +216,12 @@ and extend the leading comment with the departure note, so the test reads:
   })
 ```
 
-- [ ] **Step 6: Run the whole file green**
+- [x] **Step 6: Run the whole file green**
 
 Run: `npx vitest run test/unit/reference.test.ts`
 Expected: PASS, all tests. (The range/no-NaN sweeps now include planet (0, 0): the guarded value u = 0.75, v = 0 is inside [0, 1] and finite — if a sweep fails, the guard's values are wrong, not the sweep.)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/core/reference.ts test/unit/reference.test.ts
@@ -249,7 +249,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 The two shaders must be edited **identically** — the token-for-token parity test fails between the two edits, which is expected; do not run it as a checkpoint between them.
 
-- [ ] **Step 1: Add the failing structural pin**
+- [x] **Step 1: Add the failing structural pin**
 
 In `test/unit/webgl2-shaders.test.ts`, immediately after the `it('tilts planet through a Mobius pre-transform of the plane point', ...)` test, add:
 
@@ -271,12 +271,12 @@ In `test/unit/webgl2-shaders.test.ts`, immediately after the `it('tilts planet t
   })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run test/unit/webgl2-shaders.test.ts`
 Expected: FAIL — `assigns the canonical branch-point value` (the guard is absent). The token-for-token parity test still PASSES (neither shader edited yet).
 
-- [ ] **Step 3: Edit the WGSL — comment rewrite + guard**
+- [x] **Step 3: Edit the WGSL — comment rewrite + guard**
 
 In `src/renderer/webgpu/shaders/panorama.wgsl`, `project_planet`:
 
@@ -355,7 +355,7 @@ with:
 
 (`theta` is already `var`; `phi` changes from `let` to `var`.)
 
-- [ ] **Step 4: Edit the GLSL — the same two edits, token for token**
+- [x] **Step 4: Edit the GLSL — the same two edits, token for token**
 
 In `src/renderer/webgl2/shaders/panorama.glsl`, `project_planet`:
 
@@ -398,12 +398,12 @@ with:
 
 (GLSL locals are mutable, so `float phi` needs no keyword change; the guard text is byte-identical to the WGSL's.)
 
-- [ ] **Step 5: Run the shader tests green**
+- [x] **Step 5: Run the shader tests green**
 
 Run: `npx vitest run test/unit/webgl2-shaders.test.ts`
 Expected: PASS, all tests — the new structural pins, the token-for-token parity (the guard landed in both bodies), the literal multiset and atan-count checks (`1.5` and `0.0` added equally to both), the atan2 ban and the `- lat` tripwire (the guard mentions neither).
 
-- [ ] **Step 6: Flip the f32 witness in reference.test.ts**
+- [x] **Step 6: Flip the f32 witness in reference.test.ts**
 
 In `test/unit/reference.test.ts`, `it('witnesses the f32 floored path the shaders run: floor fires, atan(0/0) remains', ...)`:
 
@@ -520,12 +520,12 @@ with:
     expect(centre.d2).toBe(1)
 ```
 
-- [ ] **Step 7: Run the reference tests green**
+- [x] **Step 7: Run the reference tests green**
 
 Run: `npx vitest run test/unit/reference.test.ts`
 Expected: PASS, all tests — the near-site ladder pins are untouched (the guard is exact-zero and was measured not to perturb any rung; if a ladder pin fails, the guard condition or the transcription is wrong).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/renderer/webgpu/shaders/panorama.wgsl src/renderer/webgl2/shaders/panorama.glsl \
@@ -549,7 +549,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md` (§2.3, ~line 79)
 
-- [ ] **Step 1: Append the dated erratum to §2.3**
+- [x] **Step 1: Append the dated erratum to §2.3**
 
 At the end of the §2.3 paragraph (the one carrying the existing `**2026-09-28 勘误（plan 期推导）**：` — append after its last sentence `…且测试采样点避开分母零点。`), append:
 
@@ -557,11 +557,11 @@ At the end of the §2.3 paragraph (the one carrying the existing `**2026-09-28 �
 **2026-09-28 二次勘误（planet-review-followups spec §2.4）**：上文「极限值连续（p, q → 0，r → 1, phi → π）」在**精确分支点**不成立——floor 在极点**附近**交付有限 zn/yn（f32 证人钉住的档位），但 lat 恰 ±90 的精确命中站点上 f32 `sin`/`cos` 对同一半角舍入到同一位，`den_re` 恰 +0（Möbius 极点站点）或分子恰 ±0（倾斜中心站点，d2 = 2，任何 d2 下限夹持够不着）→ `p = q = 0` → `atan(0/0) = NaN`；phi 的连续极限也按站点分侧（极点站点 → π，中心站点 → 0），不存在单一 phi 极限值。按 2026-09-28 用户裁决，分支点在三处实现（WGSL / GLSL / reference.ts）由显式守卫取规范值 `theta = 1.5·π`、phi 按零因子侧取 π/0，详见 planet-review-followups spec §2.1–2.2。本 spec 的任务卡是历史记录，实现以该 spec 为准。
 ```
 
-- [ ] **Step 2: Proofread the erratum**
+- [x] **Step 2: Proofread the erratum**
 
 Re-read the appended paragraph: no typos, the two spec cross-references (`planet-review-followups spec §2.4` / `§2.1–2.2`) match the section numbers of `docs/superpowers/specs/2026-09-28-planet-review-followups-design.md` (the erratum clause lives in its §2.4; the rule in §2.1–2.2).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md
@@ -581,24 +581,24 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Typecheck and lint**
+- [x] **Step 1: Typecheck and lint**
 
 Run: `npm run typecheck && npm run lint`
 Expected: both clean (three tsc programs; eslint over src, test, scripts, demo).
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `npm run build`
 Expected: clean (`dist/` ESM + CJS + `.d.ts`).
 
-- [ ] **Step 3: The card verify — unit then integration**
+- [x] **Step 3: The card verify — unit then integration**
 
 Run: `npm test`
 Expected: ALL green. In particular:
 - Gates A/B/C pass with **zero pixel change** — every gate canvas is even-sized, so no gate fragment lands on a branch point and the guard never fires under test. A gate failure means the guard fired somewhere it must not (or a transcription typo changed ordinary pixels): fix before finishing, do not touch baselines.
 - The `no-webgpu` project's fallback tests are unaffected (no shader-pipeline change beyond the formula text).
 
-- [ ] **Step 4: Write the completion report and finish**
+- [x] **Step 4: Write the completion report and finish**
 
 Append to the task card's「完成报告」section: what was done (guard in three places, pin flips, erratum), self-test results (the commands above with outcomes), deviations from this plan (none expected), residual risks (none expected — if any gate behaved unexpectedly and was resolved, record it). Then run the superloop finish gate per the executor contract.
 
