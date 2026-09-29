@@ -1,6 +1,6 @@
 ---
 plan: docs/superpowers/plans/2026-09-29-mercator-camera.md
-scope: [src/core/**, src/renderer/**, src/interaction/**, src/viewer/**, demo/lab/**, demo/shots/**, README.md, test/**]
+scope: [src/core/**, src/renderer/**, src/interaction/**, src/viewer/**, demo/lab/**, demo/shots/**, README.md, test/**, vitest.config.ts]
 verify: npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
 layer: domain
 state: reported
@@ -109,4 +109,40 @@ createdAt: 2026-09-29T09:01:03.219Z
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve**（2026-09-30，superloop-verify 四步全审）
+
+### 第一步：结构化 review（分支 vs master，37 文件 +1078/−172）
+
+1. 常量管线单源完整：`projection-kinds.json` mercator:5 → `gen:shaders` → generated.ts 双语常量；TS 侧 `ProjectionKind` 联合、`CAMERA_CODES`/`PROJECTION_KINDS`、`Projection` 判别联合加宽一致，全仓无手写投影数字面量。
+2. 三家公式逐行同形：`reference.ts` `projectMercator`（float64，asin(tanh) 的 Gudermannian 形式，f32 安全）、WGSL `project_mercator`、GLSL `project_mercator` token 级一致（仅拼写差异）；dispatch 两端齐备且各有 pin（GLSL 侧 8e44eae 补齐删除守望）。θ 与 cylindrical 精确共享；中心奇偶 I2（yy=0 时 asin(tanh(−atanh(sin lat))) = −lat）数学复核成立；极点 atanh(±1)=±∞ → tanh 饱和 → v 精确 0/1，无需守卫，推导复核成立。
+3. 拖拽链四层单位/符号自洽：`classifyDragMercator`（一屏高 = 2π·zoom 米，非正 surface 归零守卫）→ `dragToMercatorPan` 薄透传 → `panMercator` 逆投影纬度项（极点自然吸收、纯水平位级不变、零 delta 不脏帧）→ viewer rotate 事件报 applied 纬度差 + unwrapped 经度（−72 不是 288）。全部测试字面量独立复算精确吻合（49.801690337054204 / 27.658619791226776 / 89.63406064763751 / 0.6340606476375115）。
+4. `assertProjectionFinite` 双入口（构造器 + setProjection）先断言后存储；`projection.zoom` 逐事件活读，非构造期快照。
+5. vitest.config.ts no-webgpu include 白名单增补 `mercator-drag` 含注释段——CRITICAL 修复落点正确。
+6. demo lab 三处加宽（KINDS/extent 三元/URL 白名单）均走 `PROJECTION_KINDS` 单一事实源 import；README 相机表 + 五投影节 + 36.94 kB 复核口径一致；层规干净（renderer↔media 无新增交叉，`src/index.ts` 零触碰，公共面仅 `Projection` 联合增量）。
+
+### 第二步：plan 红线核对
+
+1. scope 白名单 37/37：加宽后（含 vitest.config.ts，见勘误 1）全部改动文件在册，无越界。
+2. 分支提交前缀 23/23 合规；plan 文件 diff 纯净——仅 128 处 checkbox 翻转 + 2 行头部，零内容改动。
+
+### 第三步：门禁证据复核
+
+1. 卡五节齐备（完成报告/偏离台账/遗留风险/CR 结论/测试质量结论）；CR 3 轮（初审 → edf59db 复核 → 1367d49 收尾）、最终 APPROVE_WITH_FIXES 整改闭环；例外台账 6 项全部有主（裁决或记录在案）。
+2. CRITICAL（no-webgpu 白名单漏 mercator-drag，CI 零执行）整改与用户裁决 Q1 授权一致；测试质量结论的"有效性=具名突变体钉死"口径与五项"没有≠失职"论证成立。
+3. 截图 800×450、qual-t14 三法独立验证（视觉/PIL 客观测量/跨投影距离分布）在案。
+
+### 第四步：最重发现亲验（干净 worktree，HEAD 4be2f51）
+
+1. 单测全项目 346/346；`gen:shaders` 幂等（工作树零改动）。
+2. 符号翻转突变（`reference.ts` `projectMercator` 纬度项 `- atanh(sin(lat))` 翻正）：**3 个具名测试杀**——I2 中心奇偶、lat-term 方向 pin、`pole poses collapse the frame onto one pole row`（`expected 1 to be +0`：符号翻转反转 lat +90 处无穷方向，v 0→1）。确定性 float64 语义，非舍入运气。
+3. 还原三重证明（diff 对照 / sha1 / grep）+ 还原后 43/43 复绿。
+4. no-webgpu 全项目 11 文件 58 通过 + 1 设计内 skip；**mercator-drag 五条逐条在该项目下执行**——CRITICAL 闭环亲证。
+
+### 勘误与裁定
+
+1. **主卡 frontmatter scope 已由审查者直接补齐**（追加 `vitest.config.ts`）：卡 CR 节声称"task-finish 的 syncCardToMain 会把新 scope 带回主卡"——实测不成立，syncCardToMain 只同步卡正文、保留主卡 frontmatter（主/分支卡 diff 仅 scope 行 + 2 空行可证）。按用户裁决 Q1 的授权意图直接修正主卡。
+2. **偏离台账 #2 勘误（不影响结论）**：sign-flip 变异记录杀 2（I2 + lat-term），亲验实测杀 3——第三个是极点塌缩 pin（见第四步 2）。杀集是记录的超集，净更强；按"以实测为准"原则记录。
+3. 12 项偏离逐条过目：全部有裁决或"以实测为准"记录；#11（scope 加宽）与 #12（demo 单源 import）均落在用户裁决声明的意图内。接受。
+4. 6 项遗留风险主次分明、处置路径均在案：#4（lat≠0×zoom≠1 reference pin）留独立小卡；#6（ADV-3 旧四款 rotate overshoot 统一到 applied delta）留候选后续卡；#1（仓库根 CLAUDE.md "four camera models" 陈旧计数）合并后由协调者按纯文档先例主侧更正，不阻塞本卡。
+
+**approve。**
