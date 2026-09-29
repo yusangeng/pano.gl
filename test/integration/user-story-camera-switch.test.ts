@@ -5,7 +5,7 @@ import { PROJECTIONS, imageViewer } from './support/viewer'
 import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
 import type { ProjectionName } from './support/viewer'
 
-const KINDS = ['linear', 'cylindrical', 'planet', 'pannini'] as const
+const KINDS = ['linear', 'cylindrical', 'planet', 'pannini', 'mercator'] as const
 
 describe('US3: switch camera models at runtime', () => {
   // Each case starts from a DIFFERENT model, so that every switch is a real
@@ -73,8 +73,8 @@ describe('US3: switch camera models at runtime', () => {
   it('the exported union names exactly the kinds the factory accepts', () => {
     // There is nothing to assert about an unknown kind at runtime -- it cannot be
     // written down, because `Projection` is a closed union -- so this pins the
-    // half that IS observable: the kinds this file drives are exactly the four
-    // the public union names, in both directions. A fifth kind added to one side
+    // half that IS observable: the kinds this file drives are exactly the five
+    // the public union names, in both directions. A sixth kind added to one side
     // and not the other is the failure this catches, and `PROJECTIONS` is
     // `satisfies Record<string, Projection>`, so the compiler catches it too.
     expect(Object.keys(PROJECTIONS).sort()).toEqual([...KINDS].sort())
