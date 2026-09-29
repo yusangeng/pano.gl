@@ -18,14 +18,15 @@ const OPTIONS = new URL('../src/viewer/options.ts', import.meta.url)
 const readme = readFileSync(README, 'utf8')
 const options = readFileSync(OPTIONS, 'utf8')
 
-/** Extracts the `readonly name` member names of one interface body. */
+/** Extracts the `readonly name` member names of one interface body.
+ *  @param {string} name */
 function interfaceMembers (name) {
   const start = options.indexOf(`interface ${name}`)
   if (start === -1) throw new Error(`interface ${name} not found in options.ts`)
   const body = options.slice(start, options.indexOf('}', start))
   const members = []
   for (const match of body.matchAll(/readonly (\w+)\??:/g)) {
-    members.push(match[1])
+    members.push(match[1] ?? '')
   }
   return members
 }
@@ -45,7 +46,7 @@ const rows = []
 for (const line of section.split('\n')) {
   const match = line.match(/^\| `(\w+)` \|(.*)$/)
   if (!match) continue
-  rows.push({ name: match[1], rest: match[2] })
+  rows.push({ name: match[1] ?? '', rest: match[2] ?? '' })
 }
 
 const failures = []
@@ -74,8 +75,10 @@ for (const name of documented) {
 
 // The intro sentence counts the video-only rows; keep the count honest too.
 const intro = section.match(/the video viewer adds the (\w+) marked/)
+const introWord = intro?.[1] ?? ''
+/** @type {Record<string, number>} */
 const wordCounts = { one: 1, two: 2, three: 3, four: 4, five: 5 }
-if (!intro || wordCounts[intro[1]] !== videoExtras.length) {
+if (!intro || wordCounts[introWord] !== videoExtras.length) {
   failures.push(
     `intro sentence must read "the video viewer adds the ${['zero', 'one', 'two', 'three', 'four', 'five'][videoExtras.length] ?? videoExtras.length} marked" to match the ${videoExtras.length} video-only options`
   )
