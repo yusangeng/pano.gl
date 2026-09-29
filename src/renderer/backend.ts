@@ -14,16 +14,13 @@ import type { CameraState, Projection, SourceState } from '../core/types'
  *
  * `SourceState` alone is not enough to draw one: it describes the upload -- how
  * the pixels are laid out and how big they are -- and says nothing about where
- * they come from. A backend needs both, so this pairs them. `state` is
- * `SourceState` from `core/types` rather than a re-declared shape, because
- * `core` is the layer both backends already agree on.
+ * they come from. A backend needs both, so this pairs them.
  *
- * **This is the definition and `MediaFrame` is an alias to it**, not the other
- * way round. `src/media/source.ts` (P4) writes `export type MediaFrame =
- * RenderableSource`, so there is exactly one declaration of these four members
- * and no conversion anywhere in the path from a loaded `<img>` to a bind group.
- * The renderer layer cannot import from the media layer -- the dependency runs
- * the other way -- so the declaration has to live here, on the consuming side.
+ * This is the definition and `MediaFrame` (in `src/media/source.ts`) is an
+ * alias to it, not the other way round: the renderer layer cannot import from
+ * the media layer, so the declaration lives here on the consuming side, and
+ * there is no conversion anywhere in the path from a loaded `<img>` to a bind
+ * group.
  */
 export interface RenderableSource {
   /** The upload description: layout and size. */
@@ -38,9 +35,7 @@ export interface RenderableSource {
    *
    * This is how "does the GPU texture need re-uploading" gets answered without
    * the backend subscribing to media events. An image bumps it once, on load; a
-   * video bumps it on every frame it presents. It replaces the legacy
-   * `needUpdate_` latch, which the *consumer* had to clear -- and "who clears
-   * it" is where that kind of flag goes wrong.
+   * video bumps it on every frame it presents.
    *
    * The value is the backend's ONLY pixel identity, and it is compared across
    * consecutive `setSource` calls including different source objects: the
@@ -112,9 +107,7 @@ export interface Backend {
    *
    * Without this the backend has no channel to report that it died, and the
    * viewer's `device-lost` event can never fire -- a lost device would show up
-   * as a canvas that silently stops updating, which is exactly the v0.2.2
-   * behaviour the design set out to fix (it handled neither WebGL context loss
-   * nor anything else).
+   * as a canvas that silently stops updating.
    *
    * Registering twice replaces the previous observer; the returned function
    * unregisters only if this call is still the current one, so calling a stale

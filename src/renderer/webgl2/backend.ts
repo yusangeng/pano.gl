@@ -8,7 +8,7 @@
  * The structural difference from WebGPU is the uniform upload. WebGPU packs
  * everything into one 96-byte block; here each value goes to its own named
  * uniform. The two layouts happen to coincide for this struct, which is a
- * coincidence and not a reason -- see the plan's "关键设计决定".
+ * coincidence and not a reason.
  *
  * The structural difference that does NOT exist is depth. Both matrices are
  * built by core/matrix.ts with the backend's own depth convention, and both
@@ -59,8 +59,8 @@ function buildProgram (gl: WebGL2RenderingContext): WebGLProgram {
  * @throws If one is missing, naming it. A null location means the uniform was
  *   optimized out or misspelled; the `gl.uniform*` call is then silently
  *   ignored, the value stays at its default, and the picture is wrong in a way
- *   that reads as a projection bug. Failing here, at construction, is the whole
- *   point -- the legacy path found out by rendering a wrong image.
+ *   that reads as a projection bug. Failing here, at construction, is the
+ *   whole point.
  */
 function locateUniforms (
   gl: WebGL2RenderingContext,
@@ -115,10 +115,9 @@ export class WebGL2Backend implements Backend {
   readonly kind = 'webgl2' as const
 
   /**
-   * Public, not `#private`: this satisfies `Backend.capabilities`, and the
-   * viewer reads it to decide whether a source needs downscaling before it ever
-   * calls `setSource`. A private field would fail `implements Backend` at
-   * typecheck, which is the point of declaring the interface in the first place.
+   * Public, not `#private`: it satisfies `Backend.capabilities`, and a private
+   * field would fail `implements Backend` at typecheck -- which is the point of
+   * declaring the interface at all.
    */
   readonly capabilities: Capabilities
 
@@ -243,13 +242,11 @@ export class WebGL2Backend implements Backend {
 
   setSource (source: RenderableSource | null): void {
     // During the loss window there is nothing to upload into. The spec allows
-    // createTexture() to return null on a lost context (this Chromium instead
-    // hands back a live object, which only turns the upload into a silent
-    // no-op), and the pixels would not survive the restore regardless:
-    // #onContextRestored drops the texture and the next setSource re-uploads.
-    // Returning before any GL call is what keeps a spec-conforming browser's
-    // null from reading as an allocation failure, thrown on every frame of
-    // the window.
+    // createTexture() to return null on a lost context (Chromium instead hands
+    // back a live object and the upload silently no-ops), and the pixels would
+    // not survive the restore regardless: #onContextRestored drops the texture
+    // and the next setSource re-uploads. Returning before any GL call keeps a
+    // spec-conforming browser's null from reading as an allocation failure.
     if (this.#lost) return
 
     const gl = this.#gl
@@ -286,15 +283,14 @@ export class WebGL2Backend implements Backend {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source.element)
     // No power-of-two requirement in WebGL2, so REPEAT + linear is available
-    // at any size. The legacy path could not have asked for REPEAT because
-    // WebGL1 restricts NPOT textures to NEAREST + CLAMP_TO_EDGE. The wrap
-    // modes must match WebGPU PER SOURCE KIND, not blanket: the WebGPU still
-    // sampler is repeat on BOTH axes (src/renderer/webgpu/shaders/sampler.ts)
-    // because the cross-seam/pole LINEAR blend lives in the sampler and
-    // clamp-to-edge cannot express it (gate A measured the seam blend at up
-    // to 124 LSB), while WebGPU video is edge-clamped by
-    // textureSampleBaseClampToEdge whatever the sampler says -- an API limit
-    // of its entry point, which a clamp-to-edge wrap mirrors exactly.
+    // at any size. The wrap modes must match WebGPU PER SOURCE KIND, not
+    // blanket: the WebGPU still sampler is repeat on BOTH axes
+    // (src/renderer/webgpu/shaders/sampler.ts) because the cross-seam/pole
+    // LINEAR blend lives in the sampler and clamp-to-edge cannot express it
+    // (gate A measured the seam blend at up to 124 LSB), while WebGPU video
+    // is edge-clamped by textureSampleBaseClampToEdge whatever the sampler
+    // says -- an API limit of its entry point, which a clamp-to-edge wrap
+    // mirrors exactly.
     const wrap = source.kind === 'video' ? gl.CLAMP_TO_EDGE : gl.REPEAT
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap)
@@ -361,10 +357,10 @@ export class WebGL2Backend implements Backend {
 
     if (this.#texture) this.#gl.deleteTexture(this.#texture)
     this.#gl.deleteProgram(this.#program)
-    // Ask the driver to release the context now rather than at GC time. The
-    // legacy cleanGL() never did this (defect L5), so a page that created and
-    // destroyed viewers accumulated contexts until the browser's limit (often
-    // 16) was hit and new viewers silently failed to get one.
+    // Ask the driver to release the context now rather than at GC time: a page
+    // that creates and destroys viewers otherwise accumulates contexts until
+    // the browser's limit (often 16) is hit and new viewers silently fail to
+    // get one.
     this.#gl.getExtension('WEBGL_lose_context')?.loseContext()
   }
 }

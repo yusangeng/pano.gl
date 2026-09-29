@@ -1,24 +1,12 @@
 // pano.gl panorama shader, WebGL2 backend.
 //
-// A line-by-line transcription of src/renderer/webgpu/shaders/panorama.wgsl as
-// it stands -- that is, including the latitude handling the non-linear
-// projections gained when latitude stopped being ignored (defect F5):
-// cylindrical and pannini carry the `- lat` term in phi, and since 2026-09-28
-// planet consumes latitude as the tilt of a Mobius pre-transform (see
-// project_planet). Transcribing an earlier version of that file loses the
-// latitude handling, and gate C fails on every state whose povLatitude is not
-// zero.
-//
-// Transcribed by hand rather than generated: the two languages differ enough
-// that a translator would be a project of its own, and a translator that got
-// the projections subtly wrong would be worse than two files a human can read
-// side by side.
-//
-// The cost of hand transcription is drift. Gate C is what prevents it: every
-// camera state is rendered through both backends and the pixels are compared.
-// If you change a formula here, change it in the WGSL too, and check
-// src/core/reference.ts -- the CPU reference is the arbiter when the two
-// backends disagree.
+// A line-by-line hand transcription of
+// src/renderer/webgpu/shaders/panorama.wgsl -- nothing generates it and
+// nothing type-checks the two against each other. Gate C is what holds them
+// together: every camera state is rendered through both backends and the
+// pixels are compared. If you change a formula here, change it in the WGSL
+// too, and check src/core/reference.ts -- the CPU reference is the arbiter
+// when the two backends disagree.
 //
 // THREE THINGS IN THIS FILE LOOK WRONG AND ARE NOT. Each has already been
 // wrong once, which is why each has a test that names it:
@@ -26,20 +14,17 @@
 //   1. `to_uv` has no `+ 0.5`. Adding one rotates the panorama half a turn.
 //   2. `to_uv` flips v (`1.0 - phi / PI`). Removing the flip renders it upside
 //      down.
-//   3. No `atan2` anywhere: the quadrant fixups are transcriptions of v0.2.2.
-//      The `povLongitude / 4.0` longitude offset this item also used to cover
-//      was a v0.2.2 bug as well, but unlike the fixups it was corrected
-//      (2026-09-23, pan-zoom-semantics spec §1) rather than kept. See the
-//      comments at each site.
+//   3. No `atan2` anywhere: the quadrant fixups are transcriptions of v0.2.2,
+//      and in pannini the two are not equivalent. See the comments at each
+//      site.
 //
 // WHAT IS *NOT* SHARED: the uniform layout. WebGPU packs the camera into one
 // 96-byte block; WebGL2 uses named uniforms. The semantics are shared, the
-// storage is not. See the plan's "关键设计决定".
+// storage is not.
 //
-// The fragment stage inverts the camera matrix to recover the surface point the
-// legacy rasteriser would have interpolated. Both depth conventions put the far
-// plane at ndc z = +1, so this file does not need to know which convention
-// built the matrix.
+// The fragment stage inverts the camera matrix to recover the surface point.
+// Both depth conventions put the far plane at ndc z = +1, so this file does
+// not need to know which convention built the matrix.
 
 // `#define CAMERA_PROJECTION_*` and `#define TEXTURE_PROJECTION_EQUIRECTANGULAR`
 // are prepended above this file by shaders/index.ts, generated from
@@ -72,33 +57,25 @@ const float PI = 3.141592653589793;
 const float HALF_PI = 1.5707963267948966;
 const float TWO_PI = 6.283185307179586;
 
-// Equirectangular coordinate from an angle pair.
+// Equirectangular coordinate from an angle pair. Two deliberate choices,
+// mirroring `to_uv` in the WGSL:
 //
-// `mod` here does the same job as the WGSL's `fract` -- it folds u into
-// [0, 1) -- and no more. The legacy shader did none of even that: it handed
-// texture2D a raw ratio and the texture object's default REPEAT wrap did the
-// work. The cross-seam and cross-pole LINEAR blend is likewise the sampler's,
-// not this function's, and clamp-to-edge cannot express it. On WebGPU the
-// still sampler is REPEAT on both axes for exactly that blend (see
-// src/renderer/webgpu/shaders/sampler.ts; gate A measured the seam blend at
-// up to 124 LSB), while WebGPU video is edge-clamped by
-// textureSampleBaseClampToEdge whatever the sampler's modes say -- an API
-// limit of its entry point, not a decision to treat video differently. The
-// WebGL2 sampler modes are Task 3's to set, and they must match WebGPU per
-// source kind: still textures REPEAT on both axes, video clamp-to-edge.
+//   1. u is wrapped by `mod`, which is `x - y * floor(x / y)` -- the same
+//      function as the WGSL's `fract(theta / TWO_PI)`, and NOT WGSL's `%`,
+//      which truncates toward zero and would put a seam in the panorama
+//      wherever theta is negative. The wrap stands in for the sampler's REPEAT
+//      wherever that mode is unavailable, and the cross-seam and cross-pole
+//      LINEAR blend is the sampler's, not this function's -- clamp-to-edge
+//      cannot express it (gate A measured the seam blend at up to 124 LSB).
+//      The sampler modes are set per source kind in backend.ts to mirror
+//      WebGPU: still REPEAT on both axes, video clamp-to-edge.
 //
-// `mod` is x - y * floor(x / y), the same function as WGSL's `fract` for a
-// divisor of 1.0. WGSL's `%` is NOT the same (it truncates toward zero) and
-// would put a seam in the panorama wherever theta is negative. If you copy this
-// line back to the WGSL, `fract` is the one to use.
-//
-// v is FLIPPED. The legacy upload set UNPACK_FLIP_Y_WEBGL, so its sampler read
-// a vertically mirrored image compared with the source file. P3 decided the
-// flip lives in the shader once, for every source path, so the two backends
-// cannot disagree about it -- which means this backend uploads with
-// UNPACK_FLIP_Y_WEBGL explicitly false (see backend.ts) and reverses the flip
-// here. Removing it from one side only flips the picture, and removing it from
-// both would break gate A against the baseline.
+//   2. v is FLIPPED. The flip lives in the shader once, for every source
+//      path, so the two backends cannot disagree about it -- which means this
+//      backend uploads with UNPACK_FLIP_Y_WEBGL explicitly false (see
+//      backend.ts) and reverses the flip here. Removing it from one side only
+//      flips the picture, and removing it from both would break gate A
+//      against the baseline.
 vec2 to_uv (float theta, float phi) {
   return vec2(mod(theta / TWO_PI, 1.0), 1.0 - phi / PI);
 }
@@ -129,9 +106,7 @@ vec2 project_linear (vec3 s) {
 // arrives here already baked into `s`; this file never sees an extent.
 //
 // `lng` and `lat` are in RADIANS and are already the values the formulas
-// consume. Both degree conversions happen at the call site in main() -- `lng`
-// honestly converted only since 2026-09-23, when the `/ 4.0` mixed-units
-// offset was corrected (pan-zoom-semantics spec §1).
+// consume; both degree conversions happen at the call site in main().
 
 vec2 project_cylindrical (vec3 s, float zoom, float lng, float lat) {
   // `s.x` is deliberately unread, exactly as in the WGSL and in the legacy
@@ -276,33 +251,23 @@ void main () {
   vec4 homogeneous = u_invClip * vec4(v_ndc, 1.0, 1.0);
   vec3 surface = homogeneous.xyz / homogeneous.w;
 
-  // `CameraState.povLongitude` is in DEGREES; converted here, honestly. The
-  // legacy shader declared `float lng = u_CamPOVLongitude / 2.0` at file scope
-  // and each non-linear projection then subtracted `lng / 2.0`, so what
-  // actually came off a radian angle was `povLongitude / 4` -- degrees
-  // subtracted from radians, ~14.3x oversensitive panning. That was a v0.2.2
-  // defect; the port carried it through as the deliberate retention recorded
-  // in v1-design §11.4 (B1), and it was corrected 2026-09-23 by user
-  // adjudication -- the pan-zoom-semantics spec §1
-  // (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md) supersedes that
-  // retention and is where this note, the WGSL copy and `lngOffset()` in
-  // src/core/reference.ts all point. Changing the formula means changing all
-  // three in one commit; gate C exists to catch a change made here alone.
-  //
-  // `* PI / 180.0`. NOT `/ 4.0`. The two differ by a factor of about 14.3
-  // (45 / PI), and the wrong one still renders a plausible-looking panorama.
+  // `CameraState.povLongitude` is in DEGREES; converted here, honestly. It
+  // was not always: v0.2.2 subtracted `povLongitude / 4` -- degrees from a
+  // radian angle, ~14.3x oversensitive, and the wrong value still renders a
+  // plausible-looking panorama -- until corrected by user adjudication
+  // (2026-09-23, pan-zoom-semantics spec §1). The WGSL twin and `lngOffset`
+  // in src/core/reference.ts -- which carries the full history -- must change
+  // in the same commit; gate C holds the three formulas together.
   float lng = u_povLongitude * PI / 180.0;
 
-  // Latitude, like `lng` above, is honestly converted -- but its provenance
-  // differs. The legacy non-linear cameras ignored it completely (defect F5:
-  // the uniform was declared and never read, and the inner ortho camera was
-  // built with latitude 0 and never updated). P3's Task 8 turned that into a
-  // deliberate, separately tested behaviour change, in the WGSL and in the
-  // reference at the same time.
-  // 2026-09-28: planet no longer subtracts it from phi -- it is the tilt
-  // angle of the Mobius pre-transform in project_planet (steerable-centre
-  // semantics; docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md).
-  // Cylindrical and pannini still subtract it.
+  // Latitude, like `lng` above, is honestly converted, but it is an addition
+  // rather than a correction: v0.2.2's non-linear cameras ignored it entirely
+  // (defect F5), so the term was born with correct units. Gate B pins the
+  // behaviour. On planet it is not subtracted from phi -- it is the tilt angle
+  // of the Mobius pre-transform in project_planet (2026-09-28
+  // planet-drag-semantics spec,
+  // docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md);
+  // cylindrical and pannini still subtract it.
   float lat = u_povLatitude * PI / 180.0;
 
   vec2 uv;
