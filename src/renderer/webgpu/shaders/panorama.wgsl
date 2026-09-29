@@ -4,7 +4,7 @@
 // clip-space coordinates from the vertex index alone; everything else happens
 // per fragment. The fragment stage recovers the surface point by inverting the
 // camera matrix: for the linear camera the point is on the far plane and only
-// its direction matters, and the non-linear three read it as the quad point
+// its direction matters, and the non-linear four read it as the quad point
 // (1, y, z), which is exactly what their formulas expect.
 //
 // Both depth conventions put the far plane at ndc z = +1, so this shader does
@@ -95,8 +95,10 @@ fn to_uv(theta: f32, phi: f32) -> vec2f {
 }
 
 /*
- * The four projections are transcribed statement for statement from the v0.2.2
- * shader, and line for line against `src/core/reference.ts`. Two things that
+ * Four of the five projections below are transcribed statement for statement
+ * from the v0.2.2 shader; mercator (2026-09-29) is not one of them -- it is
+ * v1's own, cylindrical's conformal twin with no v0.2.2 original. All five
+ * are held line for line against `src/core/reference.ts`. Two things that
  * look like transcription errors and are not:
  *
  *   - `atan(a / b)` plus explicit quadrant fixups is deliberately NOT
@@ -112,7 +114,7 @@ fn to_uv(theta: f32, phi: f32) -> vec2f {
  * pre-transform in project_planet. Making latitude work is v1's one
  * deliberate behaviour change here, pinned by gate B.
  *
- * Keep all four in the same shape as the reference so the two can be read side
+ * Keep all five in the same shape as the reference so the two can be read side
  * by side.
  */
 
@@ -133,7 +135,7 @@ fn project_linear(s: vec3f) -> vec2f {
 }
 
 /*
- * The three non-linear projections below read the MAGNITUDE of their inputs, so
+ * The four non-linear projections below read the MAGNITUDE of their inputs, so
  * the size of the surface being projected is part of the projection. That size
  * lives in the camera matrix, and `invClip` delivers the right point without
  * the shader needing to know the extent.
@@ -164,7 +166,7 @@ fn project_planet(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
   // horizontal screen axis (the fixed points are w = +-1) and the angle is
   // lat itself, no negation: drag down (lat < 0) rolls the centre so it
   // samples what was above it -- content follows the finger, the convention
-  // the other three cameras use. At lat = 0 this is the identity term for
+  // the other four cameras use. At lat = 0 this is the identity term for
   // term, so the default little planet does not move by one bit -- except a
   // -0 -> +0 flip of theta's sign of zero on the z = 0 half-line, which no
   // consumer distinguishes.
@@ -250,7 +252,7 @@ fn project_pannini(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
   let z = s.z * zoom;
 
   // `z * 0.5 / s.x`, not `z * 0.5 * s.x`. This is the only term in any of the
-  // four projections that reads the magnitude of x rather than its ratio, and
+  // five projections that reads the magnitude of x rather than its ratio, and
   // it is why the reconstruction has to recover x = 1 exactly instead of some
   // far-plane distance. See `buildProjection` in src/core/matrix.ts.
   var theta = 2.0 * atan((z * 0.5) / s.x);
@@ -269,6 +271,28 @@ fn project_pannini(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
   return to_uv(theta, phi);
 }
 
+/*
+ * The fifth projection is v1's own (2026-09-29 mercator-camera spec): there is
+ * no v0.2.2 original to transcribe. It is cylindrical's conformal twin --
+ * uniform scale everywhere, poles at infinity -- sharing cylindrical's
+ * horizontal term exactly.
+ */
+fn project_mercator(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
+  // `s.x` is deliberately unread, exactly as in project_cylindrical.
+  let y = s.y * zoom;
+  let z = s.z * zoom;
+
+  let theta = z * TWO_PI - lng;
+  // The negated atanh(sin(lat)) mirrors cylindrical's "- lat": at the screen
+  // centre the two cameras read the same source point (spec I2).
+  let m = y * TWO_PI - atanh(sin(lat));
+  // gd(m) + pi/2 in the asin/tanh form: tanh saturates at +-1 and asin's
+  // domain is closed, so no branch and no guard (spec 2.4 -- the exp form
+  // overflows f32 near m = 88.7).
+  let phi = asin(tanh(m)) + HALF_PI;
+  return to_uv(theta, phi);
+}
+
 // Where in the source this pixel reads from. Shared by both fragment entry
 // points: everything above this point is a function from a screen position to a
 // texture coordinate, and nothing about it depends on how the source is bound.
@@ -278,7 +302,7 @@ fn panorama_uv(ndc: vec2f) -> vec2f {
   // The 1.0 in the z slot: both depth conventions put the far plane at ndc
   // z = +1, and the camera matrix is built so that inverting it there lands on
   // the legacy surface -- the far plane for the linear camera, whose direction
-  // is all that matters, and exactly (1, y, z) for the other three, because
+  // is all that matters, and exactly (1, y, z) for the other four, because
   // their ortho projection is built with far = 1.
   let homogeneous = camera.invClip * vec4f(ndc, 1.0, 1.0);
   let surface = homogeneous.xyz / homogeneous.w;
@@ -298,7 +322,8 @@ fn panorama_uv(ndc: vec2f) -> vec2f {
   // of the Mobius pre-transform in project_planet (2026-09-28
   // planet-drag-semantics spec,
   // docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md);
-  // cylindrical and pannini still subtract it.
+  // cylindrical and pannini still subtract it, and mercator subtracts
+  // atanh(sin(lat)) -- the conformal counterpart of cylindrical's `- lat`.
   let lat = camera.povLatitude * PI / 180.0;
 
   var uv: vec2f;
@@ -307,6 +332,7 @@ fn panorama_uv(ndc: vec2f) -> vec2f {
     case CAMERA_PROJECTION_CYLINDRICAL: { uv = project_cylindrical(surface, camera.zoom, lng, lat); }
     case CAMERA_PROJECTION_PLANET: { uv = project_planet(surface, camera.zoom, lng, lat); }
     case CAMERA_PROJECTION_PANNINI: { uv = project_pannini(surface, camera.zoom, lng, lat); }
+    case CAMERA_PROJECTION_MERCATOR: { uv = project_mercator(surface, camera.zoom, lng, lat); }
     // WGSL requires a `switch` to be exhaustive. This is the one place a silent
     // fallback is allowed, because `projKind` can only come from the generated
     // constants above.

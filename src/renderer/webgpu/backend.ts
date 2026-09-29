@@ -361,7 +361,7 @@ export class WebGPUBackend implements Backend {
     // view from the constant LEGACY_QUAD_VIEW (see matrix.ts), so their clip
     // matrix does not depend on the camera at all -- pose and zoom reach the
     // shader through these uniforms alone, and any upload-skip premised on the
-    // matrix being unchanged would freeze pan and zoom on three of the four
+    // matrix being unchanged would freeze pan and zoom on four of the five
     // camera models. The render loop already calls setCamera only on frames it
     // is drawing, so this costs one small upload per drawn frame.
     this.#writeCameraUniforms()
