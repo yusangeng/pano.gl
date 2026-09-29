@@ -105,6 +105,7 @@ describe('WebGL2 shader source', () => {
     expect(PANORAMA_GLSL_FRAGMENT).toContain('CAMERA_PROJECTION_CYLINDRICAL')
     expect(PANORAMA_GLSL_FRAGMENT).toContain('CAMERA_PROJECTION_PLANET')
     expect(PANORAMA_GLSL_FRAGMENT).toContain('CAMERA_PROJECTION_PANNINI')
+    expect(PANORAMA_GLSL_FRAGMENT).toContain('CAMERA_PROJECTION_MERCATOR')
     expect(PANORAMA_GLSL_FRAGMENT).toContain('TEXTURE_PROJECTION_EQUIRECTANGULAR')
     expect(PANORAMA_GLSL_FRAGMENT).not.toMatch(/projKind\s*==\s*\d/)
   })
@@ -242,7 +243,7 @@ describe('WebGL2 shader source', () => {
     // coarser first signal. Gate C remains the authority on rendering; this is
     // the unit-level tripwire for the actual failure mode of hand
     // transcription, one file edited and the other not.
-    for (const fn of ['to_uv', 'project_linear', 'project_cylindrical', 'project_planet', 'project_pannini']) {
+    for (const fn of ['to_uv', 'project_linear', 'project_cylindrical', 'project_planet', 'project_pannini', 'project_mercator']) {
       expect(
         bodyTokens(glslBody(fn)),
         `${fn}: the GLSL body is not the WGSL body token for token`
@@ -253,7 +254,7 @@ describe('WebGL2 shader source', () => {
     // divisor where the WGSL's fract has none, so the raw literal multisets
     // differ by design -- the normalised comparison above, which applies the
     // fract-to-mod mapping, is where to_uv is held.
-    for (const fn of ['project_linear', 'project_cylindrical', 'project_planet', 'project_pannini']) {
+    for (const fn of ['project_linear', 'project_cylindrical', 'project_planet', 'project_pannini', 'project_mercator']) {
       const glsl = skeleton(glslBody(fn))
       const wgsl = skeleton(wgslBody(fn))
 
@@ -263,6 +264,21 @@ describe('WebGL2 shader source', () => {
         (glsl.match(/atan\(/g) ?? []).length,
         `${fn} has a different number of atan call sites`
       ).toBe((wgsl.match(/atan\(/g) ?? []).length)
+    }
+  })
+
+  it('project_mercator is the spec formula in both files: negated atanh(sin(lat)), asin(tanh) form', () => {
+    // Mercator stays out of the latitude-usage loop above on purpose: its
+    // term is `- atanh(sin(lat))`, which that loop's /-\s*lat\b/ regex does
+    // not match. This pin is its substitute, and it holds both files to the
+    // spec's two load-bearing choices: the NEGATED atanh (I2, centre parity
+    // with cylindrical) and the asin(tanh) form (spec 2.4, f32-safe near the
+    // poles where the exp form overflows). The token comparison above already
+    // proves the two files agree with each other; this pins what they agree
+    // ON.
+    for (const body of [glslBody('project_mercator'), wgslBody('project_mercator')]) {
+      expect(body).toContain('- atanh(sin(lat))')
+      expect(body).toContain('asin(tanh(m))')
     }
   })
 })

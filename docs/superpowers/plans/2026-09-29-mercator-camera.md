@@ -442,7 +442,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 背景：GLSL 的 dispatch 是 **if-链不是 switch**（ES 3.00 的 `#define` case 标签是移植性陷阱）。`webgl2-shaders.test.ts` 的 token 归一化（`bodyTokens`：剥注释、`vec2f(`→`vec2(`、丢 `let|float`、丢大括号）会让逐行同形的两个函数体 token 序列完全一致——这是本任务的红线：**两边必须逐行同形**。
 
-- [ ] **Step 1: 先写失败的测试（三处）**
+- [x] **Step 1: 先写失败的测试（三处）**
 
 `test/unit/webgl2-shaders.test.ts`：
 
@@ -484,7 +484,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 Run: `npx vitest run --project unit test/unit/webgl2-shaders.test.ts`
 Expected: FAIL——GLSL 里还没有 `project_mercator`。
 
-- [ ] **Step 2: panorama.glsl 加公式**
+- [x] **Step 2: panorama.glsl 加公式**
 
 `project_pannini` 之后、`panorama_uv` 之前插入（**与 WGSL 逐行同形**；GLSL 兄弟函数签名风格是 `vec2 name (vec3 s, ...)`，空格照抄）：
 
@@ -512,7 +512,7 @@ vec2 project_mercator (vec3 s, float zoom, float lng, float lat) {
 }
 ```
 
-- [ ] **Step 3: if-链加分支**
+- [x] **Step 3: if-链加分支**
 
 `u_projKind == CAMERA_PROJECTION_PANNINI` 分支之后、最终 `else { uv = vec2(0.0, 0.0); }` 之前插入：
 
@@ -521,22 +521,22 @@ vec2 project_mercator (vec3 s, float zoom, float lng, float lat) {
     uv = project_mercator(surface, u_zoom, lng, lat);
 ```
 
-- [ ] **Step 4: 两处注释更新**
+- [x] **Step 4: 两处注释更新**
 
 1. `:103-110`：`The three non-linear projections` → `The four non-linear projections`。
 2. lat 注释（`:263-271`，WGSL `:294-302` 的镜像）：补 mercator 的第三种用法，与 WGSL 侧同句。
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 Run: `npx vitest run --project unit test/unit/webgl2-shaders.test.ts test/unit/shaders.test.ts`
 Expected: 全绿。token-for-token 测试通过 = 两份公式逐行同形。
 
-- [ ] **Step 6: 变异检查（双 shader 看守的"咬人"证明）**
+- [x] **Step 6: 变异检查（双 shader 看守的"咬人"证明）**
 
 临时把 **GLSL** 里 mercator 的 `- atanh(sin(lat))` 改成 `+ atanh(sin(lat))`（只改一个文件），重跑 Step 5 命令。
 Expected: token-for-token 测试与结构性 pin **双红**——单边改公式正是它们存在的理由。改回，重跑全绿，`git diff` 为空。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/renderer/webgl2/shaders/panorama.glsl test/unit/webgl2-shaders.test.ts

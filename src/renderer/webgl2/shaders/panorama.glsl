@@ -85,7 +85,7 @@ vec2 to_uv (float theta, float phi) {
 //
 // `atan(s.z / s.x)` plus the fixups is deliberately NOT `atan(s.z, s.x)`. The
 // two agree here, but the same shape is load-bearing in project_pannini, where
-// they do not, and keeping all four projections in the reference's shape is
+// they do not, and keeping all five projections in the reference's shape is
 // what makes the two files readable side by side.
 vec2 project_linear (vec3 s) {
   float theta = atan(s.z / s.x);
@@ -100,7 +100,7 @@ vec2 project_linear (vec3 s) {
   return to_uv(theta, phi);
 }
 
-// The three non-linear projections read the MAGNITUDE of their input, so the
+// The four non-linear projections read the MAGNITUDE of their input, so the
 // size of the surface being projected is part of the projection. That size
 // lives in the camera matrix (see `buildProjection` in src/core/matrix.ts) and
 // arrives here already baked into `s`; this file never sees an extent.
@@ -132,7 +132,7 @@ vec2 project_planet (vec3 s, float zoom, float lng, float lat) {
   // horizontal screen axis (the fixed points are w = +-1) and the angle is
   // lat itself, no negation: drag down (lat < 0) rolls the centre so it
   // samples what was above it -- content follows the finger, the convention
-  // the other three cameras use. At lat = 0 this is the identity term for
+  // the other four cameras use. At lat = 0 this is the identity term for
   // term, so the default little planet does not move by one bit -- except a
   // -0 -> +0 flip of theta's sign of zero on the z = 0 half-line, which no
   // consumer distinguishes.
@@ -218,7 +218,7 @@ vec2 project_pannini (vec3 s, float zoom, float lng, float lat) {
   float z = s.z * zoom;
 
   // `z * 0.5 / s.x`, not `z * 0.5 * s.x`. This is the only term in any of the
-  // four projections that reads the magnitude of x rather than its ratio, and
+  // five projections that reads the magnitude of x rather than its ratio, and
   // it is why the reconstruction has to recover x = 1 exactly instead of some
   // far-plane distance. See buildProjection in src/core/matrix.ts.
   float theta = 2.0 * atan((z * 0.5) / s.x);
@@ -238,13 +238,35 @@ vec2 project_pannini (vec3 s, float zoom, float lng, float lat) {
   return to_uv(theta, phi);
 }
 
+/*
+ * The fifth projection is v1's own (2026-09-29 mercator-camera spec): there is
+ * no v0.2.2 original to transcribe. It is cylindrical's conformal twin --
+ * uniform scale everywhere, poles at infinity -- sharing cylindrical's
+ * horizontal term exactly.
+ */
+vec2 project_mercator (vec3 s, float zoom, float lng, float lat) {
+  // `s.x` is deliberately unread, exactly as in project_cylindrical.
+  float y = s.y * zoom;
+  float z = s.z * zoom;
+
+  float theta = z * TWO_PI - lng;
+  // The negated atanh(sin(lat)) mirrors cylindrical's "- lat": at the screen
+  // centre the two cameras read the same source point (spec I2).
+  float m = y * TWO_PI - atanh(sin(lat));
+  // gd(m) + pi/2 in the asin/tanh form: tanh saturates at +-1 and asin's
+  // domain is closed, so no branch and no guard (spec 2.4 -- the exp form
+  // overflows f32 near m = 88.7).
+  float phi = asin(tanh(m)) + HALF_PI;
+  return to_uv(theta, phi);
+}
+
 void main () {
   // Recover the surface point the legacy rasteriser would have interpolated.
   //
   // The 1.0 in the z slot: both depth conventions put the far plane at ndc
   // z = +1, and the camera matrix is built so that inverting it there lands on
   // the legacy surface -- the far plane for the linear camera, whose direction
-  // is all that matters, and exactly (1, y, z) for the other three, because
+  // is all that matters, and exactly (1, y, z) for the other four, because
   // their ortho projection is built with far = 1. Do not change this to 0.0 for
   // WebGL2: the matrix was built with the GL convention, where the far plane is
   // at +1 just as it is under the ZO convention.
@@ -267,13 +289,14 @@ void main () {
   // of the Mobius pre-transform in project_planet (2026-09-28
   // planet-drag-semantics spec,
   // docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md);
-  // cylindrical and pannini still subtract it.
+  // cylindrical and pannini still subtract it, and mercator subtracts
+  // atanh(sin(lat)) -- the conformal counterpart of cylindrical's `- lat`.
   float lat = u_povLatitude * PI / 180.0;
 
   vec2 uv;
   // An if-chain rather than a switch. ES 3.00 does support switch, but the case
   // labels must be constant integral expressions and these constants arrive as
-  // preprocessor #defines, which is a portability hazard across drivers. Four
+  // preprocessor #defines, which is a portability hazard across drivers. Five
   // branches on a uniform value, once per pixel: the cost is nil.
   if (u_projKind == CAMERA_PROJECTION_LINEAR) {
     uv = project_linear(surface);
@@ -283,6 +306,8 @@ void main () {
     uv = project_planet(surface, u_zoom, lng, lat);
   } else if (u_projKind == CAMERA_PROJECTION_PANNINI) {
     uv = project_pannini(surface, u_zoom, lng, lat);
+  } else if (u_projKind == CAMERA_PROJECTION_MERCATOR) {
+    uv = project_mercator(surface, u_zoom, lng, lat);
   } else {
     // Unreachable: u_projKind comes from cameraProjectionCode() and the values
     // are generated from the same JSON the #defines are. The fallback exists
