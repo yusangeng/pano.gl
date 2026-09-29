@@ -19,21 +19,14 @@ import type { RenderableSource } from '../renderer/backend'
  *
  * **This type is `RenderableSource` from `src/renderer/backend.ts`.** It is
  * declared here as an alias, not as a second interface with the same four
- * members, and every source implementation's `frame` getter satisfies it
- * directly. That is what lets `Viewer` hand a frame to `backend.setSource`
- * with no conversion step.
+ * members: a structurally identical copy compiles and then drifts the first
+ * time either side gains a field, invisibly until the two are first compared.
+ * The alias also lets `Viewer` hand a frame to `backend.setSource` with no
+ * conversion step.
  *
- * An earlier draft declared the four members again. A structurally identical
- * copy compiles -- and then drifts the first time either side gains a field.
- * The drift is invisible until someone swaps a source into a backend, because
- * before that the two types are never compared; a `type` alias makes the
- * comparison happen at the declaration instead.
- *
- * Why the fields are where they are: `state` is `SourceState` from `core/types`,
- * and `core` is DOM-free by construction, so the element and the frame counter
- * cannot live there. What `core` describes is the part every backend needs --
- * how the pixels are laid out and how big the upload is -- and the rest is the
- * DOM layer's.
+ * The element and the frame counter live here rather than in `SourceState`
+ * because `core` is DOM-free by construction; what `core` describes is the
+ * part every backend needs, and the rest is the media layer's.
  */
 export type MediaFrame = RenderableSource
 
@@ -92,8 +85,7 @@ export interface MediaSource extends Disposable {
 
 /**
  * The DOM event names a source re-emits, mapped to the name it re-emits them
- * as. Shared so both implementations stay in step -- the legacy ImageProvider
- * and VideoProvider each carried their own list and they had already drifted.
+ * as. Declared once so both implementations cannot drift apart.
  */
 export const MEDIA_EVENT_MAP: ReadonlyArray<readonly [string, keyof MediaEvents & string]> = [
   ['load', 'media-load'],
