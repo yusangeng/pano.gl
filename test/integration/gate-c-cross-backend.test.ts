@@ -41,17 +41,18 @@ const state = (s: State): CameraState => ({ povLatitude: s.povLatitude, povLongi
  * These are the legacy quad sizes, and they are part of the projection rather
  * than of any geometry -- which is what let the geometry subsystem disappear.
  * The numbers come from the v0.2.2 quad vertex coordinates: 1x1 for
- * cylindrical, 4x4 for planet and pannini.
+ * cylindrical, 4x4 for planet and pannini. Mercator's 1x1 is a choice of the
+ * 2026-09-29 spec section 2.3, not a legacy quad size.
  */
 const extentFor = (kind: Kind): readonly [number, number] =>
-  kind === 'cylindrical' ? [1, 1] : [4, 4]
+  kind === 'cylindrical' || kind === 'mercator' ? [1, 1] : [4, 4]
 
 const projectionFor = (kind: Kind, s: State): Projection =>
   kind === 'linear'
     ? { kind, fov: s.fov, aspect: 1 }
     : { kind, zoom: s.zoom, extent: extentFor(kind) }
 
-const CAMERAS: readonly Kind[] = ['linear', 'cylindrical', 'planet', 'pannini']
+const CAMERAS: readonly Kind[] = ['linear', 'cylindrical', 'planet', 'pannini', 'mercator']
 
 // fov is in RADIANS (Projection.fov; see src/viewer/camera-controller.ts). The
 // plan originally wrote 75/60/90 here as degrees, which built a mirrored ~22
@@ -133,6 +134,32 @@ describe('gate C: WebGPU vs WebGL2', () => {
     expect(r.webgl2).toBeLessThanOrEqual(4)
   })
 
+  it('the CPU reference arbitrates mercator too, at a tilted pose', async () => {
+    // The mercator-camera spec's acceptance criterion is gate C three-way
+    // agreement, so the arbiter leg is not optional for this camera: a pair
+    // of shaders agreeing on a wrong mercator transcription has no third
+    // opinion without it. State 1 (lat 30) keeps the pose non-trivial.
+    //
+    // Tolerance, per the four requirements (fill 'measured' from the first
+    // probe run on this machine's GPU -- do NOT guess it):
+    // - measured: webgpu 1, webgl2 1, probe run of this file
+    //   (2026-09-29); the pin is not a guess;
+    // - derived: the per-fragment chain is atanh/tanh/asin -- three f32
+    //   transcendentals over a 1x1 extent's narrow sample, the same class
+    //   of cost as cylindrical's pin (<= 3) above, with no Mobius division
+    //   and no second atan;
+    // - bounded: 3, matching the cylindrical pin the chain is comparable
+    //   to; raise only with a measured reason recorded here;
+    // - headroom: the shared bilinear fetch's quantized hardware weights
+    //   are most of the distance between the shaders and float64, the same
+    //   argument as the cylindrical leg.
+    const s = STATES[1]!
+    const r = await compareWithReference(state(s), projectionFor('mercator', s))
+
+    expect(r.webgpu).toBeLessThanOrEqual(3)
+    expect(r.webgl2).toBeLessThanOrEqual(3)
+  })
+
   it('the poles are the documented exception', async () => {
     // Near latitude +/-90 the equirectangular mapping compresses the entire
     // longitude range into a few pixels, so a tiny difference in the computation
@@ -147,4 +174,31 @@ describe('gate C: WebGPU vs WebGL2', () => {
       expect(diff.max, `${kind} at the pole`).toBeLessThan(64)
     }
   })
+})
+
+describe('gate C: mercator state sweep (spec section 5)', () => {
+  // Spec 2026-09-29 section 5: gate C must cover mercator across the latitude
+  // range INCLUDING the pole poses and across the zoom range. The exact poles
+  // are row collapses, not the longitude compression that motivates the 89.5
+  // relaxation above, and mercator's theta never reads latitude, so every
+  // state here holds to the same <= 2 as the main matrix.
+  //
+  // If a state fails on first run, measure it before writing any number down
+  // -- never fabricate a 'measured' line (the four-requirement protocol the
+  // planet arbiter comment records above).
+  for (const lat of [-90, -45, 0, 45, 90]) {
+    for (const zoom of [0.01, 0.5, 1]) {
+      it(`mercator lat ${lat} zoom ${zoom}`, async () => {
+        const diff = await renderBothBackends(
+          { povLatitude: lat, povLongitude: 30 },
+          { kind: 'mercator', zoom, extent: [1, 1] }
+        )
+        expect(
+          diff.max,
+          `worst channel ${diff.max} at (${diff.x}, ${diff.y}): ` +
+            `webgpu ${JSON.stringify(diff.a)} vs webgl2 ${JSON.stringify(diff.b)}`
+        ).toBeLessThanOrEqual(2)
+      })
+    }
+  }
 })
