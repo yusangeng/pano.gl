@@ -782,3 +782,97 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     expect(centre.d2).toBe(1)
   })
 })
+
+describe('mercator (2026-09-29 mercator-camera spec)', () => {
+  const mercator: Projection = { kind: 'mercator', zoom: 1, extent: [1, 1] }
+
+  it('I1: the default pose is a bit-exact identity -- lat 0, y 0 gives v = 0.5 exactly', () => {
+    // atanh(sin 0) = 0 exactly and tanh(0)/asin(0) are exact, so no rounding
+    // stands between the input and v = 0.5. u: theta = 0.5*2pi - 350deg wraps
+    // to 19/36.
+    const uv = project(1, 0, 0.5, { povLatitude: 0, povLongitude: 350 }, mercator)
+    expect(uv.u).toBeCloseTo(0.5277777777777778, 12)
+    expect(uv.v).toBe(0.5)
+  })
+
+  it('zoom scales both terms: the half-zoom frame halves theta and M', () => {
+    // (1, 0.25, 0.5) at zoom 0.5: zz = 0.25 -> u wraps to 5/18; yy = 0.125 ->
+    // M = pi/4 exactly, so v = (gd(pi/4) + pi/2)/pi.
+    const uv = project(1, 0.25, 0.5, { povLatitude: 0, povLongitude: 350 },
+      { kind: 'mercator', zoom: 0.5, extent: [1, 1] })
+    expect(uv.u).toBeCloseTo(0.2777777777777778, 12)
+    expect(uv.v).toBeCloseTo(0.7276661003867785, 12)
+  })
+
+  it('the latitude term is negated atanh(sin(lat)), the same direction as the -lat term in cylindrical', () => {
+    // (1, 0.25, 0) at lat 45, lng 0: theta = 0 -> u = 0 exactly; M = pi/2 -
+    // atanh(sin 45deg). A positive sign instead would put M at ~2.452 and v at
+    // ~0.945 -- a visible flip this pin exists to catch.
+    const uv = project(1, 0.25, 0, { povLatitude: 45, povLongitude: 0 }, mercator)
+    expect(uv.u).toBe(0)
+    expect(uv.v).toBeCloseTo(0.7038832845573474, 12)
+  })
+
+  it('I2: at the same pose the centre reads the same source point as cylindrical', () => {
+    // Centre of the surface, y = z = 0. gd is odd, so
+    // phi = gd(-atanh(sin lat)) + pi/2 = pi/2 - lat -- cylindrical's centre
+    // term for term. Float64 agrees exactly at lat -45 and 0 and to the last
+    // ulp at the others; 1e-12 is far above an ulp and far below anything a
+    // wrong sign or a stray pi/2 tail could produce.
+    const cylindrical: Projection = { kind: 'cylindrical', zoom: 1, extent: [1, 1] }
+    for (const lat of [-80, -45, 0, 45, 80]) {
+      const pose = { povLatitude: lat, povLongitude: 0 }
+      const m = project(1, 0, 0, pose, mercator)
+      const c = project(1, 0, 0, pose, cylindrical)
+      expect(m.v, `lat ${lat}`).toBeCloseTo(c.v, 12)
+      expect(m.u, `lat ${lat}`).toBeCloseTo(c.u, 12)
+    }
+  })
+
+  it('I3: v is strictly inside (0, 1) for moderate y -- the poles are asymptotes, not clamps', () => {
+    for (const y of [-2, -0.5, 0, 0.5, 2]) {
+      const v = project(1, y, 0, state, mercator).v
+      expect(v, `y ${y}`).toBeGreaterThan(0)
+      expect(v, `y ${y}`).toBeLessThan(1)
+    }
+  })
+
+  it('float64 tanh saturates: extreme y collapses onto the pole rows exactly', () => {
+    // The honest float64 limit, same family as the pole poses below: tanh
+    // rounds to exactly 1.0 once |M| passes ~19, so y = +-100 (M = +-200pi)
+    // pins v to exactly 0 / 1. Mathematically the range is open; in float64
+    // it closes at the same saturation the exact-pole poses rely on.
+    expect(project(1, 100, 0, state, mercator).v).toBe(1)
+    expect(project(1, -100, 0, state, mercator).v).toBe(0)
+  })
+
+  it('pole poses collapse the frame onto one pole row: lat +-90 gives v = 0 / 1 exactly', () => {
+    // sin((+-90deg)*pi/180) rounds to exactly +-1 in float64, atanh(1) is
+    // +Infinity, no finite yy moves it, and phi lands on 0 / pi exactly. u
+    // stays finite: theta never reads latitude.
+    const up = project(1, 0.5, 0.3, { povLatitude: 90, povLongitude: 10 }, mercator)
+    expect(up.v).toBe(0)
+    expect(Number.isFinite(up.u)).toBe(true)
+    expect(project(1, 0.5, 0.3, { povLatitude: -90, povLongitude: 10 }, mercator).v).toBe(1)
+  })
+
+  it('the asin(tanh) form and the textbook 2*atan(e^M) - pi/2 form are the same function', () => {
+    // Spec 2.4: the implementation form must not be mistaken for a formula
+    // change. The two agree to the last few ulps of float64 -- precision 15
+    // fails at M = 6 (diff 3.1e-15), so the pin is 14.
+    for (const m of [0.5, 1, 3, 6]) {
+      const asinForm = Math.asin(Math.tanh(m))
+      const expForm = 2 * Math.atan(Math.exp(m)) - Math.PI / 2
+      expect(asinForm, `M ${m}`).toBeCloseTo(expForm, 14)
+    }
+  })
+
+  it('zoom 1 with extent 1x1 spans gd(pi) = 85.051129deg, the EPSG:3857 cutoff', () => {
+    // Spec 2.3: the screen edges at y = +-0.5 sit at v = 0.5 +- gd(pi)/pi.
+    const top = project(1, 0.5, 0, state, mercator).v
+    const bottom = project(1, -0.5, 0, state, mercator).v
+    expect(top).toBeCloseTo(0.9725062709989257, 12)
+    expect(bottom).toBeCloseTo(0.0274937290010743, 12)
+    expect(top - 0.5).toBeCloseTo(0.5 - bottom, 12)
+  })
+})

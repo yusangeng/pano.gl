@@ -229,7 +229,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 背景：Task 1 已把 `projectMercator` 落地（编译强制的），所以本任务的"红"用一步变异检查代替（Step 3）——证明这些 pin 真的咬人。
 
-- [ ] **Step 1: 在文件末尾追加 describe**
+- [x] **Step 1: 在文件末尾追加 describe**
 
 文件顶部已有 `project` 导入、`CameraState`/`Projection` 类型导入和 `const state: CameraState = { povLatitude: 0, povLongitude: 0 }`（:5），直接用。
 
@@ -329,17 +329,17 @@ describe('mercator (2026-09-29 mercator-camera spec)', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试**
+- [x] **Step 2: 跑测试**
 
 Run: `npx vitest run --project unit test/unit/reference.test.ts`
 Expected: 全绿。
 
-- [ ] **Step 3: 变异检查——证明 pin 咬人**
+- [x] **Step 3: 变异检查——证明 pin 咬人**
 
 临时把 `src/core/reference.ts` 里 `projectMercator` 的 `const M = yy * TWO_PI - Math.atanh(Math.sin(lat))` 改成 `+ Math.atanh(...)`，重跑 Step 2 命令。
 Expected: **至少 I2、lat-term、zoom-edges 三个测试红**。改回原样，重跑确认全绿。（变异必须完全恢复——`git diff` 为空才算完。）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/unit/reference.test.ts
