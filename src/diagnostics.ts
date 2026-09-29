@@ -11,8 +11,7 @@
  *    not a control channel. If you find yourself grepping logs to decide what
  *    UI to show, the thing you want is an event.
  *
- * Usage from an application (once P5 opens the public surface -- until then
- * import from the module path directly):
+ * Usage from an application:
  *
  *     import { enableChannels } from 'pano.gl'
  *     enableChannels('pano:gpu,pano:renderer')

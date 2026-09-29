@@ -53,11 +53,9 @@ export class WebGPUBackend implements Backend {
   #canvas: HTMLCanvasElement
   #acquired: AcquiredDevice
   /**
-   * Public, not `#private`: this satisfies `Backend.capabilities`, and the
-   * viewer reads it to decide whether a source needs downscaling before it ever
-   * calls `setSource`. A private field would fail `implements Backend` at
-   * typecheck -- which is the point of declaring the interface in the first
-   * place.
+   * Public, not `#private`: it satisfies `Backend.capabilities`, and a private
+   * field would fail `implements Backend` at typecheck -- which is the point of
+   * declaring the interface at all.
    */
   readonly capabilities: Capabilities
   #cameraBuffer: GPUBuffer
@@ -67,11 +65,9 @@ export class WebGPUBackend implements Backend {
   // type. This array is always over a plain ArrayBuffer we allocated.
   #cameraValues: Float32Array<ArrayBuffer>
   /**
-   * The clip matrix as last handed in. Write-only: no reader remains (the
-   * equality early-out that read it is gone -- deliberately, see setCamera),
-   * and the copy stays as a minimal-diff record of the last camera
-   * transform. The matrix the fragment stage consumes is the inverse kept
-   * in `#invClip`.
+   * The clip matrix as last handed in -- write-only (the fragment stage
+   * consumes the inverse kept in `#invClip`), retained as a record of the
+   * last camera transform.
    */
   #clip: mat4 = mat4.create()
   #invClip: mat4 = mat4.create()
@@ -107,8 +103,8 @@ export class WebGPUBackend implements Backend {
    *
    * The render loop calls `setCamera` and `setSource` every frame, so a backend
    * that drew unconditionally would present 60 identical frames a second and
-   * burn the battery. This is the replacement for the legacy `dirty` flag on
-   * `Camera.status()`, moved to the one place that knows about both inputs.
+   * burn the battery. Lives here because this is the one place that knows
+   * about both inputs.
    *
    * Starts true so the first frame is never skipped.
    */
@@ -162,8 +158,7 @@ export class WebGPUBackend implements Backend {
    * pipeline that renders into it, and a backend that keeps its device private
    * leaves no way for anyone to render offscreen. `create()` acquires a fresh
    * device per backend, so knowing this one buys no access to anything else on
-   * the page. A renderer publishing its device is ordinary -- it is the same
-   * relationship three.js has between `WebGPURenderer` and `renderer.backend`.
+   * the page.
    */
   get device (): GPUDevice {
     return this.#acquired.device
@@ -280,10 +275,8 @@ export class WebGPUBackend implements Backend {
             targets: [{ format: TARGET_FORMAT }]
           },
           primitive: { topology: 'triangle-list' },
-          // No depth or stencil attachment anywhere in this backend. The legacy
-          // renderer enabled depth testing and never cleared the buffer, so its
-          // output depended on the previous frame's depth values (defect F4).
-          // There is exactly one triangle and nothing to occlude. (The property is
+          // No depth or stencil attachment anywhere in this backend: there is
+          // exactly one triangle and nothing to occlude. (The property is
           // omitted rather than set to `undefined`: exactOptionalPropertyTypes
           // rejects an explicit undefined here, and absence means the same thing.)
           multisample: { count: 1 }
@@ -367,12 +360,10 @@ export class WebGPUBackend implements Backend {
     // Unconditional upload, deliberately. The non-linear kinds build their
     // view from the constant LEGACY_QUAD_VIEW (see matrix.ts), so their clip
     // matrix does not depend on the camera at all -- pose and zoom reach the
-    // shader through these uniforms alone. A matrix-equality early-out here
-    // skipped the upload AND the dirty flag (both live in
-    // #writeCameraUniforms) for every camera change on those kinds, freezing
-    // pan and zoom on three of the four camera models. No skip means no
-    // premise to get wrong; the render loop already calls setCamera only on
-    // frames it is drawing, so this costs one small upload per drawn frame.
+    // shader through these uniforms alone, and any upload-skip premised on the
+    // matrix being unchanged would freeze pan and zoom on three of the four
+    // camera models. The render loop already calls setCamera only on frames it
+    // is drawing, so this costs one small upload per drawn frame.
     this.#writeCameraUniforms()
   }
 
@@ -468,12 +459,9 @@ export class WebGPUBackend implements Backend {
     const device = this.#acquired.device
     const queue = device.queue
 
-    // Pushed before any of the work and popped after the submit. An error scope
-    // only sees what happens between push and pop, so wrapping the calls in a
-    // helper that pushes and pops around them would be the same thing -- the
-    // reason this is spelled out is that the scope must still be open while the
-    // command encoder is alive, and that is easy to get wrong when the work is
-    // split across branches.
+    // Pushed before any of the work and popped after the submit: the scope must
+    // still be open while the command encoder is alive, which is easy to get
+    // wrong when the work is split across branches.
     device.pushErrorScope('validation')
 
     try {
@@ -588,11 +576,10 @@ export class WebGPUBackend implements Backend {
       throw err
     }
 
-    // Popped, not awaited. Validation errors are asynchronous and never throw,
-    // so a frame that is wrong is indistinguishable from one that is fine
-    // until someone reads the console -- and the loop cannot await. The pop
-    // has to happen regardless of the branch taken, so it is not inside the
-    // `if`. See `drainRenderScope` for the lost-device case.
+    // Popped, not awaited: validation errors are asynchronous and never throw,
+    // and the loop cannot await. The pop must happen regardless of the branch
+    // taken, so it is not inside the `if`. See `drainRenderScope` for the
+    // lost-device case.
     drainRenderScope(device)
   }
 

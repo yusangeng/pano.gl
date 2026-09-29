@@ -25,12 +25,8 @@ import type { SelectedCapabilities } from '../renderer/capabilities'
  * an explicit `undefined` (TS2379) -- and "the caller omitted the option" is
  * exactly an `undefined`. The two branches are the same thing to `ImageSource`,
  * which defaults to equirectangular: it is the type that refuses, not the
- * behaviour. Building the object here rather than at each call site keeps that
- * reasoning in one place, since both `create` and the `src` setter need it.
- *
- * The alternative fix is widening the option types in `src/media/` to
- * `projection?: TextureProjection | undefined`, which is arguably where it
- * belongs; that file is outside this card's scope.
+ * behaviour. Built here rather than at each call site because both `create` and
+ * the `src` setter need it.
  */
 function imageSourceOptions (
   maxTextureDimension: number,
@@ -66,13 +62,12 @@ export class FramelessImageViewer extends Viewer {
    * Creates a viewer, or throws.
    *
    * Async because acquiring a GPU device is. Throws rather than returning a
-   * viewer that cannot draw: the legacy `createProgram` logged and returned
-   * null, and the viewer reported success and rendered nothing forever.
+   * viewer that cannot draw: a constructor that could not get a device would
+   * report success and render nothing forever.
    *
-   * Deliberately not a constructor. The spec asks for
-   * `new FramelessImageViewer(options)`, and a constructor cannot await the
-   * device -- a constructor that returned a promise would type as the class and
-   * be a `Promise` at runtime.
+   * Deliberately a static method, not a constructor: a constructor cannot
+   * await the device -- one that returned a promise would type as the class
+   * and be a `Promise` at runtime.
    *
    * @throws If the options are invalid, if the shader fails to compile, or if
    *   no backend is available -- which, with a forced `backend` preference,

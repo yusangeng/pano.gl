@@ -1,11 +1,10 @@
 /**
  * Projection kind constants.
  *
- * The numbers live in `projection-kinds.json` and nowhere else. Both this
+ * The numbers live in `projection-kinds.json` and nowhere else; both this
  * module and the shader-constant generator read that file, so the JS side and
- * the shader side cannot drift -- which is exactly what went wrong in the
- * legacy implementation, where the same four numbers were declared
- * independently in `projectionType.js` and in `fshader.glsl`.
+ * the shader side cannot drift. (The legacy code declared them independently
+ * in JS and in GLSL, and they drifted.)
  */
 
 import kinds from './projection-kinds.json'
@@ -13,31 +12,24 @@ import kinds from './projection-kinds.json'
 /**
  * The camera projection kinds, as TypeScript sees them.
  *
- * These are STRINGS, not the numbers the legacy code used, and the split is
- * deliberate. Two different things were being conflated:
+ * STRINGS in the API, numbers only on the GPU wire: a discriminant should be
+ * readable in a debugger and a stack trace (`{ kind: 'planet' }` beats
+ * `{ kind: 3 }`), while `u_CamProjType` must agree with the generated shader
+ * constants. Keeping them separate means the wire format can change without
+ * touching the API; conflating them (as the legacy code did) turns a wrong
+ * camera into a silently mis-projected image instead of a type error.
  *
- *   - what a projection is, in TypeScript -- a discriminant that should be
- *     readable in a debugger, in a stack trace and in a public API call
- *     (`{ kind: 'planet' }` beats `{ kind: 3 }` on every one of those counts)
- *   - what gets uploaded to the GPU as `u_CamProjType` -- an integer that must
- *     agree with the generated shader constants, and nothing else
- *
- * The legacy code used one number for both, which is why a wrong camera showed
- * up as a silently mis-projected image rather than as a type error. Keeping
- * them separate means the wire format can change without touching the API.
- *
- * `cameraProjectionCode` is the only bridge, and it is the only place a
- * projection kind turns into a number.
+ * `cameraProjectionCode` is the only bridge -- the only place a projection
+ * kind turns into a number.
  */
 export type ProjectionKind = 'linear' | 'cylindrical' | 'planet' | 'pannini'
 
 /**
  * The texture projection kinds, as TypeScript sees them.
  *
- * The extra kind the legacy code half-carried is deliberately absent: an
- * unreachable constant, a JS branch that threw, and a shader branch that
- * returned vec2(0.0) -- three mutually inconsistent descriptions of a feature
- * that does not exist. Describe what exists.
+ * Deliberately a single kind: the legacy code half-carried a second one as
+ * three mutually inconsistent descriptions of a feature that did not exist.
+ * Describe what exists.
  */
 export type TextureProjection = 'equirectangular'
 

@@ -1,12 +1,10 @@
 /**
  * The animation frame loop.
  *
- * Two things about this differ from the legacy FrameDriver:
+ * Two load-bearing choices:
  *
- * 1. It does not redraw unconditionally. The legacy loop ran a full-screen
- *    fragment shader sixty times a second forever, including for a still image
- *    that had not changed since it loaded. Here `shouldDraw` decides, and a
- *    static image renders exactly once.
+ * 1. `shouldDraw` decides, so a static image renders exactly once instead of
+ *    running a full-screen fragment shader sixty times a second forever.
  *
  * 2. `shouldDraw` is asked BEFORE the frame is drawn. That ordering is a
  *    hard requirement on WebGPU: acquiring the swapchain texture and then not
@@ -26,32 +24,28 @@ export interface RenderLoopOptions {
    *
    * Implementations should consume their dirty state here, not in `draw`.
    *
-   * Throwing from here stops the loop. The call sits outside the `try` that
-   * surrounds `draw`, and `#scheduleNext` is what the tick ends with -- so an
-   * exception escaping this callback means the next frame is never scheduled
-   * and the loop is over. It is deliberately not caught: the production
-   * implementation is `consumeDirty() || #sourceChanged()`, a boolean read
-   * followed by a call that catches its own failure, so a throw from here is a
-   * defect in the callback rather than a condition to survive. See `onError`.
+   * Throwing from here stops the loop: the call sits outside the `try` that
+   * surrounds `draw`, so an exception escaping it means the next frame is never
+   * scheduled. Deliberately not caught -- the production implementation is a
+   * boolean read plus a call that catches its own failure, so a throw here is
+   * a defect in the callback, not a condition to survive. See `onError`.
    */
   readonly shouldDraw: () => boolean
   readonly draw: () => void
   /**
    * Called when `draw` throws. The loop keeps running.
    *
-   * This is the ONE callback failure the loop absorbs, and it is absorbed for a
-   * specific reason: a `draw` that failed and a `draw` that was never attempted
-   * both leave the canvas unchanged, so a device lost mid-frame would otherwise
-   * freeze the canvas with no event and no further attempt -- the legacy bug
-   * where a lost context produced a permanently black canvas.
+   * The ONE callback failure the loop absorbs, because a `draw` that failed and
+   * a `draw` never attempted both leave the canvas unchanged -- a device lost
+   * mid-frame would otherwise freeze the canvas with no event and no further
+   * attempt.
    *
    * Throwing from `onError` itself stops the loop, on the same path as
-   * `shouldDraw`. That asymmetry is intentional rather than overlooked.
-   * Swallowing every callback failure and rescheduling regardless is the
-   * pattern this class exists to replace: it is what makes a broken renderer
-   * look like a working one that has nothing to draw. A throw here is also not
-   * silent -- an exception escaping a `requestAnimationFrame` callback reaches
-   * `window.onerror`, which is a channel an application can actually act on.
+   * `shouldDraw`. That asymmetry is intentional: swallowing every callback
+   * failure and rescheduling regardless is what makes a broken renderer look
+   * like a working one with nothing to draw. A throw here is not silent either
+   * -- an exception escaping a `requestAnimationFrame` callback reaches
+   * `window.onerror`.
    */
   readonly onError?: (error: unknown) => void
 }
@@ -110,10 +104,8 @@ export class RenderLoop extends Disposable {
       this.#options.draw()
       this.#drewOnce = true
     } catch (error) {
-      // Deliberately swallowed. A device-lost mid-frame would otherwise stop
-      // the loop silently, and the canvas would freeze with no event and no
-      // further attempt -- the exact failure the legacy code had, where a
-      // context loss produced a permanently black canvas.
+      // Deliberately swallowed: a device lost mid-frame would otherwise freeze
+      // the canvas with no event and no further attempt.
       this.#options.onError?.(error)
     }
   }

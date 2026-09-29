@@ -7,9 +7,8 @@
  * that nobody reads. There is no error scope to pop.
  *
  * So every failure point has to be asked about explicitly. This file is where
- * that happens, and it throws -- the legacy `createProgram` logged and returned
- * null, and the viewer that received it reported success and drew nothing for
- * its entire lifetime.
+ * that happens, and it throws -- a caller that received a silent null would
+ * report success and draw nothing for its entire lifetime.
  */
 
 /** Which stage a shader belongs to, used for error messages. */
@@ -113,9 +112,7 @@ export function linkProgram (
  */
 export function acquireContext (canvas: HTMLCanvasElement): WebGL2RenderingContext | null {
   return canvas.getContext('webgl2', {
-    // The legacy context enabled depth testing and requested a depth buffer
-    // that was never cleared (defect F4). Neither backend needs one now: there
-    // is one triangle and nothing to occlude.
+    // No depth buffer: there is one triangle and nothing to occlude.
     depth: false,
     stencil: false,
     // Stated, not a silent default. The buffer keeps the source's own alpha
@@ -133,9 +130,8 @@ export function acquireContext (canvas: HTMLCanvasElement): WebGL2RenderingConte
     /*
      * TRUE, and it is not a default worth taking. Without it the drawing buffer
      * is cleared when the browser composites the frame, so anything that reads
-     * the canvas in a later task sees black. That is every user-story test (they
-     * read after awaiting a media event), any consumer that screenshots the
-     * canvas, and the context-loss test in Task 3.
+     * the canvas in a later task sees black: every read-after-await test and
+     * any consumer that screenshots the canvas.
      *
      * It costs a copy of the buffer per frame, which is why the WebGPU backend
      * does not pay it -- the WebGPU canvas keeps its last presented frame. This

@@ -1,12 +1,5 @@
 /**
- * Constructor argument validation.
- *
- * There is far less of this than the legacy code had. `param-check` guarded
- * every public boundary against every possible wrong type; in TypeScript the
- * type system already does that, and a runtime check for "is this a string"
- * adds nothing for anyone using the library from TypeScript.
- *
- * What survives is the class of mistake the type system cannot see:
+ * Constructor argument validation, limited to what the type system cannot see:
  *
  * - A value that is the right type but the wrong range or the wrong member of
  *   a union, arriving through a cast or from JavaScript.
@@ -20,15 +13,12 @@ import type { CameraOptions } from './types'
 /**
  * The texture projections this viewer accepts.
  *
- * An alias of `TextureProjection`, not a union of its own and not a copy of its
- * members: there is exactly one accepting type, and `'fisheye'` is deliberately
- * NOT in it. Fisheye was documented in the legacy library and never implemented
- * -- the shader returned `vec2(0.0)`. Leaving it in the type would let a
- * TypeScript caller write an option that can only ever throw; the runtime check
- * below still recognises the string, because a JavaScript caller or a legacy
- * snippet has no compiler to stop it, and "not implemented" is a better message
- * than "unknown projection".
- *
+ * An alias of `TextureProjection`; `'fisheye'` is deliberately NOT in it.
+ * Fisheye was documented in the legacy library and never implemented -- the
+ * shader returned `vec2(0.0)`. Leaving it in the type would let a TypeScript
+ * caller write an option that can only ever throw; the runtime check below
+ * still recognises the string, because a JavaScript caller has no compiler to
+ * stop it, and "not implemented" is a better message than "unknown projection".
  * The day fisheye is implemented, this is the one line that widens.
  */
 export type ImageProjection = TextureProjection

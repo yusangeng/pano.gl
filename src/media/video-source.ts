@@ -1,7 +1,7 @@
 /**
  * A video source.
  *
- * Two things make this the hardest file in the media layer:
+ * Two constraints shape this file:
  *
  * 1. A video frame is only valid inside the microtask that produced it.
  *    `importExternalTexture` returns a texture the browser destroys as soon as
@@ -15,9 +15,9 @@
  *    flipped -- but that is an empirical claim, and
  *    `test/integration/video-orientation.test.ts` is what checks it.
  *
- * Neither point produces an option on this class. **Which upload path is used
- * is the backend's decision**, not the source's: the backend is the only thing
- * that has a device, and therefore the only thing that can tell whether
+ * Neither constraint produces an option on this class. **Which upload path is
+ * used is the backend's decision**, not the source's: the backend is the only
+ * thing that has a device, and therefore the only thing that can tell whether
  * `Capabilities.externalTextures` holds. An `uploadPath` option here would be a
  * second vote on a question with one voter -- and the wrong vote would be
  * silent, because both paths render.
@@ -55,8 +55,7 @@ export class VideoSource extends Disposable implements MediaSource {
     if (options.autoplay) this.#element.autoplay = true
     if (options.loop) this.#element.loop = true
     // Muted by default: an unmuted autoplay is blocked by every modern browser,
-    // so the legacy default of playing with sound produced a video that simply
-    // never started.
+    // so a sound-on default would produce a video that simply never starts.
     this.#element.muted = options.muted ?? true
 
     for (const [domName, eventName] of MEDIA_EVENT_MAP) {
@@ -118,19 +117,17 @@ export class VideoSource extends Disposable implements MediaSource {
    * the version advances on every drawn frame, "drawn" is defined as "the version
    * moved", and the loop therefore redraws a full-screen fragment shader for a
    * video nobody is watching -- at the display's refresh rate, for as long as the
-   * viewer is alive. The legacy codebase bounded that with a `MAX_FRAME_RATE = 60`
-   * cap on draw calls; v1 has no such cap (a cap is a fixed-rate loop pretending
-   * to be a reactive one), so the bound has to come from the video's own state.
+   * viewer is alive. v1 has no frame-rate cap to bound that, so the bound has to
+   * come from the video's own state.
    *
    * `ended` and not only `paused`: they are separate properties and `ended`
    * stays true after the last frame. Chromium sets `paused` at the end too
    * (measured), so this term is defensive there; an engine that left `paused`
    * false would otherwise re-upload at the refresh rate.
    *
-   * The cost of reading the element here is one property read per drawn frame,
-   * and the alternative -- a timer, or a `requestVideoFrameCallback` -- would
-   * either poll or add a callback whose lifetime has to be managed alongside the
-   * `AbortSignal`.
+   * The alternative -- `requestVideoFrameCallback` -- would add a callback
+   * whose lifetime has to be managed alongside the `AbortSignal`; one property
+   * read per drawn frame is cheaper.
    */
   markFramePresented (): void {
     if (this.#element.paused || this.#element.ended) return
@@ -192,12 +189,11 @@ export class VideoSource extends Disposable implements MediaSource {
   /**
    * How many DOM listeners this source currently holds.
    *
-   * Same reasoning as `ImageSource.listenerCount`: "did dispose remove
-   * everything" is otherwise unobservable. This class is the more interesting
-   * case of the two, because it binds ten listeners -- the eight DOM event names
-   * in the shared `MEDIA_EVENT_MAP`, plus `loadedmetadata` (which is what makes
-   * the natural size meaningful and has no image equivalent) and `timeupdate` --
-   * and drops every one of them by aborting a single signal.
+   * Same reasoning as `ImageSource.listenerCount`: whether dispose removed
+   * everything is otherwise unobservable. This class binds ten listeners --
+   * the eight `MEDIA_EVENT_MAP` names plus `loadedmetadata` and `timeupdate`
+   * (see the constructor) -- and drops every one of them by aborting a single
+   * signal.
    */
   get listenerCount (): number {
     return this.#listenerCount

@@ -76,6 +76,7 @@ share every option below; the video viewer adds the three marked.
 | `projection` | `'equirectangular'` | `'equirectangular'` | How the source's pixels are laid out. A property of the source, not the camera. |
 | `camera` | `{ projection, pose? }` | `linear`, 70° fov | The camera: which projection formula, and where it starts. See below. |
 | `PTZ` | `boolean` | `true` | Built-in pan-tilt-zoom. |
+| `backend` | `'auto' \| 'webgpu' \| 'webgl2'` | `'auto'` | Strict create-time request. `'auto'` keeps WebGPU-first selection; a named backend that is unavailable rejects `create()` naming it. What actually runs is `viewer.capabilities.backend`. |
 | `autoplay` | `boolean` | — | Video only. |
 | `loop` | `boolean` | — | Video only. |
 | `muted` | `boolean` | `true` | Video only. Muted by default because browsers block unmuted autoplay. |

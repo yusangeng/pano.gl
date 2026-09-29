@@ -6,8 +6,7 @@
  * pointer ids rather than a separate `TouchEvent` API.
  *
  * Every listener is registered with a single AbortController, so disposal is
- * one call. The legacy code spread listeners across Delegate, ZoomPlugin,
- * PanPlugin and both providers, and three pairs had already come apart.
+ * one call.
  *
  * Two behaviours worth knowing before editing:
  *
@@ -56,9 +55,8 @@ export class InputController extends Disposable {
   /**
    * Enables or disables pan-tilt-zoom.
    *
-   * Disabling short-circuits the handlers but leaves the listeners bound, which
-   * is the legacy behaviour: rebinding on every toggle would make the toggle
-   * itself a source of leaks.
+   * Disabling short-circuits the handlers but leaves the listeners bound:
+   * rebinding on every toggle would make the toggle itself a source of leaks.
    */
   get PTZ (): boolean { return this.#ptzEnabled }
   set PTZ (value: boolean) { this.#ptzEnabled = value }

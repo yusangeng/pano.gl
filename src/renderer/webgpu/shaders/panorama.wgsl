@@ -2,22 +2,13 @@
 //
 // One triangle, no vertex buffer, no vertex attributes. The vertex stage emits
 // clip-space coordinates from the vertex index alone; everything else happens
-// per fragment.
+// per fragment. The fragment stage recovers the surface point by inverting the
+// camera matrix: for the linear camera the point is on the far plane and only
+// its direction matters, and the non-linear three read it as the quad point
+// (1, y, z), which is exactly what their formulas expect.
 //
-// The legacy renderer rasterised a cube (radius 100) for the linear camera and
-// a quad (at x = 1) for the three non-linear ones, then fed the interpolated
-// vertex position to the projection formula. That worked, but the surface was
-// doing nothing except producing a coordinate -- the linear projection is
-// scale-invariant and the shader never called normalize() on anything.
-//
-// Here the surface is reconstructed by inverting the camera matrix instead:
-// given a screen position, `invClip` recovers the point the legacy rasteriser
-// would have interpolated. For the linear camera that point is on the far plane
-// and only its direction matters. For the non-linear cameras it is the quad
-// point (1, y, z), which is exactly what their formulas read.
-//
-// Both conventions put the far plane at ndc z = +1, so this shader does not
-// need to know which backend is running it.
+// Both depth conventions put the far plane at ndc z = +1, so this shader does
+// not need to know which backend is running it.
 
 struct Camera {
   invClip: mat4x4<f32>,
@@ -79,41 +70,34 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOut {
 // This differs from `toUV` in src/core/reference.ts in exactly two ways, and
 // both are deliberate:
 //
-//   1. `fract` is applied to u. The legacy shader did no wrapping at all -- it
-//      handed `texture2D` a raw ratio and the texture object's default REPEAT
-//      wrap did the work. `fract` stands in for that wrapping because the
-//      external-texture entry point below samples through
-//      `textureSampleBaseClampToEdge`, which cannot wrap at all. For the still
-//      path `fract` is redundant -- the sampler's own repeat address mode
-//      handles any u -- but harmless, and what the sampler adds over `fract`
-//      is the LINEAR blend across the seam that clamp-to-edge cannot express
-//      (see sampler.ts). The two paths therefore differ by one boundary blend
-//      at the seam and the v poles, video being the clamped one: an API limit
-//      of its entry point, not a decision to treat it differently.
+//   1. `fract` is applied to u. The external-texture entry point below samples
+//      through `textureSampleBaseClampToEdge`, which cannot wrap at all, so
+//      the wrap has to happen here. For the still path `fract` is redundant --
+//      the sampler's own repeat address mode handles any u -- and what the
+//      sampler adds over `fract` is the LINEAR blend across the seam and the
+//      v poles that clamp-to-edge cannot express (see sampler.ts; gate A
+//      measured the seam blend at up to 124 LSB). The two paths therefore
+//      differ by one boundary blend, video being the clamped one: an API
+//      limit of its entry point, not a decision to treat it differently.
 //
 //      `fract` and not `%`: WGSL's `%` truncates toward zero while `fract` is
 //      `x - floor(x)`, matching GLSL's `mod`. `%` would put a seam in the
 //      panorama wherever theta is negative.
 //
-//   2. v is flipped. The legacy upload set `UNPACK_FLIP_Y_WEBGL`, so its
-//      sampler read a vertically mirrored image compared with the source file.
-//      Neither WebGPU source path can express that -- `importExternalTexture`
-//      has no flip option at all, and using `copyExternalImageToTexture` with
-//      `flipY` for stills would give the two paths opposite orientations, which
-//      shows up as "the video is upside down but the photo is not". So one flip
-//      lives here, for both paths, exactly as spec §4.4 decided.
+//   2. v is flipped. `importExternalTexture` has no flip option, and flipping
+//      the still copy alone would give the two source paths opposite
+//      orientations ("the video is upside down but the photo is not"). So one
+//      flip lives here, for both paths, exactly as spec §4.4 decided.
 //
-// There is still NO `+ 0.5`. The legacy shader has none, and adding one rotates
-// the panorama 180 degrees.
+// There is still NO `+ 0.5`. Adding one rotates the panorama 180 degrees.
 fn to_uv(theta: f32, phi: f32) -> vec2f {
   return vec2f(fract(theta / TWO_PI), 1.0 - phi / PI);
 }
 
 /*
- * The four projections are transcribed statement for statement from
- * cam_proj_* in `legacy/shader/fshader.glsl`, and line for line against
- * `src/core/reference.ts`. Two things that look like transcription errors and
- * are not:
+ * The four projections are transcribed statement for statement from the v0.2.2
+ * shader, and line for line against `src/core/reference.ts`. Two things that
+ * look like transcription errors and are not:
  *
  *   - `atan(a / b)` plus explicit quadrant fixups is deliberately NOT
  *     simplified to `atan2`. The two agree for `linear` and `cylindrical` but
@@ -122,12 +106,11 @@ fn to_uv(theta: f32, phi: f32) -> vec2f {
  *   - Nothing wraps `theta`. Wrapping is the sampler's job.
  *
  * One thing that is a departure rather than a transcription: latitude.
- * v0.2.2 read latitude nowhere on these cameras -- the shader declared
- * `u_CamPOVLatitude` and never read it, and the viewer never uploaded it
- * either (defect F5) -- so there is nothing to transcribe. Cylindrical and
- * pannini subtract it from `phi`; planet, since 2026-09-28, consumes it as
- * the tilt of the Mobius pre-transform in project_planet. Making latitude
- * work is v1's one deliberate behaviour change here, pinned by gate B.
+ * v0.2.2 read latitude nowhere on these cameras (defect F5), so there is
+ * nothing to transcribe. Cylindrical and pannini subtract it from `phi`;
+ * planet, since 2026-09-28, consumes it as the tilt of the Mobius
+ * pre-transform in project_planet. Making latitude work is v1's one
+ * deliberate behaviour change here, pinned by gate B.
  *
  * Keep all four in the same shape as the reference so the two can be read side
  * by side.
@@ -151,10 +134,9 @@ fn project_linear(s: vec3f) -> vec2f {
 
 /*
  * The three non-linear projections below read the MAGNITUDE of their inputs, so
- * the size of the surface being projected is part of the projection. In the
- * legacy code that size lived in quad vertex coordinates; it now lives in the
- * camera matrix, and `invClip` delivers the right point without the shader
- * needing to know the extent.
+ * the size of the surface being projected is part of the projection. That size
+ * lives in the camera matrix, and `invClip` delivers the right point without
+ * the shader needing to know the extent.
  */
 
 fn project_cylindrical(s: vec3f, zoom: f32, lng: f32, lat: f32) -> vec2f {
@@ -301,32 +283,22 @@ fn panorama_uv(ndc: vec2f) -> vec2f {
   let homogeneous = camera.invClip * vec4f(ndc, 1.0, 1.0);
   let surface = homogeneous.xyz / homogeneous.w;
 
-  // `CameraState.povLongitude` is in degrees; converted here, honestly. The
-  // legacy shader declared `float lng = u_CamPOVLongitude / 2.0` and each
-  // non-linear projection then subtracted `lng / 2.0`, so what actually came
-  // off a radian angle was `povLongitude / 4` -- degrees subtracted from
-  // radians, ~14.3x oversensitive panning. That was a v0.2.2 defect; the port
-  // carried it through as the deliberate retention recorded in v1-design
-  // §11.4 (B1), and it was corrected 2026-09-23 by user adjudication -- the
-  // pan-zoom-semantics spec §1
-  // (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md) supersedes that
-  // retention and is where the three copies of this note point. The GLSL twin
-  // and `lngOffset` in src/core/reference.ts (which carries the full
-  // archaeology) changed in the same commit; gate C holds the three formulas
-  // together.
+  // `CameraState.povLongitude` is in degrees; converted here, honestly. It
+  // was not always: v0.2.2 subtracted `povLongitude / 4` -- degrees from a
+  // radian angle, ~14.3x oversensitive -- until corrected by user adjudication
+  // (2026-09-23, pan-zoom-semantics spec §1). The GLSL twin and `lngOffset` in
+  // src/core/reference.ts -- which carries the full history -- must change in
+  // the same commit; gate C holds the three formulas together.
   let lng = camera.povLongitude * PI / 180.0;
 
-  // Latitude, like `lng` above, is honestly converted -- but its provenance
-  // differs. It is the F5 fix, not a corrected bug: v0.2.2's non-linear
-  // cameras ignored it entirely (the shader never read `u_CamPOVLatitude`,
-  // and the viewer never uploaded it), so there is no legacy behaviour to
-  // reproduce and the term was born with correct units rather than corrected
-  // to them. Gate B pins the new behaviour.
-  // 2026-09-28: on planet this value is no longer subtracted from phi -- it is
-  // the tilt angle of the Mobius pre-transform in project_planet (the
-  // steerable-centre semantics,
-  // docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md).
-  // Cylindrical and pannini still subtract it.
+  // Latitude, like `lng` above, is honestly converted, but it is an addition
+  // rather than a correction: v0.2.2's non-linear cameras ignored it entirely
+  // (defect F5), so the term was born with correct units. Gate B pins the
+  // behaviour. On planet it is not subtracted from phi -- it is the tilt angle
+  // of the Mobius pre-transform in project_planet (2026-09-28
+  // planet-drag-semantics spec,
+  // docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md);
+  // cylindrical and pannini still subtract it.
   let lat = camera.povLatitude * PI / 180.0;
 
   var uv: vec2f;

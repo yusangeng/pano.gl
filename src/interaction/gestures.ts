@@ -2,9 +2,6 @@
  * Turning raw input deltas into camera movements.
  *
  * Everything here is a pure function so it can be tested without a browser.
- * The legacy plugins mixed recognition with listener management and DOM state,
- * which is why none of their thresholds were testable and several were wrong
- * (a trackpad and a mouse wheel went through the same divisor).
  */
 
 /** Wheel normalisation constants, exported so the tests can assert against them. */

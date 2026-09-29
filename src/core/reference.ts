@@ -1,53 +1,26 @@
 /**
  * A float64 CPU implementation of the four projections.
  *
- * Why this exists: the cross-backend pixel test compares WGSL against GLSL, and
- * it has a blind spot -- if both shaders were written from the same
- * misunderstanding, they agree with each other and the test passes. This module
- * is the independent third opinion. It is the only artifact in the repo that can
- * catch "both backends are wrong in the same way".
+ * The cross-backend pixel test compares WGSL against GLSL and has a blind spot:
+ * two shaders written from the same misunderstanding agree with each other.
+ * This module is the independent third opinion -- the only artifact that can
+ * catch "both backends are wrong in the same way" -- and the definition of the
+ * coordinate range the reconstructed surface is checked against (gate B).
  *
- * It is also the definition of the coordinate range the legacy shader fed to
- * `texture2D`, which gate B in P3 checks the reconstructed surface against.
- *
- * **Everything here is transcribed line by line from
- * `legacy/shader/fshader.glsl`, including its quirks, and must stay that
- * way** -- with three exceptions, each an adjudicated behaviour change
- * rather than a transcription choice (see `lngOffset`, `latOffset`, and
- * planet's branch-point guard). That is not
- * laziness -- it is the requirement. v1's acceptance criterion is "renders
- * what v0.2.2 rendered", so the reference must encode what v0.2.2 actually
- * computed, not what it should have. One consequence worth stating up front,
- * because it looks like a transcription error and is not:
+ * Everything is transcribed line by line from v0.2.2's `fshader.glsl`,
+ * including its quirks, because the acceptance criterion is "renders what
+ * v0.2.2 rendered". A quirk that looks like a transcription error is usually
+ * the point:
  *
  *   - `theta` is NOT divided by a normalising constant and `u` is NOT shifted
- *     by 0.5. The shader returns `theta / TWO_PI` raw, and the legacy texture
- *     object used the default `REPEAT` wrap, so the sampler did the wrapping.
- *     A `+ 0.5` here would rotate the panorama half a turn.
+ *     by 0.5. The shader returns `theta / TWO_PI` raw and the legacy texture
+ *     used `REPEAT` wrap, so the sampler did the wrapping; a `+ 0.5` here
+ *     would rotate the panorama half a turn.
  *
- * And three departures, each of which is neither a quirk nor an error:
- *
- *   - The non-linear cameras consume a properly-converted latitude. v0.2.2
- *     read latitude nowhere on those cameras -- the shader declared
- *     `u_CamPOVLatitude` and never read it, and the recorded uniform stream
- *     shows the viewer never uploaded it either (defect F5). There is nothing
- *     to transcribe, so the term is v1's own, with correct units. Cylindrical
- *     and pannini subtract it from `phi`; planet, since 2026-09-28, consumes
- *     it as the tilt angle of the Mobius pre-transform in `projectPlanet`
- *     (docs/superpowers/specs/2026-09-28-planet-drag-semantics-design.md).
- *     See `latOffset`.
- *   - The longitude subtraction was `povLongitude / 4`, in *degrees*,
- *     subtracted from a value in *radians* -- a v0.2.2 defect the port carried
- *     through deliberately, corrected 2026-09-23 by user adjudication: the
- *     pan-zoom-semantics spec §1
- *     (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md) supersedes the
- *     retention recorded in v1-design §11.4 (B1). See `lngOffset`.
- *   - Planet's Mobius reduction reached `p = q = 0` at its exact branch
- *     points, and the faithful transcription computed `atan(0/0)` = NaN
- *     there. Since 2026-09-28 those points take the spec's canonical value
- *     instead (planet-review-followups spec section 2.2,
- *     docs/superpowers/specs/2026-09-28-planet-review-followups-design.md);
- *     the guard in `projectPlanet` and its comment carry the details.
+ * Three adjudicated departures, documented at their sites: `latOffset` (the
+ * legacy non-linear cameras never read latitude at all), `lngOffset` (a
+ * v0.2.2 unit-mixing defect, corrected by user adjudication), and planet's
+ * branch-point guard (NaN replaced by the spec's canonical values).
  */
 
 import type { CameraState, Projection } from './types'
@@ -65,34 +38,18 @@ export interface UV {
 /**
  * The longitude offset, converted honestly: degrees to radians.
  *
- * v0.2.2 subtracted `povLongitude / 4` from a radian angle. The shader
- * declared `float lng = u_CamPOVLongitude / 2.0;` at file scope and each
- * non-linear projection then did `theta -= lng / 2.0` -- net `/4`, where
- * `u_CamPOVLongitude` is `CameraState.povLongitude` in **degrees**. That mixes
- * units, and it was a defect, not a convention: one full turn per `8 * PI`
- * (about 25.13) degrees of `povLongitude` -- about 14.3x (`45 / PI`) the rate
- * of a one-turn-per-360-degrees pan. The same rate is why v0.2.2's
- * `CylindricalCamera` wrapped its longitude with `% 25`: 25 degrees works out
- * to `25 / 4 = 6.25` radians, 0.53% short of the `2 * PI` of a full turn, so
- * the wrap point approximately coincides with the seam -- a patch serving the
- * very misalignment this conversion removes.
+ * v0.2.2 computed a net `povLongitude / 4` -- in degrees -- and subtracted it
+ * from a radian angle: about 14.3x the one-turn-per-360-degrees rate. The port
+ * first carried that through deliberately (v1-design §11.4 B1); corrected
+ * 2026-09-23 by user adjudication, pan-zoom-semantics spec §1
+ * (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md). The WGSL and GLSL
+ * copies changed in the same commit and point at the same spec -- gate C holds
+ * the three formulas together.
  *
- * The port carried the defect through deliberately (the acceptance criterion
- * was "renders what v0.2.2 rendered"; the retention is recorded in v1-design
- * §11.4, item B1). Corrected 2026-09-23 by user adjudication: the
- * pan-zoom-semantics spec §1
- * (docs/superpowers/specs/2026-09-23-pan-zoom-semantics.md) supersedes that
- * retention. The WGSL and GLSL copies of this formula changed in the same
- * commit, and their comment blocks point at the same spec -- gate C holds the
- * three formulas together.
- *
- * A second hazard, recorded because P0's baseline is the arbiter for it: the
- * legacy `lng` was a file-scope initialiser that is not a constant expression,
- * which is invalid in GLSL ES 1.0. Some drivers may have compiled it as 0, in
- * which case the legacy non-linear cameras never rotated at all. Whether the
- * captured baseline shows rotation or not determines which states are
- * comparable; P3's gate A derives its comparable set from the capture rather
- * than assuming.
+ * The legacy `lng` initialiser was not a constant expression, which is invalid
+ * GLSL ES 1.0; some drivers may have compiled it as 0, so the legacy
+ * non-linear cameras may never have rotated at all. Gate A derives its
+ * comparable state set from the capture rather than assuming either way.
  */
 function lngOffset (state: CameraState): number {
   return (state.povLongitude * PI) / 180
@@ -100,18 +57,12 @@ function lngOffset (state: CameraState): number {
 
 /**
  * The latitude offset the non-linear projections consume: cylindrical and
- * pannini subtract it from `phi`; planet uses it as the tilt angle of the
- * Mobius pre-transform in `projectPlanet` (2026-09-28 planet-drag-semantics
- * spec, which supersedes the undefined-geometry reading of this term that
- * v1-design §11.4 F5 left open).
+ * pannini subtract it from `phi`; planet uses it as the Mobius tilt angle
+ * (2026-09-28 planet-drag-semantics spec).
  *
- * This term is not a transcription of v0.2.2: on the non-linear cameras the
- * legacy shader never read latitude and the legacy viewer never uploaded it
- * (defect F5), so latitude influenced no pixel and there is no legacy number
- * to preserve. Making it work is v1's explicit behaviour change, pinned by
- * gate B -- and because it is a new term rather than a retained bug, it is a
- * proper degrees-to-radians conversion, born with the same units `lngOffset`
- * above was corrected to (2026-09-23) rather than ever carrying.
+ * Not a transcription: v0.2.2 read latitude nowhere on these cameras (defect
+ * F5), so there is no legacy number to preserve and the term is v1's own, in
+ * honest degrees-to-radians units. Pinned by gate B.
  */
 function latOffset (state: CameraState): number {
   return (state.povLatitude * PI) / 180
@@ -169,8 +120,7 @@ function projectLinear (x: number, y: number, z: number): UV {
  */
 
 function projectCylindrical (x: number, y: number, z: number, zoom: number, lng: number, lat: number): UV {
-  // `x` is deliberately unread, exactly as in the shader. On the legacy quad it
-  // was the constant 1.
+  // `x` is unread, exactly as in the shader; on the surface it is the constant 1.
   const yy = y * zoom
   const zz = z * zoom
 
@@ -185,21 +135,17 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
   // projection renders mirrored and inside out.
   const zz = -(z * zoom)
 
-  // The tilt: a sphere rotation expressed as a Mobius transform of the plane
-  // point w = zz + i*yy, rolling the source point at polar angle |lat| along
-  // the screen-vertical meridian to the screen centre (2026-09-28
-  // planet-drag-semantics spec, section 2.1). The rotation axis is the
-  // horizontal screen axis -- the fixed points are w = +-1 -- and the angle is
-  // lat itself, no negation: drag down (lat < 0) rolls the centre so it
-  // samples what was above it, the content-follows-the-finger convention the
-  // other three cameras use. At lat = 0 this is the identity term for term
-  // (sin 0 = 0, cos 0 = 1), so the default little planet does not move by one
-  // bit -- except a -0 -> +0 flip of theta's sign of zero on the z = 0
-  // half-line, which no consumer distinguishes. The WGSL/GLSL twins carry a
-  // 1e-15 floor on d2 for the excluded point's viewport crossing; this
-  // float64 arbiter deliberately does not -- its exact hits at the pole
-  // are pinned as finite one-ulp artifacts, and the branch points take
-  // the canonical value below.
+  // The tilt: a sphere rotation as a Mobius transform of the plane point
+  // w = zz + i*yy, rolling the source point at polar angle |lat| along the
+  // screen-vertical meridian to the screen centre (2026-09-28
+  // planet-drag-semantics spec §2.1). The fixed points are w = +-1 and the
+  // angle is lat itself -- drag down rolls the centre to sample what was above
+  // it, the content-follows-the-finger convention the other cameras use. At
+  // lat = 0 this is the identity term for term. The WGSL/GLSL twins add a
+  // 1e-15 floor on d2; this float64 arbiter deliberately does not -- exact
+  // pole hits stay finite and are pinned as one-ulp artifacts in
+  // test/unit/reference.test.ts, and the branch points take the canonical
+  // values below.
   const tilt = lat
   const ct = Math.cos(tilt / 2)
   const st = Math.sin(tilt / 2)
@@ -232,26 +178,19 @@ function projectPlanet (x: number, y: number, z: number, zoom: number, lng: numb
   let phi = Math.atan(r / Math.sqrt(p * p + q * q)) + HALF_PI
 
   // The Mobius reduction's branch points: p = q = 0 makes the atan above
-  // atan(0/0) and collapses phi's argument to -1/0. The canonical values
-  // are the +z-side one-sided limits, measured identical at every branch
-  // point: theta = 1.5*PI, and phi = PI where the denominator is the zero
-  // factor (the Mobius pole, num nonzero) versus 0 where the numerator is
-  // wholly zero (the lat = 0 centre, and the tilt centres at the +-90
-  // clamps). 2026-09-28 planet-review-followups spec, section 2.2. In
-  // float64 this guard fires at exact tilt-centre hits (yy bit-exactly
-  // tan(tilt / 2)) whenever ct * yy - st cancels bit for bit -- always
-  // the lat = 0 centre, where st = 0 makes the cancellation exact by
-  // construction; at other tilts per rounding luck (most integer-degree
-  // tilts cancel; 45 and 60 degrees stay half an ulp short); never at
-  // the +-90 exact-hit sites, where sin and cos of the half-angle differ
-  // by one ulp, the would-be zero factor keeps a one-ulp residue (denRe
-  // at the pole sites, numIm at the tilt centres), q stays nonzero, and
-  // the formula's own finite values stand (pinned, as non-normative
-  // artifacts, in test/unit/reference.test.ts).
-  // The phi = PI arm never wins in float64 -- every firing site has num
-  // wholly zero -- but it is load-bearing, not dead: the WGSL and GLSL
-  // twins DO reach the pole arm in f32, and the spec's three-place
-  // same-rule requires the same guard statements here.
+  // atan(0/0). The canonical values are the +z-side one-sided limits --
+  // theta = 1.5*PI; phi = PI at the Mobius pole (denominator the zero
+  // factor), 0 where the numerator is wholly zero (the lat = 0 centre and
+  // the tilt centres at the +-90 clamps) -- measured identical at every
+  // branch point (2026-09-28 planet-review-followups spec §2.2). In float64
+  // the guard fires only at exact tilt-centre hits where the cancellation is
+  // bit exact (always at lat = 0, where st = 0 makes it exact by
+  // construction; at other tilts by rounding luck); the +-90 sites keep a
+  // one-ulp residue in the would-be zero factor, never fire, and their
+  // finite values are pinned in test/unit/reference.test.ts. The phi = PI
+  // arm never wins in float64 but is load-bearing: the f32 twins DO reach
+  // the pole arm, and the spec's same-rule requires the same guard
+  // statements in all three.
   if (p === 0 && q === 0) {
     theta = 1.5 * PI
     phi = PI
@@ -289,24 +228,17 @@ function projectPannini (x: number, y: number, z: number, zoom: number, lng: num
 /**
  * Projects a point on the camera's surface to an equirectangular coordinate.
  *
- * `state.povLatitude` is read by the three non-linear projections through
- * `latOffset` -- subtracted from `phi` by cylindrical and pannini, and
- * consumed as the Mobius tilt angle by planet -- the F5 fix, one of this
- * module's deliberate departures from v0.2.2 (which read latitude nowhere
- * on those cameras; the module header lists all three). The linear
- * projection ignores it here because its latitude lives in
- * `buildViewMatrix` instead.
+ * The linear projection's angles live in `buildViewMatrix`; the non-linear
+ * projections read `state` here, through `lngOffset`/`latOffset` (the F5 fix,
+ * one of the module header's adjudicated departures).
  *
- * @param x - Surface position. For the linear projection only the direction
- *   matters; for the others the magnitude is part of the projection.
- * @param y - Surface position. Drives `phi` in every projection; scaled by
- *   `zoom` by the three non-linear ones.
- * @param z - Surface position. Drives `theta` in every projection; scaled by
- *   `zoom` by the three non-linear ones, and negated by planet.
- * @param state - Camera angles. The non-linear projections read both fields as
- *   offsets -- `povLongitude` through `lngOffset`, `povLatitude` through
- *   `latOffset`; the linear projection reads neither, because its
- *   angles are already baked into the view matrix it is paired with.
+ * @param x - Surface position. Only its direction matters to `linear`; the
+ *   magnitude is part of the projection for the others.
+ * @param y - Drives `phi` in every projection; scaled by `zoom` by the
+ *   non-linear ones.
+ * @param z - Drives `theta` in every projection; scaled by `zoom` by the
+ *   non-linear ones, and negated by planet.
+ * @param state - Camera angles, read only by the non-linear projections.
  * @param projection - Which formula to apply.
  */
 export function project (x: number, y: number, z: number, state: CameraState, projection: Projection): UV {
@@ -327,25 +259,18 @@ export function project (x: number, y: number, z: number, state: CameraState, pr
 
 /**
  * Maps a normalised device coordinate to the surface position the projection
- * formulas expect.
+ * formulas expect: the point `(1, ndcY * m, ndcX * m)` on the `x = 1` plane,
+ * `m = max(extent) / 2` matching `buildProjection`. `buildCameraTransform` is
+ * built so that inverting it on the GPU recovers exactly these numbers.
  *
- * This is the CPU-side statement of what the matrix does on the GPU. The legacy
- * pipeline rasterised a quad lying in the `x = 1` plane and let the varying
- * interpolate its local coordinates; across that quad only `(y, z)` varied and
- * `x` was the constant 1. This function is that mapping written down, and
- * `buildCameraTransform` is built so that inverting it on the GPU recovers
- * exactly these numbers.
- *
- * Both axes use `m = max(extent) / 2`, matching `buildProjection`, and **the
- * sign on `ndcX` is positive**. That sign is not free: the fixed view's basis
- * works out to view-X = world +Z, so a positive horizontal device coordinate is
- * a positive world `z`. Getting it backwards mirrors the panorama horizontally,
- * which is subtle enough to survive review on a symmetric test image and is
- * exactly what the P0 baseline comparison is for.
+ * **The sign on `ndcX` is positive**: the fixed view's basis makes a positive
+ * horizontal device coordinate a positive world `z`. Getting it backwards
+ * mirrors the panorama horizontally -- subtle enough to survive review on a
+ * symmetric test image, which is what the P0 baseline comparison is for.
  *
  * @param ndcX - Horizontal device coordinate in `[-1, 1]`.
  * @param ndcY - Vertical device coordinate in `[-1, 1]`.
- * @param extent - Surface size; the legacy quad's width and height.
+ * @param extent - Surface size, the projection's `extent`.
  */
 export function ndcToSurface (
   ndcX: number,
