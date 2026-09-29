@@ -3,7 +3,7 @@ plan: docs/superpowers/plans/2026-09-28-planet-exact-hit-nan.md
 scope: [src/renderer/webgpu/shaders/panorama.wgsl, src/renderer/webgl2/shaders/panorama.glsl, src/core/reference.ts, test/unit/reference.test.ts, test/unit/webgl2-shaders.test.ts, docs/superpowers/specs/*.md]
 verify: npm run build && npm test
 layer: domain
-state: reported
+state: merged
 createdAt: 2026-09-28T15:49:02.168Z
 ---
 # 任务：planet 分支点规范值：三处同规消除 atan(0/0)=NaN
