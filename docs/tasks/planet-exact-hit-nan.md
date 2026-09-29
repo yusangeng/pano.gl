@@ -58,4 +58,16 @@ createdAt: 2026-09-28T15:49:02.168Z
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve**（2026-09-29，superloop-verify 自动验收，四步全审）。
+
+1. **结构化 review**：全 diff 亲读（3 src + 2 test + 1 spec + plan 勾选 + 卡，8 文件 +324/−83）。三处守卫语句形逐字平行：`p === 0 && q === 0` 双条件 → `theta = 1.5 * PI`（字面拼写未被"简化"）→ num 判别 phi 分侧（极点 π / 中心 0）→ `theta -= lng` 移至守卫后；两 shader 守卫 token 一致（`== 0.0` / `num_re` / `num_im` 拼写同）。reference.ts 头部 two→three exceptions 与新 departure bullet 在位；守卫注释为 CR/red-team 整改后的**修正版** firing-set 表述（f64 逐位消零触发集：lat 0 中心恒触发、多数整度倾角亦触发、±90 永不；phi = PI 臂 f64 不可达但 load-bearing）——与 gate-c-planet-arbiter 审查期实测的 lat-30 倾斜中心 u=0.75/v=0 触发互证。测试翻转逐项对上：canonical 钉测（中心 0.75/0 bit-exact toBe、lng=90 → 0.5 顺序钉、B 类伪影表四行含 −0 载荷注释）、isDegenerate planet → false、faithful-NaN 钉测删 planet 行（output-range 块改注）、f32 证人转录守卫（`f(f(1.5) * F32_PI)`）+ exact-sites NaN → 0.75/按站点 v 翻转 + lat-0 中心 f32 新块（0.75/1/d2=1）+ 省略清单注释 F2 改写；webgl2-shaders 五个存在性钉 + 有序钉（M3b/M4 双改幸存者的唯一拦截网，角色说明在注）。spec §2.3 二次勘误在档（全角逗号，与被引原文 grep 匹配）。plan diff 纯勾选翻转（全部行均为 `[ ]`→`[x]`，零内容改动）。
+2. **plan 红线逐条核对**：scope 白名单命中 8/8 文件（wgsl/glsl/reference.ts/reference.test.ts/webgl2-shaders.test.ts/spec glob；plan/卡自动放行），无表外文件；17/17 提交带 `task-planet-exact-hit-nan:` 前缀。
+3. **门禁证据复核**：卡五节齐备。CR 1 CRITICAL（T1 守卫拓宽幸存）+ 5 INFO，整改三提交（fc76606 两枚离站点钉；54f4446 + 06defd4 修 red-team 复核出的两处 gloss 残留——shader 低枚举 firing-set 与伪影表组件级表述）；测试质量 0C/0W/3I（INFO1/INFO3 于 1da82bb 清零；INFO2 按设计接受，三条理由经复评核实：f64 假路径构造性不可达且为全文件唯一未覆盖分支、shader 两份拷贝有可执行钉、判别式活性行为由 f32 证人见证）；覆盖陈述 verbatim 在卡（98.32% branch，阈值 90%）。计数核对：分支 311 单测 = 基线 309 + 本分支 2 个新 it（canonical + 结构钉）；183+1 集成与分支基线一致（本分支零集成文件改动）——分支基线在 backend-preference 合并前，合并后 master 预期 **318 单测 / 189 过 + 1 skip**，以 task-merge 前后 verify 对照。
+4. **最重发现亲验**：
+   - **三处同规亲读**：守卫代码三处逐字比对（上述），语句顺序（phi 公式 → 守卫 → `theta -= lng` → toUV/to_uv）三处一致，无一处走样。
+   - **单测亲跑**：worktree 亲跑 `--project unit` **311/311 绿**（树净，17ff65c）。
+   - **T1 变异亲做**：worktree 将 reference.ts 守卫临时拓宽为 `q === 0` 单条件 → **恰 1 failed / 31 passed**（本文件），失败测试具名 `takes the canonical branch-point value where p and q are both zero`，首败断言正是 v 侧离站点钉 `expected 1 to be close to 0.15595826075473862`——与评估者独立复验（全套 1 failed / 310 passed，两钉各杀一侧）逐字吻合；还原三重证明（守卫行在 255 / `git diff` 0 行 / 状态净）后该文件 **32/32 复绿**。
+
+**偏离与记录项逐条裁决：接受，不构成打回**——偏离①（伪影表 −0：plan 撰写期测量笔误，toBe 即 Object.is 的载荷注释在测试内）②（有序钉为质量审 F1 增补，M3b/M4 双改幸存者的唯一拦截网）③（f32 省略清单注释纯注释改写）④（全角逗号一字勘误）⑤（三处注释修正）均亲见于 diff，accept；INFO2 接受（理由三条已核）；**记录在案①（CLAUDE.md「one adjudicated exception: lngOffset」段落已过时，现为三处）**：不阻塞本卡——CLAUDE.md 在白名单外、执行者无权改且如实记录，正确；裁决为由协调侧合并后以纯文档提交更正（gate-c-planet-arbiter MINOR-2 先例：非业务代码、主侧更正、明报）；**记录在案②（plan 78/130 行修正前措辞）**：plan 属历史文档按原样保留，accept。
+
+合并安全性由 task-merge 六重保护收口（合并前后主分支 verify 双跑）。
