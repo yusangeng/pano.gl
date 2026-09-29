@@ -1,5 +1,5 @@
 /**
- * A float64 CPU implementation of the four projections.
+ * A float64 CPU implementation of the five projections.
  *
  * The cross-backend pixel test compares WGSL against GLSL and has a blind spot:
  * two shaders written from the same misunderstanding agree with each other.
@@ -94,8 +94,10 @@ function toUV (theta: number, phi: number): UV {
 }
 
 /*
- * The four projections below are transcribed statement for statement from
- * cam_proj_linear / _cylindrical / _planet / _pannini. The `Math.atan(a / b)`
+ * Four of the five projections below are transcribed statement for
+ * statement from cam_proj_linear / _cylindrical / _planet / _pannini;
+ * mercator is not one of them -- it has no shader original to transcribe
+ * (see the header). The `Math.atan(a / b)`
  * plus explicit quadrant fixups are NOT simplified to `Math.atan2(b, a)`: the
  * two agree for `linear` and `cylindrical` but NOT for `pannini`, where the
  * shader doubles `theta` BEFORE applying the fixups, so `2 * atan2(...)` and
@@ -120,7 +122,7 @@ function projectLinear (x: number, y: number, z: number): UV {
 }
 
 /*
- * The three non-linear projections are NOT scale-invariant: they read the
+ * The four non-linear projections are NOT scale-invariant: they read the
  * magnitude of their inputs, not just their ratio. That is why the size of the
  * surface being projected is a projection parameter (`extent`) and not a
  * property of geometry.
@@ -233,7 +235,7 @@ function projectPannini (x: number, y: number, z: number, zoom: number, lng: num
 }
 
 function projectMercator (x: number, y: number, z: number, zoom: number, lng: number, lat: number): UV {
-  // `x` is deliberately unread, exactly as in project_cylindrical.
+  // `x` is deliberately unread, exactly as in `projectCylindrical` above.
   const yy = y * zoom
   const zz = z * zoom
   const theta = zz * TWO_PI - lng
