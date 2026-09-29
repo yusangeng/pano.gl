@@ -3,7 +3,7 @@ plan: docs/superpowers/plans/2026-09-29-mercator-camera.md
 scope: [src/core/**, src/renderer/**, src/interaction/**, src/viewer/**, demo/lab/**, demo/shots/**, README.md, test/**, vitest.config.ts]
 verify: npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
 layer: domain
-state: open
+state: reported
 createdAt: 2026-09-29T09:01:03.219Z
 ---
 # 任务：Mercator 相机（第五投影）
