@@ -1,10 +1,7 @@
 /**
- * Typed events, and a disposal contract that is visible in the type system.
- *
- * Both replace decorator machinery from the legacy codebase. The legacy
- * `@eventable` added untyped on/off/trigger to four classes, and `@disposable`
- * added dispose() to four more without giving the type system any way to know
- * it had been added.
+ * Typed events, and a disposal contract that is visible in the type system --
+ * typed replacements for the legacy `@eventable`/`@disposable` decorators,
+ * which added members with no trace in the types.
  */
 
 /**
@@ -26,14 +23,11 @@ export type WildcardListener<M extends EventMap> = <K extends keyof M & string>(
 /**
  * A minimal typed event emitter.
  *
- * Two deliberate differences from the legacy Eventable:
- *
- * - `on()` returns its own unsubscribe function. The common listener leak is a
- *   handler registered as an inline arrow, which cannot be named at teardown
- *   time; returning the remover makes the correct thing easier than the wrong
- *   thing.
- * - Dispatch iterates a copy, so a listener that unsubscribes during dispatch
- *   does not cause the following listener to be skipped.
+ * `on()` returns its own unsubscribe function: the common listener leak is an
+ * inline-arrow handler that cannot be named at teardown time, and returning
+ * the remover makes the correct thing easier than the wrong thing. Dispatch
+ * iterates a copy, so a listener that unsubscribes during dispatch does not
+ * skip the next one.
  */
 export class EventEmitter<M extends EventMap> {
   #listeners = new Map<keyof M & string, Set<(event: never) => void>>()
@@ -79,16 +73,12 @@ export class EventEmitter<M extends EventMap> {
   /**
    * Dispatches an event.
    *
-   * Public, and deliberately so. The classes that fire events here (a source, a
-   * viewer) *hold* an emitter rather than extending one, so a `protected`
-   * modifier would make their own emitter unreachable -- TypeScript checks
-   * protected access against the class doing the accessing, and a composing
-   * class is not a subclass.
-   *
-   * What actually keeps events unforgeable is ownership, not the modifier: the
-   * emitter instance is a private field of its owner, and `on()` hands out only
-   * the unsubscribe function. Nothing outside the owner ever holds the emitter,
-   * so nothing outside the owner can call this.
+   * Public, and deliberately so: the classes that fire events here (a source,
+   * a viewer) *hold* an emitter rather than extending one, and TypeScript
+   * checks `protected` access against the accessing class -- a composing class
+   * is not a subclass, so `protected` would make their own emitter
+   * unreachable. What keeps events unforgeable is ownership: the emitter is a
+   * private field, and `on()` hands out only the unsubscribe function.
    */
   emit<K extends keyof M & string> (type: K, event: M[K]): void {
     // Copy before iterating. A listener that unsubscribes a not-yet-visited
@@ -118,12 +108,11 @@ export abstract class Disposable {
   /**
    * Throws if this object has been disposed.
    *
-   * Called at public boundaries -- roughly eight places, not a hundred. The
-   * legacy `@undisposed` guarded every member, but the use-after-dispose that
-   * actually happens is internal: a rAF callback reaching a dead renderer, a
-   * media event reaching a dead texture. Those paths never touch a public
-   * member, so guarding every public member bought a layer of protection in
-   * the wrong place at the cost of a hundred wrapped functions.
+   * Called at public boundaries. The use-after-dispose that actually happens
+   * is internal -- a rAF callback reaching a dead renderer, a media event
+   * reaching a dead texture -- and never touches a public member, so guarding
+   * every public member (as the legacy `@undisposed` did) protects the wrong
+   * place.
    */
   assertAlive (): void {
     if (this.#disposed) {
