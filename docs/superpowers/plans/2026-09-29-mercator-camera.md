@@ -558,7 +558,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `src/interaction/gestures.ts`
 - Test: `test/unit/gestures.test.ts`
 
-- [ ] **Step 1: 先写失败的测试**
+- [x] **Step 1: 先写失败的测试**
 
 `test/unit/gestures.test.ts`：import 行把 `classifyDragMercator` 加进现有的 gestures 导入；文件末尾追加：
 
@@ -603,7 +603,7 @@ describe('classifyDragMercator', () => {
 Run: `npx vitest run --project unit test/unit/gestures.test.ts`
 Expected: FAIL——`classifyDragMercator` 未导出。
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 `src/interaction/gestures.ts`：`classifyDrag` 之后加：
 
@@ -639,12 +639,12 @@ export function classifyDragMercator (delta: DragInput, surface: SurfaceSize, zo
 
 （`DragInput`/`SurfaceSize` 若与文件内的实际名字不同，以 `classifyDrag` 的签名为准对齐——照抄它的参数类型。）
 
-- [ ] **Step 3: 跑测试**
+- [x] **Step 3: 跑测试**
 
 Run: `npx vitest run --project unit test/unit/gestures.test.ts`
 Expected: 全绿。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/interaction/gestures.ts test/unit/gestures.test.ts
@@ -665,7 +665,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 无单测文件：`input-controller` 在 coverage 排除名单里（`vitest.config.ts` 根配置），既有方法也没有 1:1 单测，本任务照先例。逻辑本身在 `classifyDragMercator`（Task 5 已全测）。
 
-- [ ] **Step 1: 加方法**
+- [x] **Step 1: 加方法**
 
 `dragToRotation` 之后加（import 处把 `classifyDragMercator` 与 `type MercatorDrag` 加进 `./gestures` 的现有导入）：
 
@@ -676,12 +676,12 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
   }
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 Run: `npm run typecheck`
 Expected: 绿。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/interaction/input-controller.ts
@@ -702,7 +702,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `src/viewer/camera-controller.ts`
 - Test: `test/unit/camera-controller.test.ts`
 
-- [ ] **Step 1: 先写失败的测试**
+- [x] **Step 1: 先写失败的测试**
 
 `test/unit/camera-controller.test.ts`：文件已有 `CameraController` 导入与各投影的工厂先例（照抄 `cylindrical` 工厂的写法）。文件末尾追加：
 
@@ -772,7 +772,7 @@ describe('panMercator', () => {
 Run: `npx vitest run --project unit test/unit/camera-controller.test.ts`
 Expected: FAIL——`panMercator` 不存在。
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 `src/viewer/camera-controller.ts`：`rotate`（`:106-111`）之后加：
 
@@ -802,17 +802,17 @@ Expected: FAIL——`panMercator` 不存在。
   }
 ```
 
-- [ ] **Step 3: 跑测试**
+- [x] **Step 3: 跑测试**
 
 Run: `npx vitest run --project unit test/unit/camera-controller.test.ts`
 Expected: 全绿（`#apply` 自带 clamp/wrap/dirty 语义，与 rotate 共用）。
 
-- [ ] **Step 4: 变异检查**
+- [x] **Step 4: 变异检查**
 
 临时删掉 `deltaM === 0` 三元 shortcut（让水平 pan 也走公式）。重跑。
 Expected: `keeps latitude bit-exact` 红（差 1 ulp）。恢复，全绿，`git diff` 为空。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer/camera-controller.ts test/unit/camera-controller.test.ts
@@ -833,7 +833,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `src/viewer/viewer.ts:61-63`（注释）、`:134-142`（pan 处理器）
 - Create: `test/integration/mercator-drag.test.ts`
 
-- [ ] **Step 1: 先写失败的集成测试**
+- [x] **Step 1: 先写失败的集成测试**
 
 新文件 `test/integration/mercator-drag.test.ts`（从 `test/integration/` 到 src 是 `'../../src'`；注意 support/ 下的文件才是 `'../../../src'` 深度）：
 
@@ -921,7 +921,7 @@ describe('mercator drag (user story)', () => {
 Run（有真 GPU 的机器）: `npx vitest run --project integration test/integration/mercator-drag.test.ts`
 Expected: FAIL——pan 处理器还在走 `dragToRotation`，姿态对不上（纬度差得远：角度线性 vs 米度量）。
 
-- [ ] **Step 2: viewer.ts pan 处理器分流**
+- [x] **Step 2: viewer.ts pan 处理器分流**
 
 把 `:134-142` 的 pan 处理器整体替换为：
 
@@ -949,14 +949,14 @@ Expected: FAIL——pan 处理器还在走 `dragToRotation`，姿态对不上（
 
 同文件 `:60-63` `snapshotProjection` 的注释里 `the four-member union` → `the five-member union`。
 
-- [ ] **Step 3: 跑测试**
+- [x] **Step 3: 跑测试**
 
 Run: `npx vitest run --project integration test/integration/mercator-drag.test.ts`
 Expected: 全绿。
 Run: `npm run typecheck`
 Expected: 绿。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/viewer/viewer.ts test/integration/mercator-drag.test.ts
@@ -979,7 +979,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 背景：camera-switch 有一个 lockstep 测试（`:73-81`）断言 `Object.keys(PROJECTIONS)` 与 `KINDS` 集合相等——两边必须同一个提交加宽，否则一边红。且 camera-switch 在 `no-webgpu` 项目也跑，mercator 用例必须在 WebGL2 上成立（Task 4 的 GLSL 孪生 + gate C 保证）。
 
-- [ ] **Step 1: 两边同时加宽**
+- [x] **Step 1: 两边同时加宽**
 
 `support/viewer.ts` 的 `PROJECTIONS`（表头注释 "The four projections" → five）加：
 
@@ -995,12 +995,12 @@ const KINDS = ['linear', 'cylindrical', 'planet', 'pannini', 'mercator'] as cons
 
 同文件 lockstep 测试上方注释若枚举 "the four the public union names" 之类字样，同步改 five。
 
-- [ ] **Step 2: 跑测试（两个项目都要绿）**
+- [x] **Step 2: 跑测试（两个项目都要绿）**
 
 Run: `npx vitest run --project integration test/integration/user-story-camera-switch.test.ts && npx vitest run --project no-webgpu test/integration/user-story-camera-switch.test.ts`
 Expected: 全绿——参数化循环自动多出 mercator 用例（从别的模型切入 mercator、pose 保持、像素变化 >2），lockstep 测试自动覆盖新键。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/integration/support/viewer.ts test/integration/user-story-camera-switch.test.ts
@@ -1020,7 +1020,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 **Files:**
 - Modify: `test/integration/gate-b-projection.test.ts`
 
-- [ ] **Step 1: CAMERAS 循环纳入 mercator**
+- [x] **Step 1: CAMERAS 循环纳入 mercator**
 
 `:20` 改为：
 
@@ -1036,7 +1036,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 （若 `as const`/类型报错，照 `LEGACY_EXTENT[camera]` 的推断加 `as const` 于 `[1, 1]`。）
 
-- [ ] **Step 2: 新增两个测试（describe 内、capture-docs 测试之后）**
+- [x] **Step 2: 新增两个测试（describe 内、capture-docs 测试之后）**
 
 ```ts
   it('mercator is extent-sensitive: the surface size is part of the projection', async () => {
@@ -1123,12 +1123,12 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 （I2 的中心奇偶在 unit 层已按位级 pin（Task 2），像素级不再重复——中心片元不落在 ndc 0 上，像素级奇偶天生不精确，spec 的 gate B 行由以上三个用例 + unit 覆盖。）
 
-- [ ] **Step 3: 跑测试**
+- [x] **Step 3: 跑测试**
 
 Run: `npx vitest run --project integration test/integration/gate-b-projection.test.ts`
 Expected: 全绿（mercator 纬度响应用例自动生成）。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/gate-b-projection.test.ts
@@ -1148,7 +1148,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 **Files:**
 - Modify: `test/integration/gate-c-cross-backend.test.ts`
 
-- [ ] **Step 1: extentFor 与 CAMERAS**
+- [x] **Step 1: extentFor 与 CAMERAS**
 
 `:46-47` 改为：
 
@@ -1167,7 +1167,7 @@ const CAMERAS: readonly Kind[] = ['linear', 'cylindrical', 'planet', 'pannini', 
 
 主矩阵自动多出 mercator × 4 状态（≤2）；极点测试 `:141` 的 `for (const kind of CAMERAS)` 自动纳入 mercator@89.5（<64——mercator 的 theta 不读纬度，无经度压缩问题，预期远低于界）。
 
-- [ ] **Step 2: 状态扫描 describe（spec §5 要求的 lat × zoom 覆盖）**
+- [x] **Step 2: 状态扫描 describe（spec §5 要求的 lat × zoom 覆盖）**
 
 文件末尾（现有 describe 之后）追加：
 
@@ -1200,7 +1200,7 @@ describe('gate C: mercator state sweep (spec section 5)', () => {
 })
 ```
 
-- [ ] **Step 3: 仲裁腿（第三意见）**
+- [x] **Step 3: 仲裁腿（第三意见）**
 
 现有 describe 内、planet 仲裁测试（`:106-134`）之后加，初始 pin 3（与 cylindrical 同级：mercator 的逐片元链是 atanh/tanh/asin 三个超越函数 + 1×1 extent 窄采样，不比 cylindrical 长；**注释按 planet 腿的四要求协议写，measured 一行首次跑时用实测值填，禁止编造**）：
 
@@ -1234,12 +1234,12 @@ describe('gate C: mercator state sweep (spec section 5)', () => {
 
 首跑时把 `<FILL>` 换成实测值（临时 `console.log(r)` 或让断言消息报出）。若实测 > 3，按四要求重推界并在注释里记录推导，不许静默放水。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`
 Expected: 全绿——4 状态主矩阵 mercator、15 态扫描、极点 89.5、仲裁腿三方一致。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add test/integration/gate-c-cross-backend.test.ts
@@ -1261,7 +1261,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `demo/lab/context.ts:58-62`
 - Modify: `demo/lab/main.ts:58-59`
 
-- [ ] **Step 1: 三处加宽**
+- [x] **Step 1: 三处加宽**
 
 `panels/camera.ts:15`：
 
@@ -1285,7 +1285,7 @@ const KINDS: ReadonlyArray<ProjectionKind> = ['linear', 'cylindrical', 'planet',
 
 （照抄该行现有写法，只往数组里加 `'mercator'`。）
 
-- [ ] **Step 2: 类型检查 + 手动冒烟**
+- [x] **Step 2: 类型检查 + 手动冒烟**
 
 Run: `npm run typecheck`
 Expected: 绿（demo 在根 tsconfig 程序内）。
@@ -1293,7 +1293,7 @@ Expected: 绿（demo 在根 tsconfig 程序内）。
 Run: `npm run start`，浏览器开 `http://localhost:5173/?projection=mercator`
 Expected: lab 以 mercator 打开；相机面板可选 mercator；zoom/extent 滑条工作；垂直拖拽内容跟手（高纬不压扁）；URL 直达生效。截图留到 Task 14。看完停掉 dev server。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add demo/lab/panels/camera.ts demo/lab/context.ts demo/lab/main.ts
@@ -1312,7 +1312,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 **Files:**
 - Modify: `README.md:93-98`（相机表）、`:153-168`（投影节）
 
-- [ ] **Step 1: 相机表加行**
+- [x] **Step 1: 相机表加行**
 
 `camera.projection` 的 kind 表 pannini 行之后加（spec §6 逐字）：
 
@@ -1322,7 +1322,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 （列结构与既有行严格对齐——先看 pannini 行再写。）
 
-- [ ] **Step 2: "The four projections" 节改五**
+- [x] **Step 2: "The four projections" 节改五**
 
 标题 `## The four projections` → `## The five projections`；正文 `the four cameras differ` → `the five cameras differ`、`All four below are the same source` → `All five below are the same source`；截图表改三列两行：
 
@@ -1344,12 +1344,12 @@ rule-of-thumb 段末补一句：
 pushed to infinity.
 ```
 
-- [ ] **Step 3: 校验脚本**
+- [x] **Step 3: 校验脚本**
 
 Run: `node scripts/check-readme-options.mjs`
 Expected: 绿（该脚本只校验 options 表 vs `options.ts`，本任务不触它的管辖，跑它是防手滑）。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md
@@ -1368,13 +1368,13 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 **Files:**
 - Create: `demo/shots/mercator.png`（800×450，与既有四张同规格）
 
-- [ ] **Step 1: 截图**
+- [x] **Step 1: 截图**
 
 Run: `npm run start`，浏览器（本仓库规则：网页浏览走 `/browse`）开 `http://localhost:5173/?projection=mercator`，视口/截取 800×450（与 `demo/shots/` 既有四张一致：同一源、zoom 1、默认姿态）。保存为 `demo/shots/mercator.png`。
 
 浏览器截图在本环境不可得时：在任务卡「完成报告」写明偏离（README 插图非门禁物），保留 README 引用，跳过本步。
 
-- [ ] **Step 2: 全量核验（顺序不可换：gen 在最前）**
+- [x] **Step 2: 全量核验（顺序不可换：gen 在最前）**
 
 ```bash
 npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
@@ -1382,7 +1382,7 @@ npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run
 
 Expected: 全绿。coverage 的 90% 分支门槛不变——新增纯函数（`classifyDragMercator`、`panMercator`、`projectMercator`）已被 Task 2/5/7 全覆盖，预期净增不降。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add demo/shots/mercator.png
