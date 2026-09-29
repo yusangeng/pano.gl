@@ -39,6 +39,32 @@ export const DEFAULT_PROJECTION: Projection = {
 const MIN_FOV = (15 * Math.PI) / 180
 const MAX_FOV = (110 * Math.PI) / 180
 
+/**
+ * Asserts a projection's numeric state is finite where it enters the
+ * controller -- the constructor and `setProjection`, both of which store what
+ * they are handed.
+ *
+ * The pose gained this guard when `param-check` was deleted; the projection
+ * outlived it, and a NaN `zoom` reaches `buildProjection` just as silently as
+ * a NaN latitude and draws the same unreported black frame. `aspect` is
+ * positive-asserted rather than merely finite, mirroring `setAspect`'s own
+ * guard: the same quantity must not be validated on the resize path and
+ * unvalidated on this one. Range is deliberately not asserted -- `setProjection`
+ * stores `zoom: 5` on purpose in the tests; finiteness is the boundary.
+ *
+ * @throws If a projection parameter is not finite (`aspect`: not positive).
+ */
+function assertProjectionFinite (projection: Projection): void {
+  if (projection.kind === 'linear') {
+    assertFinite(projection.fov, 'fov')
+    assertPositive(projection.aspect, 'aspect')
+  } else {
+    assertFinite(projection.zoom, 'zoom')
+    assertFinite(projection.extent[0], 'extent[0]')
+    assertFinite(projection.extent[1], 'extent[1]')
+  }
+}
+
 export class CameraController {
   #state: CameraState
   #projection: Projection
@@ -48,16 +74,18 @@ export class CameraController {
   /**
    * @param pose - Initial pose in degrees. Defaults to the origin.
    * @param projection - Initial projection.
-   * @throws If a supplied angle is not finite. The pose arrives straight from a
-   *   caller's `camera.pose` option, so this is a public boundary and not an
-   *   internal one -- a NaN let through here reaches the matrix and draws a
-   *   black frame with nothing reported.
+   * @throws If a supplied angle is not finite, or if a projection parameter
+   *   (`fov`, `zoom`, `extent`) is not finite (`aspect`: not positive). Both
+   *   arrive straight from a caller's `camera` option, so this is a public
+   *   boundary and not an internal one -- a NaN let through here reaches the
+   *   matrix and draws a black frame with nothing reported.
    */
   constructor (pose: Partial<CameraState> | undefined, projection: Projection) {
     this.#state = {
       povLatitude: clampLatitude(pose?.povLatitude ?? 0),
       povLongitude: wrapLongitude(pose?.povLongitude ?? 0)
     }
+    assertProjectionFinite(projection)
     this.#projection = projection
   }
 
@@ -111,12 +139,36 @@ export class CameraController {
   }
 
   /**
+   * Pans the Mercator camera: `deltaM` in the map's metre metric, `deltaLng`
+   * in degrees.
+   *
+   * The latitude update inverts the projection's own latitude term --
+   * `lat' = asin(tanh(atanh(sin lat) + deltaM))` -- so the content under the
+   * finger stays under the finger at every latitude and zoom (spec section 4;
+   * the metre formula lives in `classifyDragMercator`). Programmatic rotation
+   * keeps its degree-linear shape; this is the gesture path only.
+   */
+  panMercator (deltaM: number, deltaLng: number): void {
+    assertFinite(deltaM, 'deltaM')
+    assertFinite(deltaLng, 'deltaLng')
+    if (deltaM === 0 && deltaLng === 0) return
+    // A purely horizontal pan must not touch latitude: the atanh/tanh/asin
+    // round trip is exact in real arithmetic but only ~1 ulp in float64
+    // (measured 7.1e-15deg at lat 45, 1.4e-14 at lat 80), and every jitter
+    // dirties a full-redraw frame.
+    const lat = deltaM === 0
+      ? this.#state.povLatitude
+      : Math.asin(Math.tanh(Math.atanh(Math.sin(this.#state.povLatitude * Math.PI / 180)) + deltaM)) * 180 / Math.PI
+    this.#apply(lat, this.#state.povLongitude + deltaLng)
+  }
+
+  /**
    * Zooms by a relative magnification: a positive delta magnifies the picture
    * by (1 + delta), a negative one shrinks it by the same factor.
    *
    * Both parameterisations divide by (1 + delta) -- fov for the linear camera,
    * zoom for the others -- because in both a smaller parameter is a narrower
-   * field, so ONE formula serves four cameras and the wheel step feels the
+   * field, so ONE formula serves five cameras and the wheel step feels the
    * same on each. v1 multiplied instead, reading the "positive is zoom in"
    * wheel contract backwards and inverting wheel and pinch; corrected by user
    * adjudication, pan-zoom-semantics spec §2-3.
@@ -148,8 +200,13 @@ export class CameraController {
   /**
    * Replaces the projection, keeping the pose -- the legacy setter rebuilt the
    * whole camera and silently threw away where the user was looking.
+   *
+   * @throws If a projection parameter is not finite (`aspect`: not positive).
+   *   The throw comes before the assignment, so a rejected projection leaves
+   *   the controller on the one it held.
    */
   setProjection (projection: Projection): void {
+    assertProjectionFinite(projection)
     this.#projection = projection
     this.#dirty = true
     this.#notify()
@@ -162,7 +219,7 @@ export class CameraController {
    * The surface size is knowledge only the viewer's resize handler has, and for
    * the linear camera the projection's aspect IS the surface's -- rendering a
    * 16:9 container with the default square aspect stretches the image. The
-   * other three cameras take their shape from the projection's `extent`, which
+   * other four cameras take their shape from the projection's `extent`, which
    * the shader reads, so they have no aspect field to write.
    *
    * @param aspect - width / height of the drawing surface. Must be positive.

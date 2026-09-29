@@ -13,7 +13,7 @@ import type { Projection } from '../../../src/core/types'
 import { makeContainer } from './dom'
 
 /*
- * The four projections, fully spelled out.
+ * The five projections, fully spelled out.
  *
  * `satisfies` rather than a type annotation: each entry is checked against the
  * union member it names, so a change to `Projection` breaks this file at
@@ -28,7 +28,8 @@ export const PROJECTIONS = {
   linear: { kind: 'linear', fov: (70 * Math.PI) / 180, aspect: 1 },
   cylindrical: { kind: 'cylindrical', zoom: 1, extent: [1, 1] },
   planet: { kind: 'planet', zoom: 1, extent: [4, 4] },
-  pannini: { kind: 'pannini', zoom: 1, extent: [4, 4] }
+  pannini: { kind: 'pannini', zoom: 1, extent: [4, 4] },
+  mercator: { kind: 'mercator', zoom: 1, extent: [1, 1] }
 } satisfies Record<string, Projection>
 
 export type ProjectionName = keyof typeof PROJECTIONS

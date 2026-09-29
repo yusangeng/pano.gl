@@ -234,7 +234,7 @@ export class WebGL2Backend implements Backend {
     gl.uniform1i(this.#uniforms.u_projKind, cameraProjectionCode(projection.kind))
     gl.uniform1f(this.#uniforms.u_povLatitude, state.povLatitude)
     gl.uniform1f(this.#uniforms.u_povLongitude, state.povLongitude)
-    // The three non-linear projections scale their input by zoom; the linear
+    // The four non-linear projections scale their input by zoom; the linear
     // one has no zoom term at all. 1 is what the WGSL packer writes for a linear
     // camera, so the two backends agree on a value neither of them reads.
     gl.uniform1f(this.#uniforms.u_zoom, projection.kind === 'linear' ? 1 : projection.zoom)

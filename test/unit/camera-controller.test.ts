@@ -50,6 +50,24 @@ describe('CameraController', () => {
     expect(() => new CameraController({ povLatitude: 0, povLongitude: NaN }, linear())).toThrow(/finite/i)
   })
 
+  it('validates the projection it is constructed with', () => {
+    // The pose twin above validates the other half of the `camera` option.
+    // The projection is stored as given, so a NaN parameter reaches
+    // buildProjection and draws a black frame with nothing reported -- the
+    // same failure as the pose, pinned the same way. Direct literals, each
+    // naming its kind: a spread of the Projection union applies the override
+    // to all five variants and stops typechecking. Range is deliberately NOT
+    // asserted: `setProjection` below accepts zoom 5 on purpose, and what
+    // range a caller may set is a separate question from finiteness.
+    expect(() => new CameraController(undefined, { kind: 'mercator', zoom: NaN, extent: [1, 1] })).toThrow(/finite/i)
+    expect(() => new CameraController(undefined, { kind: 'cylindrical', zoom: Infinity, extent: [1, 1] })).toThrow(/finite/i)
+    expect(() => new CameraController(undefined, { kind: 'mercator', zoom: 1, extent: [NaN, 1] })).toThrow(/finite/i)
+    expect(() => new CameraController(undefined, { kind: 'linear', fov: NaN, aspect: 1 })).toThrow(/finite/i)
+    // aspect mirrors setAspect's own guard: a ratio must be positive, and a
+    // finite zero is still a degenerate matrix.
+    expect(() => new CameraController(undefined, { kind: 'linear', fov: Math.PI / 2, aspect: 0 })).toThrow(/greater than 0/i)
+  })
+
   it('clamps latitude instead of wrapping it', () => {
     // Latitude 100 must NOT become -80. Wrapping at the poles puts the viewer
     // past the point where the equirectangular mapping is defined and the
@@ -394,6 +412,21 @@ describe('CameraController', () => {
     expect(c.consumeDirty()).toBe(true)
   })
 
+  it('validates the projection setProjection receives, without adopting it', () => {
+    // cameraOptions' setter is the public door to setProjection. A rejected
+    // projection must leave the controller on the old one: the assert runs
+    // before the assignment, so nothing is half-applied and no frame is
+    // dirtied by a projection that was never stored.
+    const c = new CameraController(undefined, linear())
+    c.consumeDirty()
+
+    expect(() => c.setProjection({ kind: 'mercator', zoom: NaN, extent: [1, 1] })).toThrow(/finite/i)
+    expect(() => c.setProjection({ kind: 'linear', fov: Infinity, aspect: 1 })).toThrow(/finite/i)
+
+    expect(c.projection).toEqual(linear())
+    expect(c.consumeDirty()).toBe(false)
+  })
+
   it('notifies subscribers on change but not on a no-op', () => {
     const c = new CameraController(undefined, linear())
     const fn = vi.fn()
@@ -501,7 +534,7 @@ describe('CameraController', () => {
   })
 
   it('setAspect leaves a non-linear projection alone', () => {
-    // The other three cameras get their surface shape from the quad's extent,
+    // The other four cameras get their surface shape from the quad's extent,
     // which the shader reads; there is no aspect field to write and inventing one
     // would be a field nothing consumes.
     const c = new CameraController(undefined, cylindrical())
@@ -599,5 +632,71 @@ describe('DEFAULT_PROJECTION', () => {
     // baseline, so a wrong one would reach every caller who does not name a
     // projection and show up only as a visibly wrong field of view.
     expect(DEFAULT_PROJECTION).toEqual({ kind: 'linear', fov: (70 * Math.PI) / 180, aspect: 1 })
+  })
+})
+
+describe('panMercator', () => {
+  const mercator = (): Projection => ({ kind: 'mercator', zoom: 1, extent: [1, 1] })
+
+  it('translates by metres in the map metric: lat 0 pan(1) -> 49.6049deg', () => {
+    // lat' = asin(tanh(atanh(sin 0) + 1)) * 180/pi, derived independently:
+    // tanh(1) = 0.761594..., asin -> 0.865769... rad.
+    const c = new CameraController(undefined, mercator())
+    c.panMercator(1, 0)
+    expect(c.state.povLatitude).toBeCloseTo(49.6049374208547, 12)
+  })
+
+  it('moves both axes from a tilted pose', () => {
+    const c = new CameraController({ povLatitude: 60, povLongitude: 10 }, mercator())
+    c.panMercator(-2, 5)
+    expect(c.state.povLatitude).toBeCloseTo(-36.40531310489626, 12)
+    expect(c.state.povLongitude).toBe(15)
+  })
+
+  it('saturates onto the pole without crossing it or producing NaN', () => {
+    // tanh(1e9) is exactly 1.0 in float64, so asin lands exactly on +-pi/2.
+    const up = new CameraController({ povLatitude: 0, povLongitude: 0 }, mercator())
+    up.panMercator(1e9, 0)
+    expect(up.state.povLatitude).toBe(90)
+    const down = new CameraController({ povLatitude: -30, povLongitude: 0 }, mercator())
+    down.panMercator(-1e9, 0)
+    expect(down.state.povLatitude).toBe(-90)
+  })
+
+  it('the exact pole is absorbing: a finite delta cannot leave it', () => {
+    // atanh(sin(90deg)) = atanh(1) = +Infinity, and +Infinity + finite stays
+    // +Infinity in float64. Only setPose/rotate leave the pole (spec 2.5).
+    const c = new CameraController({ povLatitude: 90, povLongitude: 0 }, mercator())
+    c.panMercator(-1, 0)
+    expect(c.state.povLatitude).toBe(90)
+  })
+
+  it('a purely horizontal pan keeps latitude bit-exact', () => {
+    // lat 45 is a value where the atanh -> tanh -> asin round trip comes back
+    // one ulp short (measured 7.1e-15deg); the deltaM === 0 shortcut exists so
+    // a horizontal drag does not jitter latitude and dirty a full-redraw
+    // frame for nothing.
+    const c = new CameraController({ povLatitude: 45, povLongitude: 0 }, mercator())
+    c.panMercator(0, -72)
+    expect(c.state.povLatitude).toBe(45)
+    expect(c.state.povLongitude).toBe(288)
+  })
+
+  it('a zero delta is a no-op that does not dirty', () => {
+    const c = new CameraController(undefined, mercator())
+    c.consumeDirty()
+    c.panMercator(0, 0)
+    expect(c.consumeDirty()).toBe(false)
+  })
+
+  it('rejects non-finite deltas', () => {
+    const c = new CameraController(undefined, mercator())
+    expect(() => c.panMercator(Number.NaN, 0)).toThrow(/finite/i)
+    expect(() => c.panMercator(0, Number.POSITIVE_INFINITY)).toThrow(/finite/i)
+    // The name pins, for the reason the rotate guard test gives: /finite/i is
+    // satisfied however the guards are named, so only these show WHICH of a
+    // caller's two deltas was wrong.
+    expect(() => c.panMercator(NaN, 0)).toThrow(/deltaM/)
+    expect(() => c.panMercator(0, NaN)).toThrow(/deltaLng/)
   })
 })

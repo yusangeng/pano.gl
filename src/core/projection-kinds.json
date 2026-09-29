@@ -3,7 +3,8 @@
     "linear": 1,
     "cylindrical": 2,
     "planet": 3,
-    "pannini": 4
+    "pannini": 4,
+    "mercator": 5
   },
   "texture": {
     "equirectangular": 1

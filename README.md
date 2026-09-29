@@ -3,10 +3,10 @@
 [![Npm Info](https://nodei.co/npm/pano.gl.png?compact=true)](https://www.npmjs.com/package/pano.gl)
 
 A dependency-light viewer for equirectangular (360°) images and video. WebGPU
-first, WebGL2 as the fallback, four camera models and built-in pan-tilt-zoom —
+first, WebGL2 as the fallback, five camera models and built-in pan-tilt-zoom —
 two runtime dependencies, one of which is a logger.
 
-The ESM bundle is 38.1 kB gzipped. That number is deliberately conservative:
+The ESM bundle is 36.9 kB gzipped. That number is deliberately conservative:
 the build ships `minify: false` so the code stays readable in `node_modules`,
 and consumers who minify get it smaller.
 
@@ -96,6 +96,7 @@ each kind carries its own parameters:
 | `'cylindrical'` | `zoom` (0.01–1), `extent` (1×1) | Full 360° horizontally, vertical lines stay vertical. |
 | `'planet'` | `zoom` (0.01–1), `extent` (4×4) | The "little planet" look — the ground wraps into a sphere. |
 | `'pannini'` | `zoom` (0.01–1), `extent` (4×4) | Pannini projection — very wide fields of view with verticals kept straight. |
+| `'mercator'` | `zoom` (0.01–1), `extent` (1×1) | Conformal cylinder — uniform scale everywhere, poles at infinity. |
 
 `camera.pose` sets the starting orientation, `{ povLatitude, povLongitude }` in
 degrees. At runtime, `viewer.cameraOptions` swaps the projection **and keeps
@@ -115,7 +116,7 @@ keep the handler around for `off()`. `on('*', handler)` receives everything as
 | `media-play` / `media-pause` / `media-ended` | `{ target }` | Playback state changes (video). |
 | `media-seeking` / `media-seeked` | `{ target }` | Seeking (video). |
 | `media-progress` | `{ target }` | Playback advances (video). |
-| `rotate` | `{ lat, lng }` | After a drag. |
+| `rotate` | `{ lat, lng }` | After a drag. `lng` is the requested turn on every camera, unwrapped (`-72`, not `288`). `lat` is the applied delta on `mercator` (what the pan actually moved) and the requested one on the other cameras. |
 | `zoom` | `{ delta }` | After wheel or pinch. |
 | `device-lost` | `{ reason, message }` | The GPU device or WebGL context went away. The viewer cleans itself up; render nothing until you rebuild. |
 
@@ -150,22 +151,24 @@ browsers cap live contexts at roughly 16, and hitting the cap makes every new
 viewer fail silently), removes the DOM listeners and the canvas. A lost device
 fires `device-lost` and disposes itself.
 
-## The four projections
+## The five projections
 
-The names only go so far — the four cameras differ in ways pictures convey
-faster than prose. All four below are the same source — the linear camera at
+The names only go so far — the five cameras differ in ways pictures convey
+faster than prose. All five below are the same source — the linear camera at
 its default 70° fov, the non-linear cameras at zoom 1:
 
-| | |
-|---|---|
-| `linear` | `cylindrical` |
-| ![linear](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/linear.png) | ![cylindrical](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/cylindrical.png) |
-| `planet` | `pannini` |
-| ![planet](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/planet.png) | ![pannini](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/pannini.png) |
+| | | |
+|---|---|---|
+| `linear` | `cylindrical` | `planet` |
+| ![linear](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/linear.png) | ![cylindrical](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/cylindrical.png) | ![planet](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/planet.png) |
+| `pannini` | `mercator` | |
+| ![pannini](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/pannini.png) | ![mercator](https://raw.githubusercontent.com/yusangeng/pano.gl/master/demo/shots/mercator.png) | |
 
 Rule of thumb: `linear` for the photograph look, `cylindrical` when panning
 wide without side-stretch, `planet` for the little-planet effect, `pannini`
 when you want an ultrawide field with verticals still straight.
+`mercator` when every latitude must share one scale — the map look, poles
+pushed to infinity.
 
 ## Development
 

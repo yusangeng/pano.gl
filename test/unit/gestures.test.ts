@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifyWheel, classifyPinch, classifyDrag, WheelZoom, WheelDeltaMode } from '../../src/interaction/gestures'
+import { classifyWheel, classifyPinch, classifyDrag, classifyDragMercator, WheelZoom, WheelDeltaMode } from '../../src/interaction/gestures'
 
 describe('classifyWheel', () => {
   it('maps a line-mode wheel delta to a zoom step', () => {
@@ -117,5 +117,44 @@ describe('classifyDrag', () => {
     const small = classifyDrag({ deltaX: 100, deltaY: 0 }, { width: 500, height: 500 })
     const large = classifyDrag({ deltaX: 100, deltaY: 0 }, { width: 1000, height: 500 })
     expect(Math.abs(small.lng)).toBeCloseTo(Math.abs(large.lng) * 2, 5)
+  })
+})
+
+describe('classifyDragMercator', () => {
+  const surface = { width: 400, height: 200 }
+
+  it('a full-height upward drag is 2pi metres at zoom 1 -- one screen spans M in [-pi, pi]', () => {
+    // Spec 2.3: zoom 1 with extent 1x1 shows exactly gd(pi) = 85.051129deg
+    // of latitude either way of centre, so one screen height IS 2pi metres.
+    const d = classifyDragMercator({ deltaX: 0, deltaY: -200 }, surface, 1)
+    expect(d.meters).toBeCloseTo(2 * Math.PI, 10)
+    // toBeCloseTo, not toBe: -(0 / width) * 360 is IEEE negative zero, which
+    // Object.is distinguishes from +0. classifyDrag has the same -0 and the
+    // zero horizontal is what is being asserted, not its sign bit.
+    expect(d.lng).toBeCloseTo(0, 10)
+  })
+
+  it('zoom halves the metre span of the same pixels', () => {
+    const d = classifyDragMercator({ deltaX: 0, deltaY: -200 }, surface, 0.5)
+    expect(d.meters).toBeCloseTo(Math.PI, 10)
+  })
+
+  it('horizontal: lng matches classifyDrag exactly (I5, the theta row is shared)', () => {
+    const delta = { deltaX: 100, deltaY: 0 }
+    expect(classifyDragMercator(delta, surface, 1).lng)
+      .toBeCloseTo(classifyDrag(delta, surface).lng, 10)
+    expect(classifyDragMercator(delta, surface, 1).lng).toBeCloseTo(-90, 10)
+  })
+
+  it('the vertical sign is scene-follows-hand, same inversion as classifyDrag', () => {
+    const up = classifyDragMercator({ deltaX: 0, deltaY: -50 }, surface, 1).meters
+    const down = classifyDragMercator({ deltaX: 0, deltaY: 50 }, surface, 1).meters
+    expect(up).toBeGreaterThan(0)
+    expect(down).toBeLessThan(0)
+  })
+
+  it('a zero-sized surface reports no movement', () => {
+    expect(classifyDragMercator({ deltaX: 10, deltaY: 10 }, { width: 0, height: 0 }, 1))
+      .toEqual({ meters: 0, lng: 0 })
   })
 })
