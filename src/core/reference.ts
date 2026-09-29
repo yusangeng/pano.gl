@@ -21,6 +21,11 @@
  * legacy non-linear cameras never read latitude at all), `lngOffset` (a
  * v0.2.2 unit-mixing defect, corrected by user adjudication), and planet's
  * branch-point guard (NaN replaced by the spec's canonical values).
+ *
+ * Mercator (added 2026-09-29, mercator-camera spec) is not a transcription
+ * at all: it has no v0.2.2 original. Its authority is the spec's analytic
+ * invariants and gate C's three-way agreement, the same class of ownership
+ * as the latitude term above.
  */
 
 import type { CameraState, Projection } from './types'
@@ -58,7 +63,9 @@ function lngOffset (state: CameraState): number {
 /**
  * The latitude offset the non-linear projections consume: cylindrical and
  * pannini subtract it from `phi`; planet uses it as the Mobius tilt angle
- * (2026-09-28 planet-drag-semantics spec).
+ * (2026-09-28 planet-drag-semantics spec); mercator subtracts
+ * `atanh(sin(lat))`, the conformal counterpart of cylindrical's `- lat`
+ * (2026-09-29 mercator-camera spec).
  *
  * Not a transcription: v0.2.2 read latitude nowhere on these cameras (defect
  * F5), so there is no legacy number to preserve and the term is v1's own, in
@@ -225,6 +232,22 @@ function projectPannini (x: number, y: number, z: number, zoom: number, lng: num
   return toUV(theta, phi)
 }
 
+function projectMercator (x: number, y: number, z: number, zoom: number, lng: number, lat: number): UV {
+  // `x` is deliberately unread, exactly as in project_cylindrical.
+  const yy = y * zoom
+  const zz = z * zoom
+  const theta = zz * TWO_PI - lng
+  // The negated atanh(sin(lat)) mirrors cylindrical's "- lat" (spec I2): at
+  // the screen centre the two cameras read the same source point.
+  const M = yy * TWO_PI - Math.atanh(Math.sin(lat))
+  // gd(M) + pi/2 in the asin/tanh form: tanh saturates at exactly +-1 and
+  // asin's domain is closed, so any M -- including the +-Infinity an exact
+  // pole pose produces -- stays finite and branch-free (spec 2.4: the exp
+  // form overflows f32 near M = 88.7).
+  const phi = Math.asin(Math.tanh(M)) + HALF_PI
+  return toUV(theta, phi)
+}
+
 /**
  * Projects a point on the camera's surface to an equirectangular coordinate.
  *
@@ -254,6 +277,8 @@ export function project (x: number, y: number, z: number, state: CameraState, pr
       return projectPlanet(x, y, z, projection.zoom, lng, lat)
     case 'pannini':
       return projectPannini(x, y, z, projection.zoom, lng, lat)
+    case 'mercator':
+      return projectMercator(x, y, z, projection.zoom, lng, lat)
   }
 }
 

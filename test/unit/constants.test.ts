@@ -61,6 +61,10 @@ describe('projection kinds', () => {
     expect(cameraProjectionCode('cylindrical')).toBe(2)
     expect(cameraProjectionCode('planet')).toBe(3)
     expect(cameraProjectionCode('pannini')).toBe(4)
+    // 5 is not a legacy number: mercator has no v0.2.2 original. It is fixed by
+    // the 2026-09-29 mercator-camera spec and frozen from the first release
+    // that ships it.
+    expect(cameraProjectionCode('mercator')).toBe(5)
     expect(textureProjectionCode('equirectangular')).toBe(1)
   })
 
@@ -68,7 +72,7 @@ describe('projection kinds', () => {
     // The whole reason kinds are strings. A caller writing `{ kind: 'planet' }`
     // must not be able to write `{ kind: 3 }`, and the type must be the thing
     // that stops them -- not a runtime check that only fires in production.
-    expect(PROJECTION_KINDS).toEqual(['linear', 'cylindrical', 'planet', 'pannini'])
+    expect(PROJECTION_KINDS).toEqual(['linear', 'cylindrical', 'planet', 'pannini', 'mercator'])
     for (const kind of PROJECTION_KINDS) {
       expect(typeof kind).toBe('string')
     }
@@ -173,7 +177,7 @@ describe('projection kinds', () => {
     for (const file of srcTsFiles) {
       const src = readFileSync(file, 'utf8')
       for (const line of src.split('\n')) {
-        if (/^\s*(linear|cylindrical|planet|pannini|equirectangular)\s*:\s*\d/.test(line)) {
+        if (/^\s*(linear|cylindrical|planet|pannini|equirectangular|mercator)\s*:\s*\d/.test(line)) {
           offenders.push(`${path.relative(repoRoot, file)}: ${line.trim()}`)
         }
       }

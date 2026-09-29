@@ -93,8 +93,8 @@ const LEGACY_QUAD_VIEW: readonly [
  *   almost like plain perspective, with no error anywhere. (`near` is ordinary;
  *   any positive value below `far` works.)
  * - **`m = max(extent) / 2`, not per-axis.** All cameras are square today
- *   (cylindrical 1x1, planet and pannini 4x4), so the two agree, and `max` is
- *   what the captured matrices use.
+ *   (cylindrical and mercator 1x1, planet and pannini 4x4), so the two
+ *   agree, and `max` is what the captured matrices use.
  *
  * The `far = 1` pin is the one deliberate departure from the v0.2.2 capture:
  * composing `P * V`, only `M[2]` and `M[14]` read the `far` terms `P[10]`/`P[14]`,
@@ -102,7 +102,7 @@ const LEGACY_QUAD_VIEW: readonly [
  * `extent` -- `test/unit/matrix-baseline.test.ts` asserts exactly that.
  *
  * @param projection - The projection to build. `zoom` is *not* folded in here:
- *   all four shader paths apply it themselves, the linear path by widening the
+ *   all five shader paths apply it themselves, the linear path by widening the
  *   fov before this call.
  * @param depth - Which backend's depth clip range to produce. On the non-linear
  *   path it changes only the near-plane encoding (entries 2 and 14); both

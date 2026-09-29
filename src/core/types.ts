@@ -46,6 +46,14 @@ export type Projection =
   | { readonly kind: 'cylindrical'; readonly zoom: number; readonly extent: readonly [number, number] }
   | { readonly kind: 'planet'; readonly zoom: number; readonly extent: readonly [number, number] }
   | { readonly kind: 'pannini'; readonly zoom: number; readonly extent: readonly [number, number] }
+  /**
+   * The conformal cylinder (2026-09-29 mercator-camera spec): uniform scale
+   * everywhere, poles at infinity. Same zoom anchor as cylindrical -- full
+   * width 360 degrees at zoom 1 -- and the same 1x1 surface; the vertical
+   * field is the Gudermannian pair of the latitude, spanning +/-85.051129
+   * degrees (gd(pi), the EPSG:3857 cutoff) at zoom 1.
+   */
+  | { readonly kind: 'mercator'; readonly zoom: number; readonly extent: readonly [number, number] }
 
 /**
  * Everything the renderer needs to know about the pixels it is sampling.
