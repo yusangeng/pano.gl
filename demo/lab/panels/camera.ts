@@ -12,7 +12,7 @@ import { defaultProjection } from '../context'
 import { h } from '../dom'
 import { formatPlain, formatSignedDegrees } from '../format'
 
-const KINDS: ReadonlyArray<ProjectionKind> = ['linear', 'cylindrical', 'planet', 'pannini']
+const KINDS: ReadonlyArray<ProjectionKind> = ['linear', 'cylindrical', 'planet', 'pannini', 'mercator']
 
 /** zoom lives in [0.01, 1] -- two decades, so the slider is logarithmic. */
 const ZOOM_MIN = 0.01
