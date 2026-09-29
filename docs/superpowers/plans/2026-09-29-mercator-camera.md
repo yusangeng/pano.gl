@@ -75,7 +75,7 @@ demo/shots/mercator.png                   Task 14  lab 截图 800×450 + 全量�
 - Modify: `test/unit/constants.test.ts`
 - Modify: `test/unit/reference.test.ts`（仅机械加宽；不变量 describe 在 Task 2）
 
-- [ ] **Step 1: projection-kinds.json 加 mercator**
+- [x] **Step 1: projection-kinds.json 加 mercator**
 
 `camera` 对象在 `pannini` 之后加一行（保持既有缩进与逗号风格）：
 
@@ -83,12 +83,12 @@ demo/shots/mercator.png                   Task 14  lab 截图 800×450 + 全量�
 "mercator": 5
 ```
 
-- [ ] **Step 2: 跑生成器**
+- [x] **Step 2: 跑生成器**
 
 Run: `npm run gen:shaders`
 Expected: 无输出报错；`git diff src/renderer/shaders/generated.ts` 可见 WGSL 块新增 `CAMERA_PROJECTION_MERCATOR`、GLSL 块新增对应 `#define`。
 
-- [ ] **Step 3: types.ts 加宽两个类型**
+- [x] **Step 3: types.ts 加宽两个类型**
 
 `ProjectionKind` 联合加 `'mercator'`。`Projection` 判别联合在 pannini 成员之后加：
 
@@ -103,7 +103,7 @@ Expected: 无输出报错；`git diff src/renderer/shaders/generated.ts` 可见 
   | { readonly kind: 'mercator', readonly zoom: number, readonly extent: readonly [number, number] }
 ```
 
-- [ ] **Step 4: constants.ts 补齐（编译强制）**
+- [x] **Step 4: constants.ts 补齐（编译强制）**
 
 `CAMERA_CODES` 表加一行（漏加即 TS 错——这个表就是这样存在的）；`PROJECTION_KINDS` 数组末尾追加 `'mercator'`：
 
@@ -115,7 +115,7 @@ Expected: 无输出报错；`git diff src/renderer/shaders/generated.ts` 可见 
 export const PROJECTION_KINDS: readonly ProjectionKind[] = ['linear', 'cylindrical', 'planet', 'pannini', 'mercator']
 ```
 
-- [ ] **Step 5: matrix.ts 注释两处（无代码改动）**
+- [x] **Step 5: matrix.ts 注释两处（无代码改动）**
 
 `buildProjection` 的文档注释：
 - `m = max(extent) / 2` 条目里的枚举改为：`cylindrical and mercator 1x1, planet and pannini 4x4`；
@@ -123,7 +123,7 @@ export const PROJECTION_KINDS: readonly ProjectionKind[] = ['linear', 'cylindric
 
 mercator 走通用非线性正交路径（extent 1×1 与 cylindrical 同款），代码零改动。
 
-- [ ] **Step 6: reference.ts——公式、switch、模块头、latOffset**
+- [x] **Step 6: reference.ts——公式、switch、模块头、latOffset**
 
 (a) `projectPannini` 之后、`project()` 之前加（公式与 cylindrical 同款签名；`x` 不读，与 cylindrical 的注释同款钉住）：
 
@@ -163,7 +163,7 @@ function projectMercator (x: number, y: number, z: number, zoom: number, lng: nu
 
 (d) `latOffset` 的文档注释：把"cylindrical/pannini 减 φ、planet 当 Möbius 倾角"的枚举扩成三种用法，补一句 mercator——它减的是 `atanh(sin(lat))`，cylindrical `− lat` 的保角对应项。
 
-- [ ] **Step 7: constants.test.ts 三处**
+- [x] **Step 7: constants.test.ts 三处**
 
 (a) `uploads the numeric values the legacy shader hard-coded` 测试里，pannini 行之后加（带豁免注释——这不是 legacy 数字）：
 
@@ -182,7 +182,7 @@ function projectMercator (x: number, y: number, z: number, zoom: number, lng: nu
 
 (c) `is the only place these numbers appear` 测试的违规正则加一个分支：`(linear|cylindrical|planet|pannini|equirectangular|mercator)`。
 
-- [ ] **Step 8: reference.test.ts 机械加宽（四处）**
+- [x] **Step 8: reference.test.ts 机械加宽（四处）**
 
 (a) `isDegenerate` switch 在 `case 'cylindrical'` 之后加（I6：无分支、除数不为零、无 0/0 点）：
 
@@ -202,12 +202,12 @@ function projectMercator (x: number, y: number, z: number, zoom: number, lng: nu
 
 (c)(d) 'output range' 测试的投影数组和 no-NaN 扫描的投影数组（约 :181 与 :215）各追加同款一项（照抄邻近 cylindrical 项的 `as const` 风格）。
 
-- [ ] **Step 9: 跑测试与类型检查（此时必须全绿）**
+- [x] **Step 9: 跑测试与类型检查（此时必须全绿）**
 
 Run: `npx vitest run --project unit test/unit/constants.test.ts test/unit/reference.test.ts && npm run typecheck`
 Expected: 全绿。若 typecheck 报某个 `Record<ProjectionKind, ...>` 或穷尽 switch 缺 mercator——这正是编译强制在干活，把缺的补上（但按本 plan 的地图，不该出现地图外的文件）。
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add -A

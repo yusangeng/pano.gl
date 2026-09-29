@@ -22,7 +22,7 @@ import kinds from './projection-kinds.json'
  * `cameraProjectionCode` is the only bridge -- the only place a projection
  * kind turns into a number.
  */
-export type ProjectionKind = 'linear' | 'cylindrical' | 'planet' | 'pannini'
+export type ProjectionKind = 'linear' | 'cylindrical' | 'planet' | 'pannini' | 'mercator'
 
 /**
  * The texture projection kinds, as TypeScript sees them.
@@ -38,7 +38,8 @@ const CAMERA_CODES: Record<ProjectionKind, number> = {
   linear: kinds.camera.linear,
   cylindrical: kinds.camera.cylindrical,
   planet: kinds.camera.planet,
-  pannini: kinds.camera.pannini
+  pannini: kinds.camera.pannini,
+  mercator: kinds.camera.mercator
 }
 
 const TEXTURE_CODES: Record<TextureProjection, number> = {
@@ -63,5 +64,5 @@ export function textureProjectionCode (projection: TextureProjection): number {
 
 /** Every camera projection kind, in a stable order. */
 export const PROJECTION_KINDS: readonly ProjectionKind[] = [
-  'linear', 'cylindrical', 'planet', 'pannini'
+  'linear', 'cylindrical', 'planet', 'pannini', 'mercator'
 ]

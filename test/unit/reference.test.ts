@@ -31,6 +31,11 @@ function isDegenerate (kind: Projection['kind'], x: number, y: number, z: number
     case 'cylindrical':
       // Nothing it divides by can be zero.
       return false
+    case 'mercator':
+      // tanh saturates, asin's domain is closed: nothing here can produce
+      // NaN at any finite input, and the pole poses stay finite by design
+      // (spec 2.5).
+      return false
   }
 }
 
@@ -59,7 +64,8 @@ describe('homogeneity', () => {
   const nonLinear: Array<[string, Projection]> = [
     ['cylindrical', { kind: 'cylindrical', zoom: 1, extent: [1, 1] }],
     ['planet', { kind: 'planet', zoom: 1, extent: [4, 4] }],
-    ['pannini', { kind: 'pannini', zoom: 1, extent: [4, 4] }]
+    ['pannini', { kind: 'pannini', zoom: 1, extent: [4, 4] }],
+    ['mercator', { kind: 'mercator', zoom: 1, extent: [1, 1] }]
   ]
 
   it.each(nonLinear)('the %s projection does NOT ignore magnitude', (_name, projection) => {
@@ -182,7 +188,8 @@ describe('output range', () => {
     { kind: 'linear', fov: 1, aspect: 1 },
     { kind: 'cylindrical', zoom: 1, extent: [1, 1] },
     { kind: 'planet', zoom: 1, extent: [4, 4] },
-    { kind: 'pannini', zoom: 1, extent: [4, 4] }
+    { kind: 'pannini', zoom: 1, extent: [4, 4] },
+    { kind: 'mercator', zoom: 1, extent: [1, 1] }
   ]
 
   it.each(projections.map((p) => [String(p.kind), p] as const))(
@@ -216,7 +223,8 @@ describe('output range', () => {
       { kind: 'linear', fov: 1, aspect: 1 },
       { kind: 'cylindrical', zoom: 1, extent: [1, 1] },
       { kind: 'planet', zoom: 1, extent: [4, 4] },
-      { kind: 'pannini', zoom: 1, extent: [4, 4] }
+      { kind: 'pannini', zoom: 1, extent: [4, 4] },
+      { kind: 'mercator', zoom: 1, extent: [1, 1] }
     ]
     for (const projection of projections) {
       for (let y = -1; y <= 1; y += 0.125) {
