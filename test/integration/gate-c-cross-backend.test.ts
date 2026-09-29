@@ -5,7 +5,7 @@ import type { CameraState, Projection } from '../../src/core/types'
 /*
  * Gate C: do the two hand-transcribed shaders agree?
  *
- * The WGSL and GLSL sources are separate files with the same four formulas
+ * The WGSL and GLSL sources are separate files with the same five formulas
  * written twice. Nothing in the type system or the build connects them. This is
  * the only thing that does.
  *

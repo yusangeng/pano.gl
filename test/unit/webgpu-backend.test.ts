@@ -427,7 +427,7 @@ describe('setCamera', () => {
      * matrix-equality early-out cannot tell "nothing changed" from "the
      * camera moved in the uniforms" -- the version this test replaced
      * skipped both the upload and the dirty flag on every camera change,
-     * freezing pan and zoom on three of the four kinds. There is no skip
+     * freezing pan and zoom on four of the five kinds. There is no skip
      * left to get wrong; the render loop already limits setCamera to
      * frames that are being drawn, so the unconditional write costs one
      * small upload per drawn frame. The second call moves the pose (the
