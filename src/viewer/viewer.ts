@@ -137,7 +137,10 @@ export class Viewer extends Disposable {
       if (projection.kind === 'mercator') {
         // Content-follows-hand in the metre metric (mercator-camera spec
         // section 4): the event still speaks degrees -- the APPLIED delta,
-        // which is what a clamped pan actually moved.
+        // which is what a clamped pan actually moved. `lng` needs no such
+        // correction: longitude only wraps (lossless mod 360), so the
+        // requested turn IS the applied one -- a wrapped pose-difference
+        // (288, not -72) would break delta-summing consumers.
         const d = this.#input.dragToMercatorPan(deltaX, deltaY, surface, projection.zoom)
         if (d.meters === 0 && d.lng === 0) return
         const before = this.#camera.state.povLatitude
