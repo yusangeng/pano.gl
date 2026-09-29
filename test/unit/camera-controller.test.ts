@@ -501,7 +501,7 @@ describe('CameraController', () => {
   })
 
   it('setAspect leaves a non-linear projection alone', () => {
-    // The other three cameras get their surface shape from the quad's extent,
+    // The other four cameras get their surface shape from the quad's extent,
     // which the shader reads; there is no aspect field to write and inventing one
     // would be a field nothing consumes.
     const c = new CameraController(undefined, cylindrical())

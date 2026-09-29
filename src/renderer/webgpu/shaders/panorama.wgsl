@@ -36,7 +36,7 @@ const PI: f32 = 3.141592653589793;
 const HALF_PI: f32 = 1.5707963267948966;
 const TWO_PI: f32 = 6.283185307179586;
 
-// `CAMERA_PROJECTION_LINEAR/_CYLINDRICAL/_PLANET/_PANNINI` and
+// `CAMERA_PROJECTION_LINEAR/_CYLINDRICAL/_PLANET/_PANNINI/_MERCATOR` and
 // `TEXTURE_PROJECTION_EQUIRECTANGULAR` are prepended above this file by
 // `shaders/index.ts`, generated from `src/core/projection-kinds.json`. They are
 // the only place these numbers appear -- there is no numeric literal for a
