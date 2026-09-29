@@ -58,7 +58,7 @@ export interface ViewerInit {
  * A copy of a projection, deep enough that nothing the caller holds aliases the
  * controller's: `extent` is copied as well as the object, because it is an
  * array and a shallow copy would still share it. The `linear` branch has no
- * `extent` -- the four-member union is why this is per kind rather than one
+ * `extent` -- the five-member union is why this is per kind rather than one
  * `structuredClone`. Module-level because the constructor needs the copy
  * before `#camera` exists.
  */
@@ -132,10 +132,20 @@ export class Viewer extends Disposable {
     })
 
     this.#input.on('pan', ({ deltaX, deltaY }) => {
-      const d = this.#input.dragToRotation(deltaX, deltaY, {
-        width: this.canvas.clientWidth,
-        height: this.canvas.clientHeight
-      })
+      const surface = { width: this.canvas.clientWidth, height: this.canvas.clientHeight }
+      const projection = this.#camera.projection
+      if (projection.kind === 'mercator') {
+        // Content-follows-hand in the metre metric (mercator-camera spec
+        // section 4): the event still speaks degrees -- the APPLIED delta,
+        // which is what a clamped pan actually moved.
+        const d = this.#input.dragToMercatorPan(deltaX, deltaY, surface, projection.zoom)
+        if (d.meters === 0 && d.lng === 0) return
+        const before = this.#camera.state.povLatitude
+        this.#camera.panMercator(d.meters, d.lng)
+        this.events.emit('rotate', { lat: this.#camera.state.povLatitude - before, lng: d.lng })
+        return
+      }
+      const d = this.#input.dragToRotation(deltaX, deltaY, surface)
       if (d.lat === 0 && d.lng === 0) return
       this.#camera.rotate(d.lat, d.lng)
       this.events.emit('rotate', { lat: d.lat, lng: d.lng })
@@ -230,9 +240,9 @@ export class Viewer extends Disposable {
 
   /**
    * Zooms by a relative magnification: a positive delta magnifies the picture
-   * by (1 + delta), a negative one shrinks it by the same factor. All four
+   * by (1 + delta), a negative one shrinks it by the same factor. All five
    * cameras divide their field parameter by (1 + delta) -- the linear camera
-   * parameterises by fov, clamped to [15°, 110°]; the other three by zoom,
+   * parameterises by fov, clamped to [15°, 110°]; the other four by zoom,
    * clamped to [0.01, 1].
    */
   zoom (delta: number): void {

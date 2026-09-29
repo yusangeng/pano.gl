@@ -660,5 +660,10 @@ describe('panMercator', () => {
     const c = new CameraController(undefined, mercator())
     expect(() => c.panMercator(Number.NaN, 0)).toThrow(/finite/i)
     expect(() => c.panMercator(0, Number.POSITIVE_INFINITY)).toThrow(/finite/i)
+    // The name pins, for the reason the rotate guard test gives: /finite/i is
+    // satisfied however the guards are named, so only these show WHICH of a
+    // caller's two deltas was wrong.
+    expect(() => c.panMercator(NaN, 0)).toThrow(/deltaM/)
+    expect(() => c.panMercator(0, NaN)).toThrow(/deltaLng/)
   })
 })
