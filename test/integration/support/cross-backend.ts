@@ -239,7 +239,7 @@ export async function referenceImage (request: RenderRequest): Promise<RenderRes
   const sourceData = ctx.getImageData(0, 0, GATE_C_SIZE, GATE_C_SIZE).data
 
   // Only the linear projection is scale-invariant, and for it the extent is
-  // unread. The other three carry theirs in the projection itself -- which is
+  // unread. The other four carry theirs in the projection itself -- which is
   // what let the geometry subsystem disappear.
   const extent = projection.kind === 'linear' ? ([2, 2] as const) : projection.extent
   const rgba = new Uint8Array(width * height * 4)

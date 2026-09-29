@@ -210,6 +210,15 @@ export default defineConfig({
            * WebGPU-only days; both are dual-prototyped to match, and its one
            * WebGPU-mechanism test skips itself with a probe.
            *
+           * `mercator-drag` is here for CI coverage rather than backend
+           * coverage: in the `integration` project its five tests all skip
+           * under software WebGPU's presented-canvas death, so without this
+           * line the mercator pan wiring would have ZERO executing tests in
+           * CI. Its assertions are pose-and-event based -- no pixel readback
+           * -- so they need no adapter, and running them here also proves the
+           * gesture path on WebGL2, which is what the no-webgpu world
+           * actually runs.
+           *
            * Still a whitelist, not `test/integration/**`. The gates and the
            * backend smoke tests all assert a real adapter and would fail here
            * for a reason that has nothing to do with their subject; a blacklist
@@ -227,7 +236,7 @@ export default defineConfig({
           include: [
             'test/integration/fallback/**/*.test.ts',
             'test/integration/user-story-(photo|video|camera-switch|media-failure).test.ts',
-            'test/integration/(viewer-events|dispose-order).test.ts'
+            'test/integration/(viewer-events|dispose-order|mercator-drag).test.ts'
           ],
           browser: {
             enabled: true,

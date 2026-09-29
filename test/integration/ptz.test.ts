@@ -202,6 +202,17 @@ describe('InputController', () => {
     expect(r.lat).toBeCloseTo(-18, 5)
   })
 
+  it('dragToMercatorPan delegates to classifyDragMercator', () => {
+    const el = host()
+    const input = new InputController(el)
+    const r = input.dragToMercatorPan(100, -50, { width: 1000, height: 500 }, 0.5)
+    input.dispose()
+    // Same drag as the classifyDrag twin: lng is the shared theta row (I5).
+    // metres = -(deltaY/h)*2pi*zoom with deltaY -50, zoom 0.5 = 0.1*pi.
+    expect(r.lng).toBeCloseTo(-36, 5)
+    expect(r.meters).toBeCloseTo(0.3141592653589793, 5)
+  })
+
   it('emits nothing after dispose', () => {
     const el = host()
     const input = new InputController(el)

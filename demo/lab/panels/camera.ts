@@ -7,12 +7,15 @@
  * jump when the kind buttons are clicked.
  */
 import type { CameraState, Projection, ProjectionKind } from '../../../src/index'
+import { PROJECTION_KINDS } from '../../../src/core/constants'
 import type { LabContext } from '../context'
 import { defaultProjection } from '../context'
 import { h } from '../dom'
 import { formatPlain, formatSignedDegrees } from '../format'
 
-const KINDS: ReadonlyArray<ProjectionKind> = ['linear', 'cylindrical', 'planet', 'pannini', 'mercator']
+// The one source of truth for the kinds (core/projection-kinds.json through
+// the generator): a literal here would drift the day a sixth projection lands.
+const KINDS: ReadonlyArray<ProjectionKind> = PROJECTION_KINDS
 
 /** zoom lives in [0.01, 1] -- two decades, so the slider is logarithmic. */
 const ZOOM_MIN = 0.01

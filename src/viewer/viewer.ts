@@ -23,6 +23,14 @@ import type { CameraOptions } from './types'
  * payload it typechecks against is `{ target: Viewer }`.
  */
 export interface ViewerEvents extends EventMap {
+  /**
+   * After a drag. `lng` is the requested turn on every camera, unwrapped so
+   * delta-summing consumers keep working (`-72`, not `288`). `lat` is
+   * kind-dependent: `mercator` reports the APPLIED delta -- the pose
+   * difference its metre-metric pan actually produced -- while the other
+   * cameras report the REQUESTED linear delta, which can overshoot the
+   * clamped pose near the poles.
+   */
   rotate: { lat: number, lng: number }
   zoom: { delta: number }
   'device-lost': DeviceLost

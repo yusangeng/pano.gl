@@ -109,11 +109,11 @@ describe('buildCameraTransform', () => {
  * legacy quad's coordinate range exactly?
  *
  * The legacy non-linear cameras rasterised a quad at x = 1 spanning y and z,
- * sized 1x1 for cylindrical and 4x4 for planet and pannini, and fed the
- * interpolated position straight into the projection formula. The new renderer
- * gets the same point from `invClip`. If the matrix encodes the wrong extent,
- * the picture scales -- which looks almost right, and is the failure mode this
- * gate exists to catch.
+ * sized 1x1 for cylindrical and mercator and 4x4 for planet and pannini,
+ * and fed the interpolated position straight into the projection formula.
+ * The new renderer gets the same point from `invClip`. If the matrix encodes
+ * the wrong extent, the picture scales -- which looks almost right, and is
+ * the failure mode this gate exists to catch.
  *
  * This is CPU work, so it belongs in the unit project: it needs no adapter, and
  * a property that can be checked without a GPU should not be gated behind one.
@@ -123,12 +123,13 @@ describe('gate B: surface reconstruction', () => {
   // it to `string` and `{ kind: camera, ... }` no longer picks a Projection
   // variant. The annotation also contextually types `extent` as a tuple.
   const CASES: ReadonlyArray<{
-    camera: 'cylindrical' | 'planet' | 'pannini'
+    camera: 'cylindrical' | 'planet' | 'pannini' | 'mercator'
     extent: readonly [number, number]
   }> = [
     { camera: 'cylindrical', extent: [1, 1] },
     { camera: 'planet', extent: [4, 4] },
-    { camera: 'pannini', extent: [4, 4] }
+    { camera: 'pannini', extent: [4, 4] },
+    { camera: 'mercator', extent: [1, 1] }
   ]
 
   /*
