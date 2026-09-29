@@ -3,17 +3,12 @@
  *
  * The matrix maths is stateless and lives in `core/matrix.ts`. What is here is
  * everything that needs memory: clamping on assignment, the relative semantics
- * of rotate and zoom, and the dirty flag.
+ * of rotate and zoom, and the dirty flag -- which is why a static image renders
+ * once instead of running a full-screen fragment shader on every rAF tick
+ * forever (as the legacy FrameDriver did).
  *
- * The dirty flag is why a static image renders once instead of sixty times a
- * second. The legacy FrameDriver redrew unconditionally on every rAF tick,
- * which is a full-screen fragment shader running forever for a picture that
- * has not changed.
- *
- * Nothing here recomputes a projection formula. The CPU-side authority for those
- * is `core/reference.ts` (`project` / `ndcToSurface`), which exists so that a
- * test can predict what the shader will do; duplicating a formula here would
- * create a second opinion about it.
+ * Nothing here recomputes a projection formula: the CPU-side authority is
+ * `core/reference.ts`, and a formula duplicated here would be a second opinion.
  */
 
 import type { CameraState, Projection } from '../core/types'
@@ -22,16 +17,12 @@ import { clampLatitude, wrapLongitude, assertFinite, assertPositive } from '../c
 /**
  * The camera a viewer starts with when the caller does not name one.
  *
- * The legacy value: `CameraFactory.defaultDataMap.perspective` was
- * `{ fov: 70, aspect: 1 }`, in degrees because cuon's `mat4.perspective` took
- * degrees. `Projection.fov` is in radians (P2's `legacyFovFrom` inverts the
- * degree-based matrix, which is what proves it), so 70 degrees is converted here
- * once rather than at every call site.
- *
- * `aspect` is a placeholder: the viewer overwrites it with the surface's real
- * aspect on the first resize, which happens during construction. It cannot be
- * known before a container exists, and 1 is the value that is wrong in the least
- * visible way if a frame somehow got drawn first.
+ * The legacy default was `fov: 70` in degrees; `Projection.fov` is in radians
+ * (the legacy matrix took degrees), so the conversion happens here once. The
+ * `aspect` is a placeholder the viewer overwrites from the surface's real size
+ * on the first resize, during construction: it cannot be known before a
+ * container exists, and 1 is wrong in the least visible way if a frame somehow
+ * got drawn first.
  */
 export const DEFAULT_PROJECTION: Projection = {
   kind: 'linear',
@@ -80,9 +71,8 @@ export class CameraController {
    * Reads and clears the dirty flag.
    *
    * Consuming rather than reading is deliberate: the renderer is the only
-   * consumer, and a flag that had to be cleared by hand is exactly the kind of
-   * state that goes wrong. The legacy `needUpdate_` latch was cleared in one
-   * place and set in three.
+   * consumer, and a flag cleared by hand is exactly the state that goes wrong
+   * (the legacy latch was cleared in one place and set in three).
    */
   consumeDirty (): boolean {
     const was = this.#dirty
@@ -127,10 +117,9 @@ export class CameraController {
    * Both parameterisations divide by (1 + delta) -- fov for the linear camera,
    * zoom for the others -- because in both a smaller parameter is a narrower
    * field, so ONE formula serves four cameras and the wheel step feels the
-   * same on each. v1 multiplied instead (`zoom * (1 + delta)`), reading the
-   * "positive is zoom in" wheel contract backwards and inverting wheel and
-   * pinch relative to v0.2.2; and it returned at the kind guard for linear,
-   * which v0.2.2's fov-adjusting PerspectiveTrans.zoom never did.
+   * same on each. v1 multiplied instead, reading the "positive is zoom in"
+   * wheel contract backwards and inverting wheel and pinch; corrected by user
+   * adjudication, pan-zoom-semantics spec §2-3.
    *
    * No-op for a zero delta and for a delta whose clamped result is the value
    * already held (a wheel pinned at a limit).
@@ -157,11 +146,8 @@ export class CameraController {
   }
 
   /**
-   * Replaces the projection, keeping the pose.
-   *
-   * The legacy `cameraOptions` setter rebuilt the whole camera, which reset the
-   * pose to the origin -- so changing the projection silently threw away where
-   * the user was looking.
+   * Replaces the projection, keeping the pose -- the legacy setter rebuilt the
+   * whole camera and silently threw away where the user was looking.
    */
   setProjection (projection: Projection): void {
     this.#projection = projection
@@ -175,10 +161,9 @@ export class CameraController {
    *
    * The surface size is knowledge only the viewer's resize handler has, and for
    * the linear camera the projection's aspect IS the surface's -- rendering a
-   * 16:9 container with the default square aspect stretches the image. The other
-   * three cameras take their shape from the quad's extent, which the shader reads
-   * (P2's `LEGACY_EXTENT`), so they have no aspect field to write and are left
-   * untouched rather than given one nothing consumes.
+   * 16:9 container with the default square aspect stretches the image. The
+   * other three cameras take their shape from the projection's `extent`, which
+   * the shader reads, so they have no aspect field to write.
    *
    * @param aspect - width / height of the drawing surface. Must be positive.
    * @throws If `aspect` is not finite or is not greater than zero. A zero aspect

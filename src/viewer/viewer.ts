@@ -1,14 +1,8 @@
 /**
- * The shared viewer, composed rather than mixed in.
- *
- * The legacy version was `mix(Viewer).with(CameraFactory)` where `Viewer` was
- * itself `mix(Eventable).with(Delegate, RenderFlow)`. The problem was not the
- * syntax but the semantics: the viewer WAS a Delegate and WAS a RenderFlow, so
- * every member landed in one namespace, initialisation order was decided
- * implicitly by mixin order, and `dispose` chained through `super` -- which is
- * why five separate teardown steps were missing.
- *
- * Here each collaborator is a field and `dispose` names them in order.
+ * The shared viewer, composed rather than mixed in: each collaborator is a
+ * field, and `dispose` names them in order. (The legacy mixin chain put every
+ * member in one namespace with implicit init order, and five teardown steps
+ * went missing.)
  */
 
 import { Disposable, EventEmitter, type EventMap, type WildcardListener } from '../core/events'
@@ -24,11 +18,9 @@ import type { CameraOptions } from './types'
 /**
  * Everything the viewer can emit.
  *
- * The eight `media-*` events are the source's, re-emitted with `target` rewritten
- * to the viewer. They are declared here rather than left to the source's own
- * `MediaEvents`, because a consumer holds a viewer and never a source:
- * `viewer.on('media-play', ...)` has to typecheck against the payload the viewer
- * actually hands out, which is `{ target: Viewer }`.
+ * The eight `media-*` events are the source's, re-emitted with `target`
+ * rewritten to the viewer: a consumer holds a viewer and never a source, so the
+ * payload it typechecks against is `{ target: Viewer }`.
  */
 export interface ViewerEvents extends EventMap {
   rotate: { lat: number, lng: number }
@@ -52,13 +44,10 @@ export interface ViewerInit {
    * The canvas to draw into.
    *
    * Created by the caller, not here, because acquiring a GPU device needs a
-   * canvas and is asynchronous: it has to exist before this constructor runs, and
-   * the backend was built from it. Ownership transfers at construction -- the
-   * viewer appends it and removes it on dispose, so there is exactly one canvas
-   * and the one the backend draws into is the one in the DOM. The legacy viewer
-   * built its own canvas internally, which is why `renderer-canvas` (the class
-   * its gesture callbacks were bound to) was not the canvas anybody was drawing
-   * into.
+   * canvas and is asynchronous: it has to exist before this constructor runs,
+   * and the backend was built from it. Ownership transfers at construction --
+   * the viewer appends it and removes it on dispose, so the one the backend
+   * draws into is the one in the DOM.
    */
   readonly canvas: HTMLCanvasElement
   readonly camera: CameraOptions | undefined
@@ -67,20 +56,11 @@ export interface ViewerInit {
 
 /**
  * A copy of a projection, deep enough that nothing the caller holds aliases the
- * controller's.
- *
- * `extent` is copied as well as the object: it is an array, so a shallow copy
- * would still share it, and `projection.extent[0] = 4` would reach the shader
- * through a write that looks like it touches only the caller's own value.
- *
- * The `linear` branch has no `extent` to copy -- the four-member union is why
- * this is written per kind rather than as a single `structuredClone`.
- *
- * A module-level function rather than a private method because it is genuinely
- * pure and reads no instance state. That matters at exactly one call site: the
- * constructor needs the copy before `#camera` exists, so a private method would
- * be running against a half-initialised `this` and would stay safe only for as
- * long as nobody later had it read a field.
+ * controller's: `extent` is copied as well as the object, because it is an
+ * array and a shallow copy would still share it. The `linear` branch has no
+ * `extent` -- the four-member union is why this is per kind rather than one
+ * `structuredClone`. Module-level because the constructor needs the copy
+ * before `#camera` exists.
  */
 function snapshotProjection (projection: Projection): Projection {
   return projection.kind === 'linear'
@@ -179,15 +159,11 @@ export class Viewer extends Disposable {
   on<K extends keyof ViewerEvents & string> (type: K, fn: (event: ViewerEvents[K]) => void): () => void
   on (type: '*', fn: WildcardListener<ViewerEvents>): () => void
   on (type: string, fn: (...args: never[]) => void): () => void {
-    // Bound as well as cast, and the bind is load-bearing. A cast alone detaches
-    // the method from its receiver, and `EventEmitter.on` reads `this`:
-    // measured, the unbound form threw "Cannot read properties of undefined
-    // (reading '#listeners')" from inside the emitter. `bind` keeps the method
-    // attached; the cast only widens the signature to the emitter's
-    // implementation one, which is the signature it really has -- TypeScript
-    // simply does not offer an implementation signature to callers. Neither
-    // public overload can be called from here: the first demands a one-argument
-    // callback and the second demands the literal `'*'`.
+    // Bound as well as cast -- the bind is load-bearing. A cast alone detaches
+    // the method from its receiver and `EventEmitter.on` reads `this`; measured,
+    // the unbound form threw from inside the emitter. The cast widens to the
+    // emitter's implementation signature, which is the signature this body
+    // really has: neither public overload accepts what this call site passes.
     const dispatch = this.events.on.bind(this.events) as
     (type: string, fn: (...args: never[]) => void) => () => void
     return dispatch(type, fn)
@@ -196,22 +172,12 @@ export class Viewer extends Disposable {
   /**
    * The device's real limits, as reported by the backend in use.
    *
-   * Copied, against the same boundary as `cameraOptions` and for the same
-   * reason: this getter is public, the backend is not, and a caller of the
-   * constructor holds the backend object. Returning its record directly hands
-   * every caller write access to state other callers read -- and the field that
-   * suffers is `maxTextureDimension`, the number that decides whether a source
-   * must be downscaled, so the corruption is shared rather than local to one
-   * application.
-   *
-   * `adapter` is copied too. `Readonly<Record<string, string>>` is a
-   * compile-time modifier exactly as `Projection`'s `readonly` fields are, so a
-   * shallow copy would still share the record. Its values are strings, so one
-   * more level closes it completely and there is no third level to chase.
-   *
-   * The backend keeps handing out its live reference, as it should: that is the
-   * internal path, and copying there would allocate on every read for nobody's
-   * benefit.
+   * Copied at this public boundary because the backend is not public, yet a
+   * caller of the constructor holds the backend object: returning its record
+   * directly hands every caller write access to state every other caller reads
+   * (pinned by test/integration/viewer-capabilities.test.ts). `adapter` is
+   * copied too -- `Readonly<Record<string, string>>` is a compile-time modifier
+   * only, and its string values mean one more level closes it completely.
    */
   get capabilities (): Capabilities {
     const capabilities = this.#backend.capabilities
@@ -229,17 +195,13 @@ export class Viewer extends Disposable {
   /**
    * The camera, as a copy.
    *
-   * `CameraController` hands out the objects it holds, and `Projection`'s
-   * `readonly` fields are a compile-time modifier only -- so returning them
-   * directly would give the caller a writable alias to viewer state. The damage
-   * is not that the state moves but that it moves *silently*: a write through
-   * the alias leaves the controller's dirty flag clear, so the change never
-   * reaches a frame, and the application is left holding an object that
-   * disagrees with what is on screen.
-   *
-   * Copied here and in the setter, which are human-frequency calls, and NOT on
-   * `#drawFrame`'s path, which runs once per frame and reads the live reference
-   * so that a frame costs no allocation.
+   * `readonly` is a compile-time modifier only, so returning the controller's
+   * objects directly would hand the caller a writable alias whose writes leave
+   * the dirty flag clear -- the change never reaches a frame, and the
+   * application holds an object that disagrees with the screen (pinned by
+   * test/integration/camera-options.test.ts). Copied here and in the setter,
+   * which are human-frequency calls; `#drawFrame` reads the live reference so
+   * a frame costs no allocation.
    */
   get cameraOptions (): CameraOptions {
     return {
@@ -250,19 +212,13 @@ export class Viewer extends Disposable {
 
   set cameraOptions (options: CameraOptions) {
     this.assertAlive()
-    // Only the projection is replaced; the pose is kept. The legacy setter
-    // rebuilt the whole camera and reset it to the origin, so changing the
-    // projection silently threw away where the user was looking. A caller that
-    // wants to move the camera sets `pose` through `rotate` or `setPose`, which
-    // is where the clamping lives.
+    // Only the projection is replaced; the pose is kept -- a caller that wants
+    // to move the camera uses `rotate` or `setPose`, where the clamping lives.
     if (options.pose) this.#camera.setPose({ ...this.#camera.state, ...options.pose })
-    // Copied on the way in as well as on the way out. `setProjection` stores
-    // what it is given, so passing the caller's object through would leave that
-    // caller holding write access to the camera's projection -- the same silent
-    // no-redraw write the getter's copy exists to prevent, reaching the state
-    // by the other door. Copying on one side only is the arrangement that is
-    // incoherent; copying on both closes it. The pose needs no copy here:
-    // `setPose` builds a new object rather than adopting this one.
+    // Copied on the way in as well as out: `setProjection` stores what it is
+    // given, so passing the caller's object through would leave it holding the
+    // same silent no-redraw write the getter's copy exists to prevent. The pose
+    // needs no copy -- `setPose` builds a new object rather than adopting one.
     this.#camera.setProjection(snapshotProjection(options.projection))
   }
 
@@ -340,8 +296,6 @@ export class Viewer extends Disposable {
   #observeResize (): void {
     // ResizeObserver rather than a window resize listener: a viewer inside a
     // flex layout or a resizable panel changes size without the window doing so.
-    // The legacy code listened on window and additionally called
-    // `window.removeEventLstener` -- a typo, so its listener was never removed.
     this.#resizeObserver = new ResizeObserver(() => this.#resize())
     this.#resizeObserver.observe(this.canvas)
   }
