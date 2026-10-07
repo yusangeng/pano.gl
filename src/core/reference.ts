@@ -25,12 +25,13 @@
  *
  * - aspect fit (2026-10-07, camera-aspect-fit spec): v0.2.2 sized the ortho
  *   box as max(extent)/2 on BOTH axes -- a square box inherited from the
- *   square quad geometry -- so every non-square container stretched the
- *   picture vertically. The user-adjudicated correction derives the box per
- *   axis from the container (resolveExtent); same class as lngOffset (an
- *   inherited framework defect corrected by adjudication), and like it, the
- *   legacy behaviour stays reachable bit-for-bit through fit:'extent' with a
- *   square tuple, which is how gate A keeps watching the v0.2.2 pixels.
+ *   square quad geometry -- so every non-square container mis-framed the
+ *   vertical axis (the centre pixel was not square). The user-adjudicated
+ *   correction derives the box per axis from the container (resolveExtent);
+ *   same class as lngOffset (an inherited framework defect corrected by
+ *   adjudication), and like it, the legacy behaviour stays reachable
+ *   bit-for-bit through fit:'extent' with a square tuple, which is how
+ *   gate A keeps watching the v0.2.2 pixels.
  *
  * Mercator (added 2026-09-29, mercator-camera spec) is not a transcription
  * at all: it has no v0.2.2 original. Its authority is the spec's analytic
@@ -296,10 +297,18 @@ export function project (x: number, y: number, z: number, state: CameraState, pr
 
 /**
  * Recovers the surface point an NDC position maps to, on the RESOLVED extent
- * (the tuple `resolveExtent` returns for the container -- buildProjection
- * resolves the same value for the ortho box, which is why this inverts it).
- * Each axis scales by its own half-extent; x stays pinned at 1, the plane the
- * legacy quad sat on.
+ * (the tuple `resolveExtent` returns for the container; the ortho box
+ * itself follows the same value in the matrix cascade, which is why this
+ * inverts it). Each axis scales by its own half-extent; x stays pinned at 1,
+ * the plane the legacy quad sat on.
+ *
+ * **The sign on `ndcX` is positive**: the fixed view's basis makes a positive
+ * horizontal device coordinate a positive world `z`. Getting it backwards
+ * mirrors the panorama horizontally -- subtle enough to survive review on a
+ * symmetric test image, which is what the P0 baseline comparison is for.
+ *
+ * @param ndcX - Horizontal NDC axis (its sign is what the warning covers).
+ * @param ndcY - Vertical NDC axis.
  */
 export function ndcToSurface (
   ndcX: number,
