@@ -82,10 +82,10 @@ const LEGACY_QUAD_VIEW: readonly [
  * camera keeps its own `projection.aspect` as the authority -- the `aspect`
  * argument is the container's W/H and is deliberately ignored on this branch.
  *
- * **Non-linear** gets an orthographic box sized to the projection's `extent`. The
- * `extent` is load-bearing: it is the only carrier of the surface coordinates
- * (see `LEGACY_QUAD_VIEW`), so a box of the wrong size silently rescales `y`/`z`
- * before the shader sees them.
+ * **Non-linear** gets an orthographic box sized to the projection's resolved
+ * `extent`. The `extent` is load-bearing: it is the only carrier of the surface
+ * coordinates (see `LEGACY_QUAD_VIEW`), so a box of the wrong size silently
+ * rescales `y`/`z` before the shader sees them.
  *
  * Two pinned details:
  *
@@ -152,6 +152,20 @@ const QUAD_FAR = 1
  * Equivalent to `projection * view`, in that order. Which view is used depends
  * on the projection family -- the linear path rotates the world, the non-linear
  * paths must not.
+ *
+ * @param state - Camera angles in degrees. Read only on the linear branch; the
+ *   non-linear paths take the fixed `LEGACY_QUAD_VIEW` instead.
+ * @param projection - The projection to build from. `zoom` is *not* folded in
+ *   here: all five shader paths apply it themselves, the linear path by
+ *   widening the fov before this call.
+ * @param depth - Which backend's depth clip range to produce. On the non-linear
+ *   path it changes only the near-plane encoding (entries 2 and 14); both
+ *   conventions put the far plane at `ndcZ = 1`, the only plane reconstruction
+ *   reads, so either matrix serves both backends.
+ * @param out - Destination matrix.
+ * @param aspect - The container's width / height. Read only on the non-linear
+ *   branch, where `resolveExtent` frames the paper against it; it never
+ *   overwrites the linear camera's own `projection.aspect`.
  */
 export function buildCameraTransform (
   state: CameraState,

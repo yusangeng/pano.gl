@@ -246,7 +246,11 @@ export async function referenceImage (request: RenderRequest): Promise<RenderRes
   // unread. The other four resolve theirs against the render target's shape
   // (resolveExtent) -- the same value the matrix cascade frames the ortho box
   // with, so the arbiter judges the resolved framing rather than a tuple the
-  // shaders never see raw.
+  // shaders never see raw. That derivation keeps its own arbiters: the
+  // screen-centre equidistance property in test/unit/reference.test.ts
+  // (bypasses resolveExtent by design), the independently derived literals
+  // in extent.test.ts and matrix.test.ts, and gate A's captured v0.2.2
+  // pixels at the fit: 'extent' pin -- each an opinion formed outside it.
   const extent = projection.kind === 'linear'
     ? ([2, 2] as const)
     : resolveExtent(projection, width / height)

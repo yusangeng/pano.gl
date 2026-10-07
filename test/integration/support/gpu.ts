@@ -88,8 +88,8 @@ export async function renderOffscreen (request: RenderRequest): Promise<RenderRe
   }
 
   try {
-    // The offscreen target IS the viewport, so its shape is the honest aspect
-    // for the extent resolution -- not the canvas-less backend's default.
+    // The backend has no container of its own to ask, so the render target's
+    // own width/height is the honest aspect for the extent resolution.
     backend.setCamera(camera, projection, width / height)
     backend.setSource(source)
     backend.render(target.createView())
