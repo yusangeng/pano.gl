@@ -541,11 +541,28 @@ describe('CameraController', () => {
     // repaint: an undirty setAspect would leave a resized viewer rendering the
     // old framing until the camera moved.
     const c = new CameraController(undefined, cylindrical())
+    const fn = vi.fn()
+    c.onChange(fn)
     c.consumeDirty()
     c.setAspect(2)
     expect(c.projection).toEqual(cylindrical())
     expect(c.surfaceAspect).toBe(2)
     expect(c.consumeDirty()).toBe(true)
+    // notify rides the same edge as dirty: a reframe is a change the
+    // application-side subscriptions must hear about.
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the container aspect across a projection swap with no intervening resize', () => {
+    // The field describes the surface, not the projection: a controller
+    // mounted linear-first must still hand the TRUE container aspect to a
+    // non-linear projection swapped in later, because the resize that
+    // delivered the aspect already fired while linear was mounted.
+    const c = new CameraController(undefined, linear())
+    c.consumeDirty()
+    c.setAspect(16 / 9)
+    c.setProjection(cylindrical())
+    expect(c.surfaceAspect).toBe(16 / 9)
   })
 
   it('surfaceAspect defaults to 1 before the first resize', () => {

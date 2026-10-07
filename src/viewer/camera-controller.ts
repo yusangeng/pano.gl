@@ -234,7 +234,8 @@ export class CameraController {
    * 16:9 container with the default square aspect stretches the image. The
    * other four cameras take their shape from the projection's `extent` read
    * against the stored container aspect, so there is no aspect field to write
-   * on the projection itself.
+   * on the projection itself. The stored surface aspect is written for every
+   * kind, not just the non-linear ones.
    *
    * @param aspect - width / height of the drawing surface. Must be positive.
    * @throws If `aspect` is not finite or is not greater than zero. A zero aspect
@@ -243,12 +244,18 @@ export class CameraController {
    */
   setAspect (aspect: number): void {
     assertPositive(aspect, 'aspect')
+    // The container aspect is a fact about the surface, not the projection:
+    // store it under every kind, so a projection swapped in later -- without
+    // an intervening resize to re-deliver it -- still resolves the container
+    // fit from the real shape. The linear projection rewrite stays
+    // linear-conditional (aspect lives on that record too, and perspective()
+    // is the only consumer that reads it there).
+    const unchanged = this.#surfaceAspect === aspect &&
+      (this.#projection.kind !== 'linear' || this.#projection.aspect === aspect)
+    if (unchanged) return
+    this.#surfaceAspect = aspect
     if (this.#projection.kind === 'linear') {
-      if (this.#projection.aspect === aspect) return
       this.#projection = { ...this.#projection, aspect }
-    } else {
-      if (this.#surfaceAspect === aspect) return
-      this.#surfaceAspect = aspect
     }
     this.#dirty = true
     this.#notify()
