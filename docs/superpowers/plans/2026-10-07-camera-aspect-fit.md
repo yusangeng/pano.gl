@@ -360,7 +360,7 @@ Spec §3.3 (reference row), §5.2. Square extents are bit-identical to the old `
 - Modify: `src/core/reference.ts` (`ndcToSurface` + module header)
 - Test: `test/unit/reference.test.ts` (ndcToSurface describe)
 
-- [ ] **Step 1: Rewrite the asymmetric ndcToSurface test first**
+- [x] **Step 1: Rewrite the asymmetric ndcToSurface test first**
 
 In `test/unit/reference.test.ts`, find the `describe('ndcToSurface')` block and the test `uses max(extent) / 2 on both axes for an asymmetric extent` (`ndcToSurface(0.5, -0.5, [2, 6])` → `[1, -1.5, 1.5]`). Replace it with:
 
@@ -382,12 +382,12 @@ In `test/unit/reference.test.ts`, find the `describe('ndcToSurface')` block and 
 
 Also update the comment in the `the %s projection does NOT ignore magnitude` test that says `max(extent) / 2` (around line 79): change that phrase to `its own half of the extent, per axis`. Comment-only change.
 
-- [ ] **Step 2: Run to verify red**
+- [x] **Step 2: Run to verify red**
 
 Run: `npx vitest run --project unit test/unit/reference.test.ts`
 Expected: FAIL — the new per-axis test (old implementation returns `[1, -1.5, 1.5]` for the first case).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/core/reference.ts`, replace `ndcToSurface`'s body and doc comment so the function reads (keep the exported name and the `[number, number, number]` return shape it has today):
 
@@ -410,7 +410,7 @@ export function ndcToSurface (
 
 (If the current signature's parameter or return annotations differ cosmetically, keep the current ones — only the scaling logic and the doc change.)
 
-- [ ] **Step 4: Add the fourth adjudicated departure to the module header**
+- [x] **Step 4: Add the fourth adjudicated departure to the module header**
 
 In the same file's module header, after the planet-branch-points departure (2026-09-28) and before the mercator exemption note, insert:
 
@@ -425,12 +425,12 @@ In the same file's module header, after the planet-branch-points departure (2026
  *   square tuple, which is how gate A keeps watching the v0.2.2 pixels.
 ```
 
-- [ ] **Step 5: Run to verify green**
+- [x] **Step 5: Run to verify green**
 
 Run: `npx vitest run --project unit test/unit/reference.test.ts`
 Expected: PASS — the whole file.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/core/reference.ts test/unit/reference.test.ts

@@ -76,9 +76,9 @@ describe('homogeneity', () => {
     // three coordinates would not do, because pannini reads only ratios of its
     // input (z * 0.5 / x and y / sqrt(x*x + z*z)) and is invariant under
     // uniform scaling. Pinning x is also faithful to how extent enters these
-    // formulas: ndcToSurface keeps x at 1 and scales (y, z) by
-    // max(extent) / 2, so it is the (y, z) magnitude at fixed x that the
-    // surface size controls. These projections read |z| and |y|, so the
+    // formulas: ndcToSurface keeps x at 1 and scales (y, z) by its own half
+    // of the extent, per axis, so it is the (y, z) magnitude at fixed x that
+    // the surface size controls. These projections read |z| and |y|, so the
     // surface size is a projection parameter -- which is why `extent` exists
     // in the Projection type instead of hiding in vertex coordinates.
     const base = project(1, 0.3, 0.7, state, projection)
@@ -305,12 +305,16 @@ describe('ndcToSurface', () => {
     expect(ndcToSurface(0.5, -1, [4, 4])).toEqual([1, -2, 1])
   })
 
-  it('uses max(extent) / 2 on both axes for an asymmetric extent', () => {
-    // The same asymmetric inputs as the matrix tests, in both orders: max = 6
-    // either way, so m = 3 drives both axes. A per-axis or width-driven
-    // sizing produces a different number somewhere in this pair.
-    expect(ndcToSurface(0.5, -0.5, [2, 6])).toEqual([1, -1.5, 1.5])
-    expect(ndcToSurface(0.5, -0.5, [6, 2])).toEqual([1, -1.5, 1.5])
+  it('scales each axis by its own half of the resolved extent', () => {
+    // ndcToSurface takes the RESOLVED extent (what resolveExtent handed back
+    // for the container); each axis scales by its own half. The old
+    // max(extent)/2 collapse was only observable on asymmetric extents --
+    // exactly the extents the container fit now produces legitimately.
+    // [2, 6]: y reads 6/2 = 3, z reads 2/2 = 1.
+    expect(ndcToSurface(0.5, -0.5, [2, 6])).toEqual([1, -1.5, 0.5])
+    // [4, 2] with the transposition the old comment warned about: y reads
+    // 2/2 = 1, z reads 4/2 = 2. A transposed implementation swaps these two.
+    expect(ndcToSurface(-0.25, 0.75, [4, 2])).toEqual([1, 0.75, -0.5])
   })
 })
 

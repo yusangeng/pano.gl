@@ -17,10 +17,20 @@
  *     used `REPEAT` wrap, so the sampler did the wrapping; a `+ 0.5` here
  *     would rotate the panorama half a turn.
  *
- * Three adjudicated departures, documented at their sites: `latOffset` (the
+ * Four adjudicated departures, documented at their sites: `latOffset` (the
  * legacy non-linear cameras never read latitude at all), `lngOffset` (a
- * v0.2.2 unit-mixing defect, corrected by user adjudication), and planet's
- * branch-point guard (NaN replaced by the spec's canonical values).
+ * v0.2.2 unit-mixing defect, corrected by user adjudication), planet's
+ * branch-point guard (NaN replaced by the spec's canonical values), and the
+ * aspect fit itemised below.
+ *
+ * - aspect fit (2026-10-07, camera-aspect-fit spec): v0.2.2 sized the ortho
+ *   box as max(extent)/2 on BOTH axes -- a square box inherited from the
+ *   square quad geometry -- so every non-square container stretched the
+ *   picture vertically. The user-adjudicated correction derives the box per
+ *   axis from the container (resolveExtent); same class as lngOffset (an
+ *   inherited framework defect corrected by adjudication), and like it, the
+ *   legacy behaviour stays reachable bit-for-bit through fit:'extent' with a
+ *   square tuple, which is how gate A keeps watching the v0.2.2 pixels.
  *
  * Mercator (added 2026-09-29, mercator-camera spec) is not a transcription
  * at all: it has no v0.2.2 original. Its authority is the spec's analytic
@@ -285,25 +295,16 @@ export function project (x: number, y: number, z: number, state: CameraState, pr
 }
 
 /**
- * Maps a normalised device coordinate to the surface position the projection
- * formulas expect: the point `(1, ndcY * m, ndcX * m)` on the `x = 1` plane,
- * `m = max(extent) / 2` matching `buildProjection`. `buildCameraTransform` is
- * built so that inverting it on the GPU recovers exactly these numbers.
- *
- * **The sign on `ndcX` is positive**: the fixed view's basis makes a positive
- * horizontal device coordinate a positive world `z`. Getting it backwards
- * mirrors the panorama horizontally -- subtle enough to survive review on a
- * symmetric test image, which is what the P0 baseline comparison is for.
- *
- * @param ndcX - Horizontal device coordinate in `[-1, 1]`.
- * @param ndcY - Vertical device coordinate in `[-1, 1]`.
- * @param extent - Surface size, the projection's `extent`.
+ * Recovers the surface point an NDC position maps to, on the RESOLVED extent
+ * (the tuple `resolveExtent` returns for the container -- buildProjection
+ * resolves the same value for the ortho box, which is why this inverts it).
+ * Each axis scales by its own half-extent; x stays pinned at 1, the plane the
+ * legacy quad sat on.
  */
 export function ndcToSurface (
   ndcX: number,
   ndcY: number,
   extent: readonly [number, number]
 ): readonly [number, number, number] {
-  const m = Math.max(extent[0], extent[1]) / 2
-  return [1, ndcY * m, ndcX * m]
+  return [1, (ndcY * extent[1]) / 2, (ndcX * extent[0]) / 2]
 }
