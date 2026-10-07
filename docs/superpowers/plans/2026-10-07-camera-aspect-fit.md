@@ -452,7 +452,7 @@ The recipe below was verified numerically before this plan was written: worst de
 **Files:**
 - Test: `test/unit/reference.test.ts` (new describe at the end)
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Append to `test/unit/reference.test.ts`:
 
@@ -562,12 +562,12 @@ describe('screen-centre equidistance (aspect fit, I2)', () => {
 })
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `npx vitest run --project unit test/unit/reference.test.ts`
 Expected: PASS (all 8 cases). If any case fails by O(1), the rate constant or the weight is wrong — STOP and report; do not loosen the tolerance. If it fails by ~1e-7..1e-5, report that too (it would contradict the pre-verified 4.3e-11 and means the transcription here drifted).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/unit/reference.test.ts

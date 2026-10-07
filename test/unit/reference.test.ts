@@ -880,3 +880,123 @@ describe('mercator (2026-09-29 mercator-camera spec)', () => {
     expect(top - 0.5).toBeCloseTo(0.5 - bottom, 12)
   })
 })
+
+/*
+ * The aspect-fit contract, I2: at the screen centre, one pixel covers the
+ * same panorama angle horizontally and vertically. Spec 5.3: this must be
+ * measured on project()'s FINAL output and must never go through
+ * resolveExtent -- the render path and this module share that function, so a
+ * test that calls it has no independent opinion. The extents below are
+ * hand-resolved from the spec's 1.2 rate table (2pi for cylindrical, 1 for
+ * the rest) with constants written here, which is the second opinion.
+ *
+ * Verified before this test was written: worst |2*du*w - A*dv| =
+ * 4.30645062795762e-11 over these cases (finite-difference truncation
+ * scale); 1e-9 leaves an order of magnitude of headroom without admitting a
+ * real rate error, which lands at O(1).
+ */
+describe('screen-centre equidistance (aspect fit, I2)', () => {
+  /** Turn-difference mapped into (-0.5, 0.5], so a seam-straddling pair reads as epsilon, not as -1. */
+  const wrapTurns = (d: number): number => d - Math.round(d)
+
+  interface EquidistanceCase {
+    kind: 'cylindrical' | 'planet' | 'pannini' | 'mercator'
+    extentX: number
+    pose: { povLatitude: number, povLongitude: number }
+    /** cos of the screen-centre point's latitude: 1 for the coordinate metric. */
+    weight: number
+    /** Recorded in the case table for the reader, never asserted. */
+    why: string
+  }
+
+  const CASES: ReadonlyArray<EquidistanceCase> = [
+    {
+      kind: 'cylindrical',
+      extentX: 1,
+      pose: { povLatitude: 0, povLongitude: 0 },
+      weight: 1,
+      why: 'coordinate metric at the equator'
+    },
+    {
+      kind: 'cylindrical',
+      extentX: 1,
+      pose: { povLatitude: 30, povLongitude: 45 },
+      weight: 1,
+      why: 'coordinate metric at any pose: the rates never read the pose'
+    },
+    {
+      kind: 'pannini',
+      extentX: 4,
+      pose: { povLatitude: 0, povLongitude: 0 },
+      weight: 1,
+      why: 'centre column is isotropic in the coordinate metric'
+    },
+    {
+      kind: 'pannini',
+      extentX: 4,
+      pose: { povLatitude: 30, povLongitude: 45 },
+      weight: 1,
+      why: 'coordinate metric, off-equator pose'
+    },
+    {
+      kind: 'mercator',
+      extentX: 1,
+      pose: { povLatitude: 0, povLongitude: 0 },
+      weight: 1,
+      why: 'conformal; both metrics agree where the centre sits at M = 0'
+    },
+    {
+      kind: 'mercator',
+      extentX: 1,
+      pose: { povLatitude: 30, povLongitude: 45 },
+      weight: Math.cos((30 * Math.PI) / 180),
+      why: 'conformal: physical metric, centre latitude is the pose latitude'
+    },
+    {
+      kind: 'planet',
+      extentX: 4,
+      pose: { povLatitude: 30, povLongitude: 45 },
+      weight: Math.sin((30 * Math.PI) / 180),
+      why: 'tilt 0 is the pole at centre (degenerate metric) so planet starts at 30; centre latitude 90-30 = 60, cos 60 = sin 30'
+    },
+    {
+      kind: 'planet',
+      extentX: 4,
+      pose: { povLatitude: 45, povLongitude: 45 },
+      weight: Math.sin((45 * Math.PI) / 180),
+      why: 'second tilt; cos 45 = sin 45'
+    }
+  ]
+
+  it.each(CASES)('$kind at lat $pose.povLatitude stays equidistant across aspects and zooms', ({ kind, extentX, pose, weight }) => {
+    const eps = 1e-4
+    // The rate table, hand-transcribed (spec 2.1) -- NOT resolveExtent.
+    const rate = kind === 'cylindrical' ? 2 * Math.PI : 1
+
+    for (const aspect of [1, 16 / 9, 9 / 16]) {
+      for (const zoom of [1, 0.5]) {
+        const projection: Projection = { kind, zoom, extent: [extentX, extentX] }
+        const halfX = extentX / 2
+        const halfY = (extentX * rate) / aspect / 2
+
+        // Screen centre +/- eps, as the inverted camera transform delivers
+        // it: ndc x maps to the paper's z axis, ndc y to y (pinned separately
+        // by the gate B surface-reconstruction tests in matrix.test.ts).
+        const px = project(1, 0, eps * halfX, pose, projection)
+        const mx = project(1, 0, -eps * halfX, pose, projection)
+        const py = project(1, eps * halfY, 0, pose, projection)
+        const my = project(1, -eps * halfY, 0, pose, projection)
+
+        const du = Math.abs(wrapTurns(px.u - mx.u))
+        const dv = Math.abs(py.v - my.v)
+        // du is per 2*eps of ndc x = eps*W pixels; dv likewise per eps*H.
+        // Equal angle per pixel horizontally and vertically is
+        // |dtheta|*w = A*|dphi| with A = W/H, which in turn/v units is:
+        expect(
+          Math.abs(2 * du * weight - aspect * dv),
+          `${kind} aspect ${aspect} zoom ${zoom} lat ${pose.povLatitude}`
+        ).toBeLessThan(1e-9)
+      }
+    }
+  })
+})
