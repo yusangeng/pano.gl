@@ -565,6 +565,20 @@ describe('CameraController', () => {
     expect(c.surfaceAspect).toBe(16 / 9)
   })
 
+  it('rewrites a linear projection whose aspect diverges from the stored surface aspect', () => {
+    // Pins the guard's second conjunct: the store can hold the container's
+    // aspect from a non-linear era while a user-supplied linear projection
+    // carries a different (stale) aspect. setAspect must rewrite the record,
+    // not early-return on the surface conjunct alone.
+    const c = new CameraController(undefined, cylindrical())
+    c.setAspect(16 / 9)
+    c.setProjection({ kind: 'linear', fov: Math.PI / 2, aspect: 1 })
+    c.consumeDirty()
+    c.setAspect(16 / 9)
+    expect(c.projection).toEqual({ kind: 'linear', fov: Math.PI / 2, aspect: 16 / 9 })
+    expect(c.consumeDirty()).toBe(true)
+  })
+
   it('surfaceAspect defaults to 1 before the first resize', () => {
     // Same story as the linear placeholder aspect: unknowable at construction,
     // and 1 is the least-visible wrong value -- the square framing every
