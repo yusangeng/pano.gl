@@ -25,7 +25,7 @@ Spec §2.2, §3.1, §2.4.
 - Create: `src/core/extent.ts`
 - Test: `test/unit/extent.test.ts` (new)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test/unit/extent.test.ts`:
 
@@ -95,12 +95,12 @@ describe('resolveExtent', () => {
 })
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npx vitest run --project unit test/unit/extent.test.ts`
 Expected: FAIL — `Cannot find module '../../src/core/extent'` (or the equivalent resolution error).
 
-- [ ] **Step 3: Add the `fit` field to the four non-linear union members**
+- [x] **Step 3: Add the `fit` field to the four non-linear union members**
 
 In `src/core/types.ts`, replace the extent paragraph of the `Projection` doc comment (currently lines 34-36, `The pair is ordered \`[width, height]\`. Every extent in use is square, ...`) together with the four member lines, so the union reads:
 
@@ -168,7 +168,7 @@ export type Projection =
 
 (Keep the mercator member's existing doc comment attached as shown; only the field lines change.)
 
-- [ ] **Step 4: Implement `resolveExtent`**
+- [x] **Step 4: Implement `resolveExtent`**
 
 Create `src/core/extent.ts`:
 
@@ -211,12 +211,12 @@ export function resolveExtent (
 }
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `npx vitest run --project unit test/unit/extent.test.ts`
 Expected: PASS (4 tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/core/types.ts src/core/extent.ts test/unit/extent.test.ts
