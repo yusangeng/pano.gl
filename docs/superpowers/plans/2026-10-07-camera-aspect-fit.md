@@ -941,7 +941,7 @@ Spec §5.4 (gate B row): 1:1 / 16:9 / 9:16 × four cameras, screen edges against
 **Files:**
 - Modify: `test/integration/gate-b-projection.test.ts`
 
-- [ ] **Step 1: Add the test**
+- [x] **Step 1: Add the test**
 
 Append a new test to the file's top-level describe (it imports `compareWithReference` from `./support/cross-backend`; check the file's existing imports and add `import { compareWithReference } from './support/cross-backend'` if absent):
 
@@ -988,12 +988,12 @@ and thread `shape.width`/`shape.height` into the render-request objects it build
 
 Check the file for the exact helper names (`CAMERAS`, `LEGACY_EXTENT` — gate B already declares both) and adapt the spelling; the contract is: three shapes × four cameras, both backends against the reference, tolerance 2, projections carry NO `fit` (the container default is the behaviour under test).
 
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
 
 Run: `npx vitest run --project integration test/integration/gate-b-projection.test.ts`
 Expected: PASS. A failure above tolerance on one camera at one shape = a framing bug the unit property test could not see (it tests the reference, not the render path through the matrix) — investigate, do not loosen.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/integration/gate-b-projection.test.ts test/integration/support/cross-backend.ts
