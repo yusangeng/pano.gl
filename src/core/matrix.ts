@@ -10,6 +10,7 @@
  */
 
 import { mat4 } from 'gl-matrix'
+import { resolveExtent } from './extent'
 import type { CameraState, DepthRange, Projection } from './types'
 
 /** Near and far planes for the LINEAR perspective path; generous bounds are all
@@ -77,7 +78,9 @@ const LEGACY_QUAD_VIEW: readonly [
  * Builds a projection matrix in the requested depth convention.
  *
  * **Linear** gets a normal perspective frustum; the fragment shader recovers the
- * view ray from it and `cam_proj_linear` turns that into angles.
+ * view ray from it and `cam_proj_linear` turns that into angles. The linear
+ * camera keeps its own `projection.aspect` as the authority -- the `aspect`
+ * argument is the container's W/H and is deliberately ignored on this branch.
  *
  * **Non-linear** gets an orthographic box sized to the projection's `extent`. The
  * `extent` is load-bearing: it is the only carrier of the surface coordinates
@@ -92,9 +95,15 @@ const LEGACY_QUAD_VIEW: readonly [
  *   `atan(z * 0.5 / x)` is off by a factor of 1000 -- a pannini that looks
  *   almost like plain perspective, with no error anywhere. (`near` is ordinary;
  *   any positive value below `far` works.)
- * - **`m = max(extent) / 2`, not per-axis.** All cameras are square today
- *   (cylindrical and mercator 1x1, planet and pannini 4x4), so the two
- *   agree, and `max` is what the captured matrices use.
+ * - **Per-axis halves of the RESOLVED extent.** The box is sized by
+ *   `resolveExtent(projection, aspect)`: `fit: 'container'` (the default)
+ *   derives the paper height so the centre pixel stays square whatever the
+ *   container's shape; `fit: 'extent'` takes the tuple literally, which for a
+ *   square tuple reproduces the legacy `max(extent) / 2` square box
+ *   bit-for-bit at any viewport -- the v0.2.2 pixel contract gate A watches
+ *   through exactly that pin. `ndcToSurface` (core/reference.ts) inverts the
+ *   same resolved value, which is what keeps the arbiter and the matrix from
+ *   framing the surface differently.
  *
  * The `far = 1` pin is the one deliberate departure from the v0.2.2 capture:
  * composing `P * V`, only `M[2]` and `M[14]` read the `far` terms `P[10]`/`P[14]`,
@@ -109,11 +118,15 @@ const LEGACY_QUAD_VIEW: readonly [
  *   conventions put the far plane at `ndcZ = 1`, the only plane reconstruction
  *   reads, so either matrix serves both backends.
  * @param out - Destination matrix.
+ * @param aspect - The container's width / height. Read only on the non-linear
+ *   branch, where `resolveExtent` frames the paper against it; it never
+ *   overwrites the linear camera's own `projection.aspect`.
  */
 export function buildProjection (
   projection: Projection,
   depth: DepthRange,
-  out: mat4
+  out: mat4,
+  aspect: number
 ): mat4 {
   if (projection.kind === 'linear') {
     return depth === 'zero-to-one'
@@ -121,11 +134,11 @@ export function buildProjection (
       : mat4.perspective(out, projection.fov, projection.aspect, NEAR, FAR)
   }
 
-  const m = Math.max(projection.extent[0], projection.extent[1]) / 2
+  const [extentX, extentY] = resolveExtent(projection, aspect)
 
   return depth === 'zero-to-one'
-    ? mat4.orthoZO(out, -m, m, -m, m, QUAD_NEAR, QUAD_FAR)
-    : mat4.ortho(out, -m, m, -m, m, QUAD_NEAR, QUAD_FAR)
+    ? mat4.orthoZO(out, -extentX / 2, extentX / 2, -extentY / 2, extentY / 2, QUAD_NEAR, QUAD_FAR)
+    : mat4.ortho(out, -extentX / 2, extentX / 2, -extentY / 2, extentY / 2, QUAD_NEAR, QUAD_FAR)
 }
 
 /** Near/far for the non-linear ortho box. `QUAD_FAR` is pinned to the surface's
@@ -144,7 +157,8 @@ export function buildCameraTransform (
   state: CameraState,
   projection: Projection,
   depth: DepthRange,
-  out: mat4
+  out: mat4,
+  aspect: number
 ): mat4 {
   const view = mat4.create()
   const proj = mat4.create()
@@ -155,6 +169,6 @@ export function buildCameraTransform (
     mat4.set(view, ...LEGACY_QUAD_VIEW)
   }
 
-  buildProjection(projection, depth, proj)
+  buildProjection(projection, depth, proj, aspect)
   return mat4.multiply(out, proj, view)
 }

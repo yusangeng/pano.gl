@@ -372,7 +372,7 @@ export class Viewer extends Disposable {
     } else {
       this.#backend.setSource(null)
     }
-    this.#backend.setCamera(this.#camera.state, this.#camera.projection)
+    this.#backend.setCamera(this.#camera.state, this.#camera.projection, this.#camera.surfaceAspect)
     this.#backend.render()
     // After the draw, not before: `version` has to describe the frame just drawn
     // while the backend is reading it. A video advances its version here, which

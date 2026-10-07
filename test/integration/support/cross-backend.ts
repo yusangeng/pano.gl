@@ -17,6 +17,7 @@ import { renderOffscreen, maxChannelDiff } from './gpu'
 import type { RenderRequest, RenderResult } from './gpu'
 import { mat4 } from 'gl-matrix'
 import { buildCameraTransform } from '../../../src/core/matrix'
+import { resolveExtent } from '../../../src/core/extent'
 import { cameraProjectionCode, textureProjectionCode } from '../../../src/core/constants'
 import { compileShader, linkProgram } from '../../../src/renderer/webgl2/context'
 import { PANORAMA_GLSL_FRAGMENT, PANORAMA_GLSL_VERTEX } from '../../../src/renderer/webgl2/shaders'
@@ -115,8 +116,11 @@ export async function renderOffscreenGLSL (request: RenderRequest): Promise<Rend
   // 'minus-one-to-one', where the WebGPU half passes 'zero-to-one'. This one
   // argument is the whole depth-convention difference between the backends; if
   // both halves were given the same one here, gate C would fail and the failure
-  // would have nothing to do with the projection formulas.
-  buildCameraTransform(camera, projection, 'minus-one-to-one', clip)
+  // would have nothing to do with the projection formulas. The aspect is the
+  // request's own width/height, the same value the WebGPU half's setCamera
+  // receives -- the two legs must frame the surface identically or the
+  // comparison measures the framing, not the formulas.
+  buildCameraTransform(camera, projection, 'minus-one-to-one', clip, width / height)
   mat4.invert(invClip, clip)
 
   gl.uniformMatrix4fv(gl.getUniformLocation(program, 'u_invClip'), false, invClip)
@@ -239,9 +243,13 @@ export async function referenceImage (request: RenderRequest): Promise<RenderRes
   const sourceData = ctx.getImageData(0, 0, GATE_C_SIZE, GATE_C_SIZE).data
 
   // Only the linear projection is scale-invariant, and for it the extent is
-  // unread. The other four carry theirs in the projection itself -- which is
-  // what let the geometry subsystem disappear.
-  const extent = projection.kind === 'linear' ? ([2, 2] as const) : projection.extent
+  // unread. The other four resolve theirs against the render target's shape
+  // (resolveExtent) -- the same value the matrix cascade frames the ortho box
+  // with, so the arbiter judges the resolved framing rather than a tuple the
+  // shaders never see raw.
+  const extent = projection.kind === 'linear'
+    ? ([2, 2] as const)
+    : resolveExtent(projection, width / height)
   const rgba = new Uint8Array(width * height * 4)
 
   for (let y = 0; y < height; y++) {

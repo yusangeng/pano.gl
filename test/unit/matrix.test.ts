@@ -16,8 +16,8 @@ describe('depth convention', () => {
     const nearPoint: vec4 = [0, 0, -0.1, 1]
 
     for (const projection of [linear, planet]) {
-      const gl = buildProjection(projection, 'minus-one-to-one', mat4.create())
-      const zo = buildProjection(projection, 'zero-to-one', mat4.create())
+      const gl = buildProjection(projection, 'minus-one-to-one', mat4.create(), 1)
+      const zo = buildProjection(projection, 'zero-to-one', mat4.create(), 1)
 
       const glClip = vec4.transformMat4(vec4.create(), nearPoint, gl)
       expect(glClip[2] / glClip[3]).toBeCloseTo(-1, 6)
@@ -30,16 +30,16 @@ describe('depth convention', () => {
   it('is the only thing that differs between backends for the same projection', () => {
     const out1 = mat4.create()
     const out2 = mat4.create()
-    buildProjection(linear, 'minus-one-to-one', out1)
-    buildProjection(linear, 'zero-to-one', out2)
+    buildProjection(linear, 'minus-one-to-one', out1, 1)
+    buildProjection(linear, 'zero-to-one', out2, 1)
     // X and Y terms are untouched by the depth convention.
     expect(out1[0]).toBeCloseTo(out2[0], 12)
     expect(out1[5]).toBeCloseTo(out2[5], 12)
   })
 
-  it('sizes the non-linear ortho box to half the largest extent, in either convention', () => {
-    const gl = buildProjection(planet, 'minus-one-to-one', mat4.create())
-    const zo = buildProjection(planet, 'zero-to-one', mat4.create())
+  it('sizes the non-linear ortho box to half the extent at a square viewport, in either convention', () => {
+    const gl = buildProjection(planet, 'minus-one-to-one', mat4.create(), 1)
+    const zo = buildProjection(planet, 'zero-to-one', mat4.create(), 1)
     // A 4x4 extent means a [-2, 2] box on both axes: 2 / (2 - (-2)) = 0.5.
     // The x/y scales are what the fragment shader reads the surface through,
     // so they must not depend on the depth convention.
@@ -50,25 +50,60 @@ describe('depth convention', () => {
     expect(zo[10]).not.toBe(gl[10])
   })
 
-  it('bases the box half-width on the largest extent axis, not per axis', () => {
-    // Both orderings of an asymmetric extent, which the type allows even
-    // though every legacy extent was square. Jointly the two inputs pin
-    // m = max/2 against all three wrong sizings: per-axis ([4, 2] catches it
-    // on y), width-driven ([2, 4] catches it on both axes) and height-driven
-    // ([4, 2] catches it on both axes).
-    for (const extent of [[4, 2], [2, 4]] as const) {
-      const asymmetric: Projection = { kind: 'cylindrical', zoom: 1, extent }
-      const gl = buildProjection(asymmetric, 'minus-one-to-one', mat4.create())
-      const zo = buildProjection(asymmetric, 'zero-to-one', mat4.create())
-
-      // max = 4 either way, so m = 2 on BOTH axes: a [-2, 2] x [-2, 2] box
-      // has both scales at 2 / (2 - (-2)) = 0.5. Any sizing that reads the
-      // wrong axis -- or one axis for both -- produces a 1 somewhere.
-      expect(gl[0]).toBeCloseTo(0.5, 12)
-      expect(gl[5]).toBeCloseTo(0.5, 12)
-      expect(zo[0]).toBeCloseTo(0.5, 12)
-      expect(zo[5]).toBeCloseTo(0.5, 12)
+  it('sizes the box per axis from a manual extent tuple (fit extent)', () => {
+    // fit 'extent' takes the tuple literally: [4, 2] is a [-2, 2] x [-1, 1]
+    // box, so gl[0] = 2/(2*2) = 0.5 and gl[5] = 2/(2*1) = 1 -- independent
+    // per-axis scales, the rectangular-ortho contract the fragment
+    // reconstruction reads the surface through. Both orderings, so a
+    // transposed implementation fails at least one of them loudly.
+    for (const [extent, sx, sy] of [[[4, 2], 0.5, 1], [[2, 4], 1, 0.5]] as const) {
+      const manual: Projection = { kind: 'planet', zoom: 1, extent, fit: 'extent' }
+      const gl = buildProjection(manual, 'minus-one-to-one', mat4.create(), 1)
+      const zo = buildProjection(manual, 'zero-to-one', mat4.create(), 1)
+      expect(gl[0]).toBeCloseTo(sx, 12)
+      expect(gl[5]).toBeCloseTo(sy, 12)
+      expect(zo[0]).toBeCloseTo(sx, 12)
+      expect(zo[5]).toBeCloseTo(sy, 12)
     }
+  })
+
+  it('derives the container-fit height per camera rate', () => {
+    // Literals derived independently from the rate table, not by running
+    // resolveExtent. Cylindrical at A=2 resolves [1, 1] to [1, pi]:
+    // gl[0] = 1/(1/2) = 2, gl[5] = 1/(pi/2) = 0.6366197723675814.
+    const cylindrical: Projection = { kind: 'cylindrical', zoom: 1, extent: [1, 1] }
+    const gl = buildProjection(cylindrical, 'minus-one-to-one', mat4.create(), 2)
+    expect(gl[0]).toBeCloseTo(2, 12)
+    // mat4 is Float32Array storage, so the assertable value is the correctly
+    // rounded float32 of the independently derived double -- Math.fround of
+    // the plan literal, bit-for-bit what ortho()/orthoZO() stores (here and
+    // at the pannini leg below). A wrong rate or a missing aspect coupling
+    // displaces the double by O(1) and lands on a different float32, still
+    // failing loudly.
+    expect(gl[5]).toBeCloseTo(Math.fround(0.6366197723675814), 12)
+
+    // Pannini at A=16/9 resolves [4, 4] to [4, 2.25]:
+    // gl[0] = 2/4 = 0.5, gl[5] = 2/2.25 = 0.8888888888888888.
+    const pannini: Projection = { kind: 'pannini', zoom: 1, extent: [4, 4] }
+    const zo = buildProjection(pannini, 'zero-to-one', mat4.create(), 16 / 9)
+    expect(zo[0]).toBeCloseTo(0.5, 12)
+    expect(zo[5]).toBeCloseTo(Math.fround(0.8888888888888888), 12)
+  })
+
+  it('fit extent with a square tuple is bit-identical at any viewport (I6)', () => {
+    // The legacy collapse was m = max(extent)/2; for a square tuple that is
+    // exactly per-axis halves, so fit 'extent' + square tuple reproduces the
+    // legacy matrix WHATEVER the container. This is what lets gate A keep
+    // watching the v0.2.2 pixels instead of re-shooting the baseline. toEqual,
+    // not toBeCloseTo: I6 is a bit-for-bit claim.
+    const probe: Projection = { kind: 'planet', zoom: 1, extent: [4, 4], fit: 'extent' }
+    const reference = buildProjection(probe, 'minus-one-to-one', mat4.create(), 1)
+    for (const aspect of [16 / 9, 9 / 16, 2.39]) {
+      const other = buildProjection(probe, 'minus-one-to-one', mat4.create(), aspect)
+      expect(other).toEqual(reference)
+    }
+    expect(reference[0]).toBe(0.5)
+    expect(reference[5]).toBe(0.5)
   })
 })
 
@@ -94,10 +129,10 @@ describe('buildViewMatrix', () => {
 describe('buildCameraTransform', () => {
   it('is projection times view, in that order', () => {
     const state = { povLatitude: 20, povLongitude: 40 }
-    const actual = buildCameraTransform(state, linear, 'minus-one-to-one', mat4.create())
+    const actual = buildCameraTransform(state, linear, 'minus-one-to-one', mat4.create(), 1)
 
     const view = buildViewMatrix(state, mat4.create())
-    const proj = buildProjection(linear, 'minus-one-to-one', mat4.create())
+    const proj = buildProjection(linear, 'minus-one-to-one', mat4.create(), 1)
     const expected = mat4.multiply(mat4.create(), proj, view)
 
     for (let i = 0; i < 16; i++) expect(actual[i]).toBeCloseTo(expected[i]!, 12)
@@ -156,9 +191,10 @@ describe('gate B: surface reconstruction', () => {
     it(`${camera} recovers a surface spanning ${extent[0]} x ${extent[1]} at x = 1`, () => {
       const clip = buildCameraTransform(
         { povLatitude: 0, povLongitude: 0 },
-        { kind: camera, zoom: 1, extent },
+        { kind: camera, zoom: 1, extent, fit: 'extent' },
         'zero-to-one',
-        mat4.create()
+        mat4.create(),
+        1
       )
       // The shader inverts; so does this test. Inverting separately is what
       // makes the assertion about the matrix rather than about gl-matrix.
@@ -188,6 +224,33 @@ describe('gate B: surface reconstruction', () => {
       expect(Math.max(...zs) + Math.min(...zs)).toBeCloseTo(0, 3)
     })
   }
+
+  it('resolves the container fit before sizing the box (cylindrical at A=1 spans 1 x 2pi)', () => {
+    // The container default at a square viewport: cylindrical's rate is 2pi,
+    // so [1, 1] resolves to [1, 2pi] -- the same reconstruction as above, with
+    // the span read from the RESOLVED pair rather than the tuple.
+    const clip = buildCameraTransform(
+      { povLatitude: 0, povLongitude: 0 },
+      { kind: 'cylindrical', zoom: 1, extent: [1, 1] },
+      'zero-to-one',
+      mat4.create(),
+      1
+    )
+    const invClip = mat4.invert(mat4.create(), clip)
+    if (!invClip) throw new Error('the camera transform must be invertible')
+
+    const corners = [
+      surfaceAt(invClip, -1, -1), surfaceAt(invClip, 1, -1),
+      surfaceAt(invClip, -1, 1), surfaceAt(invClip, 1, 1)
+    ]
+    for (const c of corners) expect(c.x).toBeCloseTo(1, 3)
+    const ys = corners.map(c => c.y)
+    const zs = corners.map(c => c.z)
+    expect(Math.max(...zs) - Math.min(...zs)).toBeCloseTo(1, 3)
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(2 * Math.PI, 3)
+    expect(Math.max(...ys) + Math.min(...ys)).toBeCloseTo(0, 3)
+    expect(Math.max(...zs) + Math.min(...zs)).toBeCloseTo(0, 3)
+  })
 })
 
 describe('fragment-stage reconstruction', () => {
@@ -203,12 +266,14 @@ describe('fragment-stage reconstruction', () => {
       { povLatitude: 0, povLongitude: 0 },
       planet,
       'minus-one-to-one',
-      mat4.create()
+      mat4.create(),
+      1
     )
     const inv = mat4.invert(mat4.create(), transform)
     expect(inv, 'camera transform must be invertible').not.toBeNull()
 
-    // max([4, 4]) / 2: the quad spans [-2, 2] on both axes.
+    // The extent resolves to [4, 4] at this square viewport: the quad spans
+    // [-2, 2] on both axes.
     const half = 2
     const points = [[0.25, -0.5], [-0.75, 0.375]] as const
 
