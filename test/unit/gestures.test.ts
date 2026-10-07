@@ -160,15 +160,15 @@ describe('classifyDragMercator', () => {
 
   it('scales the metres by the resolved extent_y (one screen height = 2pi*zoom*extentY)', () => {
     // A 16:9 container resolves mercator [1, 1] to [1, 0.5625]; a 9:16 one
-    // to [1, 1.7778]. Pannini-shaped papers scale the same way. Derived
-    // independently: 2pi*1*2.25 = 14.137166941154069;
-    // 2pi*0.5*2.25 = 7.0685834705770345.
+    // to [1, 1.7778]. Pannini-shaped papers scale the same way; the 2.25
+    // below is pannini [4, 4] resolved on a 16:9 container (4/(16/9)),
+    // standing in for any tall paper. Derived independently:
+    // 2pi*1*2.25 = 14.137166941154069; 2pi*0.5*2.25 = 7.0685834705770345.
     const up = { deltaX: 0, deltaY: -200 }
     expect(classifyDragMercator(up, surface, 1, 2.25).meters).toBeCloseTo(14.137166941154069, 10)
     expect(classifyDragMercator(up, surface, 0.5, 2.25).meters).toBeCloseTo(7.0685834705770345, 10)
-    // lng never reads the extent. toBeCloseTo, not toBe: -(0/width)*360 is
-    // IEEE negative zero, which Object.is distinguishes from +0 -- the same
-    // trap the first test in this describe documents.
-    expect(classifyDragMercator(up, surface, 1, 2.25).lng).toBeCloseTo(0, 10)
+    // lng never reads the extent: nonzero deltaX, so an extentY-carrying
+    // mutant lands at -202.5, far from -90.
+    expect(classifyDragMercator({ deltaX: 100, deltaY: 0 }, surface, 1, 2.25).lng).toBeCloseTo(-90, 10)
   })
 })

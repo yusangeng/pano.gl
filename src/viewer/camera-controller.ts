@@ -72,7 +72,7 @@ export class CameraController {
    * The container's width/height, stored on every setAspect whatever the
    * kind and read only by the non-linear kinds' extent resolution;
    * defaults to 1 until the first resize -- the same placeholder story as
-   * the linear projection's aspect. Consumed at draw time through
+   * the linear projection's aspect. Consumed at draw and pan time through
    * resolveExtent; never cached further (resolve per frame, store only
    * the input).
    */

@@ -181,4 +181,35 @@ describe('mercator drag (user story)', () => {
       container.remove()
     }
   })
+
+  it('follows a mid-life resize: the drag scales by the framing in force when it happens', async (ctx) => {
+    // The resize-following pin (T6 review): every other test mounts 400x200
+    // and stays, so a mutant that caches the resolved extent_y at first
+    // resize passes them all. Mount 400x200 (extent_y 0.5), resize to a
+    // square 400x400 (extent_y 1), then drag -64px of the NEW height 400:
+    // metres = (64/400)*2pi*1*1 = 0.16*2pi -- the square-paper pipeline, so
+    // the pose is the pre-T6 pin 49.801690337054204 (derived independently
+    // and adjudicated then; the stale-cache mutant computes half the metres
+    // and lands at 27.658619791226776 instead). -64px, not -32: at -32 the
+    // height doubling and the extent_y doubling cancel and both paths agree.
+    await skipIfPresentedCanvasBroken(ctx)
+    const container = makeContainer(400, 200)
+    const viewer = await FramelessImageViewer.create({
+      container,
+      src: '/fixtures/panorama.png',
+      camera: { projection: { kind: 'mercator', zoom: 1, extent: [1, 1] } }
+    })
+    try {
+      await nextFrames(3)
+      container.style.width = '400px'
+      container.style.height = '400px'
+      await nextFrames(5)
+      await drag(canvasOf(container), { from: { x: 200, y: 250 }, to: { x: 200, y: 186 } })
+      await nextFrames(2)
+      expect(viewer.cameraOptions.pose?.povLatitude).toBeCloseTo(49.801690337054204, 10)
+    } finally {
+      viewer.dispose()
+      container.remove()
+    }
+  })
 })
