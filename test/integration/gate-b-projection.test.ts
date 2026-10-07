@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { renderOffscreen, maxChannelDiff } from './support/gpu'
+import { compareWithReference } from './support/cross-backend'
 import { LEGACY_EXTENT } from '../support/baseline'
 import { loadSource, readCaptureDoc } from './support/baseline-browser'
+import type { Projection } from '../../src/core/types'
 
 /*
  * Gate B, part 2: the one place the new renderer intentionally disagrees with
@@ -149,5 +151,32 @@ describe('latitude now affects the non-linear cameras', () => {
     expect(spread(pole.rgba)).toBeLessThanOrEqual(2)
     // The equator frame shows many rows.
     expect(spread(equator.rgba)).toBeGreaterThan(2)
+  })
+
+  it('frames every camera against the reference at three container shapes', async () => {
+    // The aspect-fit framing contract at the pixel level (spec 5.4, gate B
+    // row): at each container shape the rendered screen edges must land
+    // where the float64 reference puts them, with the extent RESOLVED for
+    // that shape. A wrong rate constant (say cylindrical forgetting its 2pi)
+    // displaces the poles off-screen and shows up frame-wide, far above 2.
+    // 256x144 is 16:9, 144x256 is 9:16, 128x128 the square.
+    const SHAPES: ReadonlyArray<{ width: number, height: number, label: string }> = [
+      { width: 256, height: 144, label: '16:9' },
+      { width: 144, height: 256, label: '9:16' },
+      { width: 128, height: 128, label: '1:1' }
+    ]
+    for (const camera of CAMERAS) {
+      const extent = camera === 'mercator' ? [1, 1] : LEGACY_EXTENT[camera]
+      const projection = { kind: camera, zoom: 1, extent } as Projection
+      for (const shape of SHAPES) {
+        const r = await compareWithReference(
+          { povLatitude: 0, povLongitude: 0 },
+          projection,
+          shape
+        )
+        expect(r.webgpu, `${camera} ${shape.label} webgpu vs reference`).toBeLessThanOrEqual(2)
+        expect(r.webgl2, `${camera} ${shape.label} webgl2 vs reference`).toBeLessThanOrEqual(2)
+      }
+    }
   })
 })

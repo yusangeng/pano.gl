@@ -320,15 +320,25 @@ function diagnose (a: ArrayLike<number>, b: ArrayLike<number>, width: number): G
   return { max: maxChannelDiff(a, b), ...locate(a, b, width) }
 }
 
-/** The request all three paths are given. Identical, including the source pixels. */
-export async function gateRequest (camera: CameraState, projection: Projection): Promise<RenderRequest> {
+/**
+ * The request all three paths are given. Identical, including the source pixels.
+ *
+ * The render target defaults to the gate C square; `shape` renders at a
+ * rectangular container instead. The source stays GATE_C_SIZE whatever the
+ * target: these gates compare projections, not source rescaling.
+ */
+export async function gateRequest (
+  camera: CameraState,
+  projection: Projection,
+  shape: { width: number, height: number } = { width: GATE_C_SIZE, height: GATE_C_SIZE }
+): Promise<RenderRequest> {
   // One source per call, handed to all three paths. Two sources with "the same"
   // pattern is how a comparison ends up measuring the difference between two
   // generators.
   const { bitmap, size } = await gateSource()
   return {
-    width: GATE_C_SIZE,
-    height: GATE_C_SIZE,
+    width: shape.width,
+    height: shape.height,
     camera,
     projection,
     source: bitmap,
@@ -340,16 +350,22 @@ export async function gateRequest (camera: CameraState, projection: Projection):
 /**
  * Renders one camera state through both shaders and returns the worst channel
  * difference between them.
+ *
+ * The render target defaults to the gate C square; `shape` renders at a
+ * rectangular container instead.
  */
 export async function renderBothBackends (
   camera: CameraState,
-  projection: Projection
+  projection: Projection,
+  shape: { width: number, height: number } = { width: GATE_C_SIZE, height: GATE_C_SIZE }
 ): Promise<GateCDiff> {
-  const request = await gateRequest(camera, projection)
+  const request = await gateRequest(camera, projection, shape)
   const webgpu = await renderOffscreen(request)
   const webgl2 = await renderOffscreenGLSL(request)
   request.source.close()
-  return diagnose(webgpu.rgba, webgl2.rgba, GATE_C_SIZE)
+  // shape.width, not GATE_C_SIZE: the located (x, y) is only meaningful
+  // against the row width of the images that were actually rendered.
+  return diagnose(webgpu.rgba, webgl2.rgba, shape.width)
 }
 
 /**
@@ -359,12 +375,17 @@ export async function renderBothBackends (
  * differ, running this says which of them is wrong. It is also the only thing
  * that can catch a mistake present in BOTH transcriptions -- the one failure
  * mode the A/B comparison is blind to by construction.
+ *
+ * The render target defaults to the gate C square; `shape` renders at a
+ * rectangular container instead, and the reference resolves the extent against
+ * that shape's own aspect.
  */
 export async function compareWithReference (
   camera: CameraState,
-  projection: Projection
+  projection: Projection,
+  shape: { width: number, height: number } = { width: GATE_C_SIZE, height: GATE_C_SIZE }
 ): Promise<{ webgpu: number, webgl2: number }> {
-  const request = await gateRequest(camera, projection)
+  const request = await gateRequest(camera, projection, shape)
   const reference = await referenceImage(request)
   const webgpu = await renderOffscreen(request)
   const webgl2 = await renderOffscreenGLSL(request)
