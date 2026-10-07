@@ -68,6 +68,13 @@ function assertProjectionFinite (projection: Projection): void {
 export class CameraController {
   #state: CameraState
   #projection: Projection
+  /*
+   * The container's width/height for the non-linear kinds, defaulting to 1
+   * until the first resize -- the same placeholder story as the linear
+   * projection's aspect. Consumed at draw time through resolveExtent; never
+   * cached further (resolve per frame, store only the input).
+   */
+  #surfaceAspect = 1
   #dirty = true
   readonly #changeListeners = new Set<() => void>()
 
@@ -94,6 +101,11 @@ export class CameraController {
 
   /** The current projection. */
   get projection (): Projection { return this.#projection }
+
+  /** The container aspect the non-linear kinds resolve their extent against. */
+  get surfaceAspect (): number {
+    return this.#surfaceAspect
+  }
 
   /**
    * Reads and clears the dirty flag.
@@ -213,14 +225,16 @@ export class CameraController {
   }
 
   /**
-   * Sets the linear projection's aspect from the surface's, and does nothing to
-   * the others.
+   * Sets the surface's aspect on the camera: the linear projection's `aspect`
+   * for the linear kind, and for the others the stored container aspect their
+   * extent is resolved against at draw time.
    *
    * The surface size is knowledge only the viewer's resize handler has, and for
    * the linear camera the projection's aspect IS the surface's -- rendering a
    * 16:9 container with the default square aspect stretches the image. The
-   * other four cameras take their shape from the projection's `extent`, which
-   * the shader reads, so they have no aspect field to write.
+   * other four cameras take their shape from the projection's `extent` read
+   * against the stored container aspect, so there is no aspect field to write
+   * on the projection itself.
    *
    * @param aspect - width / height of the drawing surface. Must be positive.
    * @throws If `aspect` is not finite or is not greater than zero. A zero aspect
@@ -229,9 +243,13 @@ export class CameraController {
    */
   setAspect (aspect: number): void {
     assertPositive(aspect, 'aspect')
-    if (this.#projection.kind !== 'linear') return
-    if (this.#projection.aspect === aspect) return
-    this.#projection = { ...this.#projection, aspect }
+    if (this.#projection.kind === 'linear') {
+      if (this.#projection.aspect === aspect) return
+      this.#projection = { ...this.#projection, aspect }
+    } else {
+      if (this.#surfaceAspect === aspect) return
+      this.#surfaceAspect = aspect
+    }
     this.#dirty = true
     this.#notify()
   }
