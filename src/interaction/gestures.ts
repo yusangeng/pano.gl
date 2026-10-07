@@ -119,18 +119,20 @@ export interface MercatorDrag {
  *
  * The metre formula is the vertical twin of `classifyDrag`'s longitude: one
  * screen height spans `2*pi*zoom` metres, so the same pixels span half the
- * metres at zoom 0.5 (spec section 4). The sign follows the same
- * scene-follows-hand inversion as `classifyDrag` -- drag up, and the content
- * that was below centre comes to centre.
+ * metres at zoom 0.5 (spec section 4). The metres are per the RESOLVED
+ * extent -- one screen height of drag is `2*pi*zoom*extent_y` metres on the
+ * paper, so the same pixels move less map on a taller paper. The sign follows
+ * the same scene-follows-hand inversion as `classifyDrag` -- drag up, and the
+ * content that was below centre comes to centre.
  *
  * A non-positive surface dimension yields zero metres and zero degrees, the
  * same guard `classifyDrag` has: a collapsed container must not turn the
  * division into infinity or NaN.
  */
-export function classifyDragMercator (delta: DragInput, surface: SurfaceSize, zoom: number): MercatorDrag {
+export function classifyDragMercator (delta: DragInput, surface: SurfaceSize, zoom: number, extentY: number): MercatorDrag {
   if (surface.width <= 0 || surface.height <= 0) return { meters: 0, lng: 0 }
   return {
     lng: -(delta.deltaX / surface.width) * 360,
-    meters: -(delta.deltaY / surface.height) * 2 * Math.PI * zoom
+    meters: -(delta.deltaY / surface.height) * 2 * Math.PI * zoom * extentY
   }
 }

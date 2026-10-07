@@ -137,8 +137,8 @@ export class InputController extends Disposable {
   }
 
   /** Classifies a pan event for the Mercator camera. See {@link classifyDragMercator}. */
-  dragToMercatorPan (deltaX: number, deltaY: number, surface: SurfaceSize, zoom: number): MercatorDrag {
-    return classifyDragMercator({ deltaX, deltaY }, surface, zoom)
+  dragToMercatorPan (deltaX: number, deltaY: number, surface: SurfaceSize, zoom: number, extentY: number): MercatorDrag {
+    return classifyDragMercator({ deltaX, deltaY }, surface, zoom, extentY)
   }
 
   override dispose (): void {

@@ -830,7 +830,7 @@ Spec §4 (the classifyDragMercator row and the viewer pan row). Today's hardcode
 - Test: `test/integration/ptz.test.ts:205-215`
 - Test: `test/integration/mercator-drag.test.ts`
 
-- [ ] **Step 1: Write the failing unit tests first**
+- [x] **Step 1: Write the failing unit tests first**
 
 In `test/unit/gestures.test.ts`, inside the `classifyDragMercator` describe (surface `{ width: 400, height: 200 }`):
 
@@ -855,12 +855,12 @@ In `test/unit/gestures.test.ts`, inside the `classifyDragMercator` describe (sur
 
 (Adapt the call shape to the file's actual helper spelling — if the describe builds `delta`/`surface` once, reuse them.)
 
-- [ ] **Step 2: Run to verify red**
+- [x] **Step 2: Run to verify red**
 
 Run: `npx vitest run --project unit test/unit/gestures.test.ts`
 Expected: FAIL — `classifyDragMercator` takes no `extentY` (TypeError, wrong arity at runtime under esbuild).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 (a) `src/interaction/gestures.ts` — `classifyDragMercator` gains the parameter and the factor (keep the zero-size guard exactly as it is):
 
@@ -904,7 +904,7 @@ export function classifyDragMercator (
 
 (Preserve the branch's existing comment text where it overlaps — the intent is: only the `extentY` resolution and the extra argument are new.) Add `import { resolveExtent } from '../core/extent'` at the top.
 
-- [ ] **Step 4: Update the twin and the end-to-end literals**
+- [x] **Step 4: Update the twin and the end-to-end literals**
 
 (a) `test/integration/ptz.test.ts` (~line 208): `input.dragToMercatorPan(100, -50, { width: 1000, height: 500 }, 0.5)` gains `, 1` — its literals (`lng` −36, `meters` 0.3141592653589793) are unchanged at extentY 1.
 
@@ -917,7 +917,7 @@ export function classifyDragMercator (
 
 Each updated comment keeps the "derived independently" phrasing already in the file.
 
-- [ ] **Step 5: Run green**
+- [x] **Step 5: Run green**
 
 Run: `npx vitest run --project unit test/unit/gestures.test.ts`
 Expected: PASS.
@@ -925,7 +925,7 @@ Expected: PASS.
 Run: `npx vitest run --project integration test/integration/mercator-drag.test.ts --project no-webgpu test/integration/mercator-drag.test.ts`
 Expected: PASS in both projects (the no-webgpu run proves the WebGL2 leg of the same story).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/interaction/gestures.ts src/interaction/input-controller.ts src/viewer/viewer.ts test/unit/gestures.test.ts test/integration/ptz.test.ts test/integration/mercator-drag.test.ts

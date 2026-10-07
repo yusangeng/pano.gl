@@ -27,13 +27,14 @@ describe('mercator drag (user story)', () => {
       const rotations: Array<{ lat: number, lng: number }> = []
       viewer.on('rotate', (r) => { rotations.push(r) })
 
-      // 32px of 200px height upward: metres = -(deltaY/h)*2pi*zoom
-      // = 2pi*0.16 = 1.0053096491487339, derived independently.
+      // 32px of 200px height upward: metres = -(deltaY/h)*2pi*zoom*extent_y
+      // = 2pi*0.16*0.5 = 0.5026548245743669, derived independently. The
+      // 400x200 container resolves extent [1, 1] to extent_y 0.5.
       await drag(canvasOf(container), { from: { x: 200, y: 100 }, to: { x: 200, y: 68 } })
       await nextFrames(2)
 
       const pose = viewer.cameraOptions.pose
-      expect(pose?.povLatitude).toBeCloseTo(49.801690337054204, 9)
+      expect(pose?.povLatitude).toBeCloseTo(27.658619791226776, 9)
       expect(pose?.povLongitude).toBe(0)
       // Each 'rotate' carries its own applied delta. The drag helper delivers
       // exactly one move, so this is one event; the sum keeps the assertion
@@ -41,7 +42,7 @@ describe('mercator drag (user story)', () => {
       expect(rotations.length).toBeGreaterThanOrEqual(1)
       const totalLat = rotations.reduce((s, r) => s + r.lat, 0)
       const totalLng = rotations.reduce((s, r) => s + r.lng, 0)
-      expect(totalLat).toBeCloseTo(49.801690337054204, 9)
+      expect(totalLat).toBeCloseTo(27.658619791226776, 9)
       expect(totalLng).toBe(0)
     } finally {
       viewer.dispose()
@@ -126,15 +127,16 @@ describe('mercator drag (user story)', () => {
       await nextFrames(3)
 
       // Halve the zoom parameter -- 1 / (1 + 1) = 0.5 -- so the same 32px of
-      // 200px upward spans half the metres: 2pi*0.16*0.5, and
-      // lat' = asin(tanh(2pi*0.08)) * 180/pi = 27.658619791226776,
+      // 200px upward spans half the metres again (extent_y is already 0.5 on
+      // this 400x200 container): 2pi*0.16*0.25, and
+      // lat' = asin(tanh(2pi*0.04)) * 180/pi = 14.250753735296483,
       // derived independently.
       viewer.zoom(1)
       await drag(canvasOf(container), { from: { x: 200, y: 100 }, to: { x: 200, y: 68 } })
       await nextFrames(2)
 
       const pose = viewer.cameraOptions.pose
-      expect(pose?.povLatitude).toBeCloseTo(27.658619791226776, 9)
+      expect(pose?.povLatitude).toBeCloseTo(14.250753735296483, 9)
     } finally {
       viewer.dispose()
       container.remove()
@@ -147,8 +149,8 @@ describe('mercator drag (user story)', () => {
     // not saturation). The pose-vs-sum pair is the point: applied delta and
     // absolute pose coincide at lat 0, where the first test drags, so an
     // implementation emitting the absolute pose passed the whole suite until
-    // this test, measured by Task 8's review. L = 89.63406064763751, applied
-    // = L - 89 = 0.6340606476375115, both derived independently.
+    // this test, measured by Task 8's review. L = 89.39506770045162, applied
+    // = L - 89 = 0.39506770045161943, both derived independently.
     await skipIfPresentedCanvasBroken(ctx)
     const container = makeContainer(400, 200)
     const viewer = await FramelessImageViewer.create({
@@ -165,14 +167,15 @@ describe('mercator drag (user story)', () => {
       const rotations: Array<{ lat: number, lng: number }> = []
       viewer.on('rotate', (r) => { rotations.push(r) })
 
-      // The same 32px-of-200px upward drag: metres = 2pi*0.16.
+      // The same 32px-of-200px upward drag: metres = 2pi*0.16*0.5 (extent_y
+      // is 0.5 on this 400x200 container).
       await drag(canvasOf(container), { from: { x: 200, y: 100 }, to: { x: 200, y: 68 } })
       await nextFrames(2)
 
       const pose = viewer.cameraOptions.pose
-      expect(pose?.povLatitude).toBeCloseTo(89.63406064763751, 9)
+      expect(pose?.povLatitude).toBeCloseTo(89.39506770045162, 9)
       const totalLat = rotations.reduce((s, r) => s + r.lat, 0)
-      expect(totalLat).toBeCloseTo(0.6340606476375115, 9)
+      expect(totalLat).toBeCloseTo(0.39506770045161943, 9)
     } finally {
       viewer.dispose()
       container.remove()

@@ -126,7 +126,7 @@ describe('classifyDragMercator', () => {
   it('a full-height upward drag is 2pi metres at zoom 1 -- one screen spans M in [-pi, pi]', () => {
     // Spec 2.3: zoom 1 with extent 1x1 shows exactly gd(pi) = 85.051129deg
     // of latitude either way of centre, so one screen height IS 2pi metres.
-    const d = classifyDragMercator({ deltaX: 0, deltaY: -200 }, surface, 1)
+    const d = classifyDragMercator({ deltaX: 0, deltaY: -200 }, surface, 1, 1)
     expect(d.meters).toBeCloseTo(2 * Math.PI, 10)
     // toBeCloseTo, not toBe: -(0 / width) * 360 is IEEE negative zero, which
     // Object.is distinguishes from +0. classifyDrag has the same -0 and the
@@ -135,26 +135,40 @@ describe('classifyDragMercator', () => {
   })
 
   it('zoom halves the metre span of the same pixels', () => {
-    const d = classifyDragMercator({ deltaX: 0, deltaY: -200 }, surface, 0.5)
+    const d = classifyDragMercator({ deltaX: 0, deltaY: -200 }, surface, 0.5, 1)
     expect(d.meters).toBeCloseTo(Math.PI, 10)
   })
 
   it('horizontal: lng matches classifyDrag exactly (I5, the theta row is shared)', () => {
     const delta = { deltaX: 100, deltaY: 0 }
-    expect(classifyDragMercator(delta, surface, 1).lng)
+    expect(classifyDragMercator(delta, surface, 1, 1).lng)
       .toBeCloseTo(classifyDrag(delta, surface).lng, 10)
-    expect(classifyDragMercator(delta, surface, 1).lng).toBeCloseTo(-90, 10)
+    expect(classifyDragMercator(delta, surface, 1, 1).lng).toBeCloseTo(-90, 10)
   })
 
   it('the vertical sign is scene-follows-hand, same inversion as classifyDrag', () => {
-    const up = classifyDragMercator({ deltaX: 0, deltaY: -50 }, surface, 1).meters
-    const down = classifyDragMercator({ deltaX: 0, deltaY: 50 }, surface, 1).meters
+    const up = classifyDragMercator({ deltaX: 0, deltaY: -50 }, surface, 1, 1).meters
+    const down = classifyDragMercator({ deltaX: 0, deltaY: 50 }, surface, 1, 1).meters
     expect(up).toBeGreaterThan(0)
     expect(down).toBeLessThan(0)
   })
 
   it('a zero-sized surface reports no movement', () => {
-    expect(classifyDragMercator({ deltaX: 10, deltaY: 10 }, { width: 0, height: 0 }, 1))
+    expect(classifyDragMercator({ deltaX: 10, deltaY: 10 }, { width: 0, height: 0 }, 1, 1))
       .toEqual({ meters: 0, lng: 0 })
+  })
+
+  it('scales the metres by the resolved extent_y (one screen height = 2pi*zoom*extentY)', () => {
+    // A 16:9 container resolves mercator [1, 1] to [1, 0.5625]; a 9:16 one
+    // to [1, 1.7778]. Pannini-shaped papers scale the same way. Derived
+    // independently: 2pi*1*2.25 = 14.137166941154069;
+    // 2pi*0.5*2.25 = 7.0685834705770345.
+    const up = { deltaX: 0, deltaY: -200 }
+    expect(classifyDragMercator(up, surface, 1, 2.25).meters).toBeCloseTo(14.137166941154069, 10)
+    expect(classifyDragMercator(up, surface, 0.5, 2.25).meters).toBeCloseTo(7.0685834705770345, 10)
+    // lng never reads the extent. toBeCloseTo, not toBe: -(0/width)*360 is
+    // IEEE negative zero, which Object.is distinguishes from +0 -- the same
+    // trap the first test in this describe documents.
+    expect(classifyDragMercator(up, surface, 1, 2.25).lng).toBeCloseTo(0, 10)
   })
 })
