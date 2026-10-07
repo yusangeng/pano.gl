@@ -887,17 +887,32 @@ describe('mercator (2026-09-29 mercator-camera spec)', () => {
  * measured on project()'s FINAL output and must never go through
  * resolveExtent -- the render path and this module share that function, so a
  * test that calls it has no independent opinion. The extents below are
- * hand-resolved from the spec's 1.2 rate table (2pi for cylindrical, 1 for
- * the rest) with constants written here, which is the second opinion.
+ * hand-resolved from the spec 1.2 extent table (extent_y = extent_x*2pi/A
+ * for cylindrical, extent_x/A for the rest) with constants written here,
+ * which is the second opinion.
+ *
+ * Adding a camera: a new non-linear kind must appear in CASES with its
+ * hand-resolved rate; linear is deliberately absent -- it carries fov and
+ * aspect, not extent.
  *
  * Verified before this test was written: worst |2*du*w - A*dv| =
  * 4.30645062795762e-11 over these cases (finite-difference truncation
  * scale); 1e-9 leaves an order of magnitude of headroom without admitting a
- * real rate error, which lands at O(1).
+ * real rate error, which lands at O(1). Failure triage: a miss at
+ * ~1e-7..1e-5 means transcription drift in THIS file -- re-derive against
+ * the spec tables, it is not a tolerance problem; O(1) means a real
+ * rate/weight error.
  */
 describe('screen-centre equidistance (aspect fit, I2)', () => {
-  /** Turn-difference mapped into (-0.5, 0.5], so a seam-straddling pair reads as epsilon, not as -1. */
+  /** Turn-difference mapped into [-0.5, 0.5): Math.round rounds halves toward +infinity, so a +0.5 input lands on -0.5. Lets a seam-straddling pair read as epsilon, not as -1. */
   const wrapTurns = (d: number): number => d - Math.round(d)
+
+  /** Aspect ratios as W/H, labelled so a failure message prints 16:9, not 1.7777777777777777. */
+  const ASPECTS: ReadonlyArray<{ value: number, label: string }> = [
+    { value: 1, label: '1:1' },
+    { value: 16 / 9, label: '16:9' },
+    { value: 9 / 16, label: '9:16' }
+  ]
 
   interface EquidistanceCase {
     kind: 'cylindrical' | 'planet' | 'pannini' | 'mercator'
@@ -970,11 +985,13 @@ describe('screen-centre equidistance (aspect fit, I2)', () => {
 
   it.each(CASES)('$kind at lat $pose.povLatitude stays equidistant across aspects and zooms', ({ kind, extentX, pose, weight }) => {
     const eps = 1e-4
-    // The rate table, hand-transcribed (spec 2.1) -- NOT resolveExtent.
+    // The per-kind rate k_x/k_y, hand-transcribed from the spec 2.1 rate table -- NOT resolveExtent.
     const rate = kind === 'cylindrical' ? 2 * Math.PI : 1
 
-    for (const aspect of [1, 16 / 9, 9 / 16]) {
+    for (const { value: aspect, label: aspectLabel } of ASPECTS) {
       for (const zoom of [1, 0.5]) {
+        // The extent tuple is inert for project() (it reads kind and zoom
+        // only); the extent enters through the probes' halfX/halfY.
         const projection: Projection = { kind, zoom, extent: [extentX, extentX] }
         const halfX = extentX / 2
         const halfY = (extentX * rate) / aspect / 2
@@ -989,12 +1006,20 @@ describe('screen-centre equidistance (aspect fit, I2)', () => {
 
         const du = Math.abs(wrapTurns(px.u - mx.u))
         const dv = Math.abs(py.v - my.v)
+        const label = `${kind} aspect ${aspectLabel} zoom ${zoom} lat ${pose.povLatitude}`
+        // Canaries against a vacuous pass: were project() deaf to both
+        // probe axes, du = dv = 0 and the property below would hold for free.
+        expect(du, label).toBeGreaterThan(0)
+        expect(dv, label).toBeGreaterThan(0)
         // du is per 2*eps of ndc x = eps*W pixels; dv likewise per eps*H.
         // Equal angle per pixel horizontally and vertically is
-        // |dtheta|*w = A*|dphi| with A = W/H, which in turn/v units is:
+        // |dtheta|*w = A*|dphi| with A = W/H. u is turns (u = theta/2pi)
+        // and v is half-turns (v = phi/pi), so dtheta = 2pi*du and
+        // dphi = pi*dv: the pis cancel and the 2 below is the surviving
+        // unit ratio, turn over half-turn:
         expect(
           Math.abs(2 * du * weight - aspect * dv),
-          `${kind} aspect ${aspect} zoom ${zoom} lat ${pose.povLatitude}`
+          label
         ).toBeLessThan(1e-9)
       }
     }
