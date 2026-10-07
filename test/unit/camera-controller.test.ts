@@ -533,15 +533,27 @@ describe('CameraController', () => {
     expect(c.consumeDirty()).toBe(true)
   })
 
-  it('setAspect leaves a non-linear projection alone', () => {
-    // The other four cameras get their surface shape from the quad's extent,
-    // which the shader reads; there is no aspect field to write and inventing one
-    // would be a field nothing consumes.
+  it('setAspect stores the surface aspect for the non-linear kinds, dirtying without rewriting the projection', () => {
+    // The other four cameras derive their surface shape from the container at
+    // draw time (resolveExtent); the projection tuple stays the user's
+    // calibration. What setAspect writes here is the controller's cached W/H,
+    // and a change must dirty the frame -- the picture reframes, it does not
+    // repaint: an undirty setAspect would leave a resized viewer rendering the
+    // old framing until the camera moved.
     const c = new CameraController(undefined, cylindrical())
     c.consumeDirty()
     c.setAspect(2)
     expect(c.projection).toEqual(cylindrical())
-    expect(c.consumeDirty()).toBe(false)
+    expect(c.surfaceAspect).toBe(2)
+    expect(c.consumeDirty()).toBe(true)
+  })
+
+  it('surfaceAspect defaults to 1 before the first resize', () => {
+    // Same story as the linear placeholder aspect: unknowable at construction,
+    // and 1 is the least-visible wrong value -- the square framing every
+    // existing square-extent render already assumed.
+    const c = new CameraController(undefined, cylindrical())
+    expect(c.surfaceAspect).toBe(1)
   })
 
   it('setAspect is a no-op when the aspect did not change', () => {
@@ -551,6 +563,11 @@ describe('CameraController', () => {
     c.consumeDirty()
     c.setAspect(1)
     expect(c.consumeDirty()).toBe(false)
+
+    const nonLinear = new CameraController(undefined, cylindrical())
+    nonLinear.consumeDirty()
+    nonLinear.setAspect(1)
+    expect(nonLinear.consumeDirty()).toBe(false)
   })
 
   it('rejects a non-positive aspect', () => {
@@ -573,6 +590,16 @@ describe('CameraController', () => {
     expect(() => nonLinear.setAspect(0)).toThrow(/greater than 0/i)
     expect(() => nonLinear.setAspect(-1)).toThrow(/greater than 0/i)
     expect(() => nonLinear.setAspect(NaN)).toThrow(/greater than 0/i)
+  })
+
+  it('setProjection keeps a manual fit', () => {
+    // fit travels inside the projection record; nothing on the controller
+    // reads or rewrites it. The pin exists so a future normalization step
+    // (say, defaulting fit to 'container' on store) cannot silently drop the
+    // manual-framing mode.
+    const c = new CameraController(undefined, cylindrical())
+    c.setProjection({ kind: 'cylindrical', zoom: 1, extent: [1, 1], fit: 'extent' })
+    expect(c.projection).toEqual({ kind: 'cylindrical', zoom: 1, extent: [1, 1], fit: 'extent' })
   })
 
   it('invalidate forces the next frame to draw', () => {

@@ -233,7 +233,7 @@ Spec §3.2. The controller stores the container's W/H for the non-linear kinds; 
 - Modify: `src/viewer/camera-controller.ts`
 - Test: `test/unit/camera-controller.test.ts:509-576`
 
-- [ ] **Step 1: Rewrite the affected tests first**
+- [x] **Step 1: Rewrite the affected tests first**
 
 In `test/unit/camera-controller.test.ts`:
 
@@ -289,12 +289,12 @@ In `test/unit/camera-controller.test.ts`:
   })
 ```
 
-- [ ] **Step 2: Run to verify the new tests fail**
+- [x] **Step 2: Run to verify the new tests fail**
 
 Run: `npx vitest run --project unit test/unit/camera-controller.test.ts`
 Expected: FAIL — `c.surfaceAspect is not a function` on the new tests.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/viewer/camera-controller.ts`:
 
@@ -338,12 +338,12 @@ In `src/viewer/camera-controller.ts`:
 
 (The assert stays above the kind branch — the existing `rejects a non-positive aspect` test pins that order for both kinds, and it must keep passing unchanged.)
 
-- [ ] **Step 4: Run to verify green**
+- [x] **Step 4: Run to verify green**
 
 Run: `npx vitest run --project unit test/unit/camera-controller.test.ts`
 Expected: PASS — the whole file, including the untouched `rejects a non-positive aspect`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer/camera-controller.ts test/unit/camera-controller.test.ts
