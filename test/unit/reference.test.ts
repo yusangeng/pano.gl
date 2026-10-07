@@ -293,7 +293,7 @@ describe('output range', () => {
 describe('ndcToSurface', () => {
   // Direct pins, beyond the property tests above: this mapping is the
   // protagonist of gate B, and the property tests never call it.
-  it('maps the device square onto the x = 1 plane at half the largest extent', () => {
+  it('maps the device square onto the x = 1 plane at half of each axis of a square extent', () => {
     // extent [4, 4] -> m = 2, so the corners of the device square land on the
     // corners of the legacy quad. This is the same correspondence the matrix
     // tests pin from the other side: ndc(±1, ±1) <-> (1, ±2, ±2).
