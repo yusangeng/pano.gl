@@ -86,7 +86,7 @@ describe('WebGL2Backend', () => {
     // literal `fov: 75` handed the matrix 75 radians -- a deterministic but
     // nonsensical camera whose vertical span was +-11 degrees and vertically
     // mirrored, too narrow for the both-colors assertion below to ever fire.
-    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 })
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 }, 1)
     backend!.setSource(await twoToneSource())
     backend!.render()
 
@@ -149,7 +149,7 @@ describe('WebGL2Backend', () => {
     const unsubscribe = backend!.onDeviceLost(l => lost.push(l))
 
     backend!.resize(32, 32, 1)
-    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 })
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 }, 1)
     backend!.setSource(await twoToneSource())
     backend!.render()
     const before = nonBlackFraction(readGl(canvas))
@@ -212,7 +212,7 @@ describe('WebGL2Backend', () => {
     // A second source object, because the first one's element was released --
     // which is the documented setSource contract, and the reason a restore
     // cannot redraw on its own. See the non-goals.
-    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 })
+    backend!.setCamera(ORIGIN, { kind: 'linear', fov: (75 * Math.PI) / 180, aspect: 1 }, 1)
     backend!.setSource(await twoToneSource())
     backend!.render()
     const after = nonBlackFraction(readGl(canvas))

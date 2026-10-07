@@ -45,13 +45,14 @@ describe.skipIf(captures.length === 0)('matrix parity with the v0.2.2 baseline',
       const projection: Projection =
         camera === 'perspective'
           ? { kind: 'linear', fov: legacyFovFrom(matrix), aspect: 1 }
-          : { kind: camera, zoom: 1, extent: LEGACY_EXTENT[camera] }
+          : { kind: camera, zoom: 1, extent: LEGACY_EXTENT[camera], fit: 'extent' }
 
       const actual = buildCameraTransform(
         { povLatitude: pose.lat, povLongitude: pose.lng },
         projection,
         'minus-one-to-one',
-        mat4.create()
+        mat4.create(),
+        1
       )
 
       // The linear path is the same computation the legacy performed, so all 16
@@ -75,9 +76,10 @@ describe.skipIf(captures.length === 0)('matrix parity with the v0.2.2 baseline',
 
     const actual = buildCameraTransform(
       { povLatitude: pose.lat, povLongitude: pose.lng },
-      { kind: 'planet', zoom: 1, extent: LEGACY_EXTENT.planet },
+      { kind: 'planet', zoom: 1, extent: LEGACY_EXTENT.planet, fit: 'extent' },
       'minus-one-to-one',
-      mat4.create()
+      mat4.create(),
+      1
     )
 
     const differing = []

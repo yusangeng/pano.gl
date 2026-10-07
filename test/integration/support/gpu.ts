@@ -88,7 +88,9 @@ export async function renderOffscreen (request: RenderRequest): Promise<RenderRe
   }
 
   try {
-    backend.setCamera(camera, projection)
+    // The offscreen target IS the viewport, so its shape is the honest aspect
+    // for the extent resolution -- not the canvas-less backend's default.
+    backend.setCamera(camera, projection, width / height)
     backend.setSource(source)
     backend.render(target.createView())
     const rgba = await readTexture(device, target, width, height)

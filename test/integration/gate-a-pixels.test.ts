@@ -86,10 +86,16 @@ describe('gate A: fullscreen triangle vs the v0.2.2 baseline', () => {
         // The legacy fov is read out of the matrix it built rather than guessed:
         // this gate is about whether the rest of the pipeline agrees, and a
         // wrong fov would produce a confident failure that says nothing useful.
+        // fit 'extent' pins the legacy square box: the v0.2.2 pixels were
+        // captured through max(extent)/2 on a square tuple, and the container
+        // default must not reinterpret the tuple against the 128x128 viewport
+        // (cylindrical would resolve [1, 1] to [1, 2pi] and drift the whole
+        // frame). The baseline is NOT re-shot; this pin is what keeps it
+        // comparable (spec 5.1, invariant I6).
         const projection: Projection =
           camera === 'perspective'
             ? { kind: 'linear', fov: legacyFovFrom(captured.u_CamTransMatrix as number[]), aspect: 1 }
-            : { kind: camera, zoom: 1, extent: LEGACY_EXTENT[camera] }
+            : { kind: camera, zoom: 1, extent: LEGACY_EXTENT[camera], fit: 'extent' }
 
         const bitmap = await createImageBitmap(
           new ImageData(source.rgba.slice(), source.width, source.height)

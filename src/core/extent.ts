@@ -24,6 +24,10 @@ const TWO_PI = 2 * Math.PI
  * derived paper height graceful. The derivation never reads zoom --
  * zoom cancels on both sides of the equidistance condition, which is what
  * keeps it a purely horizontal framing knob.
+ *
+ * @throws If `aspect` is not a finite number greater than 0, whatever the
+ *   framing mode -- the guard is `assertPositive`'s, and a manual tuple does
+ *   not waive the shape check.
  */
 export function resolveExtent (
   projection: NonLinearProjection,

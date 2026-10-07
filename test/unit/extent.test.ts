@@ -49,6 +49,10 @@ describe('resolveExtent', () => {
     // default rather than throwing mid-frame.
     const typo = { kind: 'mercator', zoom: 1, extent: [1, 1], fit: 'contain' } as unknown as NonLinearProjection
     expect(resolveExtent(typo, 2)).toEqual([1, 0.5])
+    // The spelled-out default deserves its own leg, not only the typo case:
+    // 'container' by name must resolve identically to the degradation.
+    const named: Projection = { kind: 'mercator', zoom: 1, extent: [1, 1], fit: 'container' }
+    expect(resolveExtent(named, 2)).toEqual([1, 0.5])
   })
 
   it('rejects a non-positive or non-finite aspect', () => {
