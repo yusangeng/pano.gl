@@ -596,7 +596,7 @@ One commit changes the signature everywhere, because a defaulted parameter would
 - Modify: `test/unit/matrix-baseline.test.ts`
 - Modify: `test/integration/gate-a-pixels.test.ts:89-92`
 
-- [ ] **Step 1: Write the new matrix tests first**
+- [x] **Step 1: Write the new matrix tests first**
 
 In `test/unit/matrix.test.ts`:
 
@@ -705,12 +705,12 @@ and inside the loop the projection literal becomes `{ kind: camera, zoom: 1, ext
 
 (d) `test/unit/matrix-baseline.test.ts`: every non-linear projection literal `{ kind: camera, zoom: 1, extent: LEGACY_EXTENT[camera] }` gains `fit: 'extent'` (I6: the captured baselines must keep comparing bit-for-bit), and every `buildCameraTransform({ povLatitude, povLongitude }, projection, 'minus-one-to-one', mat4.create())` call gains a final `, 1`.
 
-- [ ] **Step 2: Run to verify red**
+- [x] **Step 2: Run to verify red**
 
 Run: `npx vitest run --project unit test/unit/matrix.test.ts`
 Expected: FAIL on `sizes the box per axis...` and `derives the container-fit height...` (today's builder ignores the aspect argument and collapses to max/2). The I6 test may already pass (the current code ignores aspect entirely) — that one is a pin, not a red.
 
-- [ ] **Step 3: Implement `matrix.ts`**
+- [x] **Step 3: Implement `matrix.ts`**
 
 In `src/core/matrix.ts`:
 
@@ -755,7 +755,7 @@ export function buildProjection (
 
 (c) `buildCameraTransform` gains the same trailing `aspect: number` parameter and passes it to `buildProjection`.
 
-- [ ] **Step 4: Cascade the signature**
+- [x] **Step 4: Cascade the signature**
 
 (a) `src/renderer/backend.ts` — the interface method becomes:
 
@@ -799,7 +799,7 @@ with `import { resolveExtent } from '../../src/core/extent'` added. (The linear 
     : { kind: camera, zoom: 1, extent: LEGACY_EXTENT[camera], fit: 'extent' }
 ```
 
-- [ ] **Step 5: Run unit green, then the gates**
+- [x] **Step 5: Run unit green, then the gates**
 
 Run: `npx vitest run --project unit`
 Expected: PASS — all unit files.
@@ -809,7 +809,7 @@ Expected: PASS — gate A bit-stable through `fit: 'extent'`; gate C green becau
 
 If gate A fails: the `fit: 'extent'` pin did not land everywhere it must (check the second `camerasOf()`-style construction if the file has more than one), or I6 broke — do not touch tolerance.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/core/matrix.ts src/renderer/backend.ts src/renderer/webgpu/backend.ts src/renderer/webgl2/backend.ts src/viewer/viewer.ts test/integration/support/gpu.ts test/integration/support/cross-backend.ts test/integration/webgl2-smoke.test.ts test/unit/webgpu-backend.test.ts test/unit/matrix.test.ts test/unit/matrix-baseline.test.ts test/integration/gate-a-pixels.test.ts
