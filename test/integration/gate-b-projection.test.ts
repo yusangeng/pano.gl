@@ -157,15 +157,24 @@ describe('latitude now affects the non-linear cameras', () => {
     // The aspect-fit framing contract at the pixel level (spec 5.4, gate B
     // row): at each container shape the rendered screen edges must land
     // where the float64 reference puts them, with the extent RESOLVED for
-    // that shape. A wrong rate constant (say cylindrical forgetting its 2pi)
-    // displaces the poles off-screen and shows up frame-wide, far above 2.
-    // 256x144 is 16:9, 144x256 is 9:16, 128x128 the square.
+    // that shape. What this leg catches is a render/reference disagreement
+    // in extent application -- the renderer resolving a different box than
+    // the reference (verified by mutation drill: the raw-tuple mutant lands
+    // at 244 vs the tolerance 2). A wrong RATE constant moves both sides of
+    // the comparison together (they share resolveExtent) and is pinned
+    // where the derivation is genuinely independent: the extent.test.ts
+    // literals and the equidistance property in test/unit/reference.test.ts,
+    // which bypasses resolveExtent by design. The square shape doubles as
+    // a shape-independent control: all-three-shapes red indicts something
+    // aspect-blind, rectangular-only red indicts the aspect path.
     const SHAPES: ReadonlyArray<{ width: number, height: number, label: string }> = [
-      { width: 256, height: 144, label: '16:9' },
-      { width: 144, height: 256, label: '9:16' },
-      { width: 128, height: 128, label: '1:1' }
+      { width: 256, height: 144, label: '16:9 (256x144)' },
+      { width: 144, height: 256, label: '9:16 (144x256)' },
+      { width: 128, height: 128, label: '1:1 (128x128)' }
     ]
     for (const camera of CAMERAS) {
+      // mercator has no LEGACY_EXTENT key (no v0.2.2 original); under the
+      // container default only extent[0] is read, so [1, 1] is its calibration.
       const extent = camera === 'mercator' ? [1, 1] : LEGACY_EXTENT[camera]
       const projection = { kind: camera, zoom: 1, extent } as Projection
       for (const shape of SHAPES) {
