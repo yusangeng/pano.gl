@@ -1083,7 +1083,7 @@ Spec §5.4 (aspect-fit.test.ts row). Public surface only: `FramelessImageViewer`
 - Create: `test/integration/aspect-fit.test.ts`
 - Modify: `vitest.config.ts` (no-webgpu include — the mercator CRITICAL lesson: a story file not whitelisted there has ZERO executing tests in CI)
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Create `test/integration/aspect-fit.test.ts`:
 
@@ -1197,7 +1197,7 @@ describe('aspect fit (user story)', () => {
 
 Two cautions the executor must verify on first run: (1) `project`'s `v` is unflipped in the reference convention — cross-backend's referenceImage samples with `1 - v`, mirrored above; if the first run shows a systematic v-mirror (worst ≈ 200+ on HALF the samples and ≈0 on the rest), the flip convention in this file is wrong, not the renderer — fix the sampling line and note it in the commit. (2) The canvas drawing buffer may be dpr-scaled; `readCanvas` downscales to 160x90 regardless, and the ndc grid is taken in readback coordinates, so dpr cancels — but the ASPECT fed to `resolveExtent` must be the container's css aspect (640/360), which is what the viewer itself used.
 
-- [ ] **Step 2: Whitelist the story in the no-webgpu project**
+- [x] **Step 2: Whitelist the story in the no-webgpu project**
 
 In `vitest.config.ts`, the no-webgpu `include` (the whitelist whose third line currently reads `'test/integration/(viewer-events|dispose-order|mercator-drag).test.ts'`) — extend that third line to:
 
@@ -1207,7 +1207,7 @@ In `vitest.config.ts`, the no-webgpu `include` (the whitelist whose third line c
 
 (Only `aspect-fit` is added here. The sibling card `rotate-applied-delta` adds its own name to this same alternation in its own commit — if it has already landed, the line will already carry `|rotate-applied-delta` and you keep it; never remove another card's name from the whitelist.)
 
-- [ ] **Step 3: Run both projects**
+- [x] **Step 3: Run both projects**
 
 Run: `npx vitest run --project integration test/integration/aspect-fit.test.ts`
 Expected: PASS (2 tests).
@@ -1215,7 +1215,7 @@ Expected: PASS (2 tests).
 Run: `npx vitest run --project no-webgpu`
 Expected: the file is collected and its 2 tests PASS on WebGL2 with a null adapter (that is the point of the whitelist).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/aspect-fit.test.ts vitest.config.ts
