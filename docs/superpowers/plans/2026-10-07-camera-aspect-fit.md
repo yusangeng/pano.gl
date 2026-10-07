@@ -1010,7 +1010,7 @@ Spec §5.4 (gate C row): at least square + 16:9 + 9:16, three-way agreement.
 - Modify: `test/integration/gate-c-cross-backend.test.ts`
 - Modify: `test/integration/support/cross-backend.ts` (if the shape parameter was not added in Task 7)
 
-- [ ] **Step 1: Add the test**
+- [x] **Step 1: Add the test**
 
 Append to the main describe (the four non-linear kinds only, spelt explicitly — linear keeps its own `projection.aspect` authority, and its behaviour at rectangular offscreen sizes is not this card's contract):
 
@@ -1061,12 +1061,12 @@ Append to the main describe (the four non-linear kinds only, spelt explicitly �
 
 If a pannini leg measures above 3: record the measured pair in the comment and pin the smallest power of two strictly above twice the larger measured value — the protocol the planet leg documents — and say so in the commit message.
 
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
 
 Run: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/integration/gate-c-cross-backend.test.ts test/integration/support/cross-backend.ts
