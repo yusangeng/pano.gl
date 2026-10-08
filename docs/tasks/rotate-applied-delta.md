@@ -3,7 +3,7 @@ plan: docs/superpowers/plans/2026-10-07-rotate-applied-delta.md
 scope: [src/viewer/**, README.md, test/**, vitest.config.ts]
 verify: npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
 layer: domain
-state: reported
+state: merged
 createdAt: 2026-10-07T06:36:50.545Z
 ---
 # 任务：旧四款 rotate 事件统一报 applied delta（ADV-3）
