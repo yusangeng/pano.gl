@@ -1232,7 +1232,7 @@ Spec §6, §5.2. `scripts/check-readme-options.mjs` only checks the constructor-
 - Modify: `README.md:93-99` (camera table), `README.md:167-171` (rule of thumb)
 - Modify: `CLAUDE.md` (the arbiter paragraph)
 
-- [ ] **Step 1: README camera table**
+- [x] **Step 1: README camera table**
 
 The four non-linear rows' Parameters column gains `fit`; the Fields column keeps its text. New rows:
 
@@ -1258,7 +1258,7 @@ lenses, locked framing, or reproducing the pre-1.0 square behaviour), with
 `extent[1]` ignored under the default `fit: 'container'`.
 ```
 
-- [ ] **Step 2: README rule of thumb**
+- [x] **Step 2: README rule of thumb**
 
 Append one sentence to the rule-of-thumb paragraph (after "`mercator` when every latitude must share one scale — the map look, poles pushed to infinity."):
 
@@ -1267,7 +1267,7 @@ On the non-linear cameras the container's shape is honoured automatically;
 reach for `fit: 'extent'` only when you need a locked manual frame.
 ```
 
-- [ ] **Step 3: CLAUDE.md — three departures become four**
+- [x] **Step 3: CLAUDE.md — three departures become four**
 
 In the arbiter paragraph, change `with three adjudicated exceptions` to `with four adjudicated exceptions`, and after the planet branch-points clause (`... instead of the faithful \`atan(0/0)\` NaN.`) insert:
 
@@ -1277,7 +1277,7 @@ In the arbiter paragraph, change `with three adjudicated exceptions` to `with fo
 
 (Keep the following mercator-exemption sentence intact.)
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run: `npm run typecheck`
 Expected: 0 errors, `check-readme-options` green.
