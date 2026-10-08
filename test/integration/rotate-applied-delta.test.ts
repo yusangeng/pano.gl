@@ -27,6 +27,15 @@ import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
  * difference (90 - 89.9) and the requested floats away from the clamp (0.2
  * is not binary-exact) can each differ from the single-shot product by an
  * ulp.
+ *
+ * `lng` is asserted as a SUM, never per-event, on the vertical legs: a
+ * pure-vertical drag's requested turn is exactly -0 (the negation of a
+ * zero deltaX), `toBe(0)` rejects -0 because Object.is(-0, 0) is false,
+ * and pinning the sign of zero would pin an implementation artifact, not
+ * a contract. The reduce accumulator's initial 0 turns the sum back into
+ * +0, so `toBe(0)` there asserts exactly "no longitude leaked into a
+ * vertical drag" -- bit-exact, because deltaX is exactly zero. The one
+ * leg with a horizontal component asserts the nonzero turn instead.
  */
 
 describe('rotate reports the applied delta on the old-four cameras', () => {
@@ -53,6 +62,7 @@ describe('rotate reports the applied delta on the old-four cameras', () => {
 
       expect(viewer.cameraOptions.pose?.povLatitude).toBe(90)
       expect(rotations.reduce((s, r) => s + r.lat, 0)).toBe(1)
+      expect(rotations.reduce((s, r) => s + r.lng, 0)).toBe(0)
     } finally {
       viewer.dispose()
       container.remove()
@@ -90,6 +100,7 @@ describe('rotate reports the applied delta on the old-four cameras', () => {
 
       expect(viewer.cameraOptions.pose?.povLatitude).toBe(90)
       expect(rotations.reduce((s, r) => s + r.lat, 0)).toBe(1)
+      expect(rotations.reduce((s, r) => s + r.lng, 0)).toBe(0)
     } finally {
       viewer.dispose()
       container.remove()
@@ -120,6 +131,7 @@ describe('rotate reports the applied delta on the old-four cameras', () => {
 
       expect(viewer.cameraOptions.pose?.povLatitude).toBe(90)
       expect(rotations.reduce((s, r) => s + r.lat, 0)).toBeCloseTo(0.1, 9)
+      expect(rotations.reduce((s, r) => s + r.lng, 0)).toBe(0)
     } finally {
       viewer.dispose()
       container.remove()
@@ -156,6 +168,7 @@ describe('rotate reports the applied delta on the old-four cameras', () => {
 
       expect(viewer.cameraOptions.pose?.povLatitude).toBe(-90)
       expect(rotations.reduce((s, r) => s + r.lat, 0)).toBe(-1)
+      expect(rotations.reduce((s, r) => s + r.lng, 0)).toBe(0)
     } finally {
       viewer.dispose()
       container.remove()
@@ -203,6 +216,7 @@ describe('rotate reports the applied delta on the old-four cameras', () => {
       expect(rotations[0]?.lat).toBe(1)
       expect(rotations[1]?.lat).toBe(0)
       expect(rotations.reduce((s, r) => s + r.lat, 0)).toBe(1)
+      expect(rotations.reduce((s, r) => s + r.lng, 0)).toBe(0)
       expect(viewer.cameraOptions.pose?.povLatitude).toBe(90)
     } finally {
       viewer.dispose()
@@ -240,6 +254,7 @@ describe('rotate reports the applied delta on the old-four cameras', () => {
 
       expect(rotations).toHaveLength(1)
       expect(rotations[0]?.lat).toBe(0)
+      expect(rotations.reduce((s, r) => s + r.lng, 0)).toBe(0)
       expect(viewer.cameraOptions.pose?.povLatitude).toBe(90)
     } finally {
       viewer.dispose()
@@ -308,6 +323,7 @@ describe('rotate reports the applied delta on the old-four cameras', () => {
 
       expect(viewer.cameraOptions.pose?.povLatitude).toBeCloseTo(66, 9)
       expect(rotations.reduce((s, r) => s + r.lat, 0)).toBeCloseTo(36, 9)
+      expect(rotations.reduce((s, r) => s + r.lng, 0)).toBe(0)
     } finally {
       viewer.dispose()
       container.remove()
