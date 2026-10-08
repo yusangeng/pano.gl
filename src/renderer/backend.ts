@@ -72,8 +72,13 @@ export interface Backend {
   readonly kind: 'webgpu' | 'webgl2'
   readonly capabilities: Capabilities
 
-  /** Sets the camera pose and projection. Takes effect on the next `render`. */
-  setCamera (state: CameraState, projection: Projection): void
+  /**
+   * Sets the camera pose and projection. `aspect` is the container's
+   * width / height, which the non-linear kinds resolve their extent against;
+   * the linear kind reads its own `projection.aspect` and ignores it. Takes
+   * effect on the next `render`.
+   */
+  setCamera (state: CameraState, projection: Projection, aspect: number): void
 
   /**
    * Sets the source to sample, or `null` to draw nothing.

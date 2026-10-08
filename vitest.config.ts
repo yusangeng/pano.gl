@@ -192,7 +192,8 @@ export default defineConfig({
           name: 'no-webgpu',
           setupFiles: ['./test/integration/support/require-no-webgpu.ts'],
           /*
-           * Widened from `fallback/**` in two rounds, for two different reasons.
+           * Widened from `fallback/**` more than once, each widening for its
+           * own reason, recorded with its entry below.
            *
            * The four user stories (P6) are the whole point of this project: the
            * same test text, run again with the WebGPU path gone, so "the fallback
@@ -219,6 +220,14 @@ export default defineConfig({
            * gesture path on WebGL2, which is what the no-webgpu world
            * actually runs.
            *
+           * `aspect-fit` (2026-10-07) is here for a reason that differs in
+           * kind from mercator-drag's "no pixel readback": a user story that
+           * must pass on the WebGL2 path like any other, it DOES read
+           * pixels, but through the canvas 2D API (toDataURL / drawImage),
+           * which needs no GPU adapter -- so it runs here for the same
+           * reason the other story files do: the story, not the backend, is
+           * the subject.
+           *
            * Still a whitelist, not `test/integration/**`. The gates and the
            * backend smoke tests all assert a real adapter and would fail here
            * for a reason that has nothing to do with their subject; a blacklist
@@ -236,7 +245,7 @@ export default defineConfig({
           include: [
             'test/integration/fallback/**/*.test.ts',
             'test/integration/user-story-(photo|video|camera-switch|media-failure).test.ts',
-            'test/integration/(viewer-events|dispose-order|mercator-drag).test.ts'
+            'test/integration/(viewer-events|dispose-order|mercator-drag|aspect-fit).test.ts'
           ],
           browser: {
             enabled: true,

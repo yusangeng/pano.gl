@@ -395,7 +395,7 @@ describe('device loss', () => {
 describe('setCamera', () => {
   it('packs and uploads the uniforms, with zoom 1 on the linear kind', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
 
     expect(h.mocks.writeBuffer).toHaveBeenCalledTimes(1)
     const view = uniformUpload(h, 0)
@@ -408,7 +408,7 @@ describe('setCamera', () => {
 
   it('uploads the projection zoom for the non-linear kinds', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, CYLINDRICAL)
+    h.backend.setCamera(CAMERA, CYLINDRICAL, 1)
 
     const view = uniformUpload(h, 0)
     expect(view.getUint32(64, true)).toBe(2) // projKind: cylindrical
@@ -417,9 +417,9 @@ describe('setCamera', () => {
 
   it('uploads the camera uniforms on every call, even when the matrix cannot see the change', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, CYLINDRICAL)
+    h.backend.setCamera(CAMERA, CYLINDRICAL, 1)
     const MOVED = { povLatitude: 30, povLongitude: 40 }
-    h.backend.setCamera(MOVED, { ...CYLINDRICAL })
+    h.backend.setCamera(MOVED, { ...CYLINDRICAL }, 1)
     /*
      * Same projection kind, moved pose -- and the upload must happen
      * anyway. On the non-linear kinds the clip matrix is constant BY
@@ -445,8 +445,8 @@ describe('setCamera', () => {
 
   it('uploads again when the camera changes', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
-    h.backend.setCamera({ povLatitude: -10, povLongitude: 340 }, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
+    h.backend.setCamera({ povLatitude: -10, povLongitude: 340 }, LINEAR, 1)
     expect(h.mocks.writeBuffer).toHaveBeenCalledTimes(2)
   })
 
@@ -455,17 +455,17 @@ describe('setCamera', () => {
     // Every matrix the real builder produces is invertible, so the only way
     // here is a builder that changed shape -- which is exactly what the throw
     // exists to announce instead of silently rendering black.
-    vi.mocked(buildCameraTransform).mockImplementationOnce((_state, _projection, _depth, out) => {
+    vi.mocked(buildCameraTransform).mockImplementationOnce((_state, _projection, _depth, out, _aspect) => {
       // gl-matrix's mat4 type carries no .fill; 16 explicit zeros say the same.
       mat4.set(out, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
       return out
     })
-    expect(() => h.backend.setCamera(CAMERA, LINEAR)).toThrow('camera clip matrix is singular')
+    expect(() => h.backend.setCamera(CAMERA, LINEAR, 1)).toThrow('camera clip matrix is singular')
   })
 
   it('repacks the uniforms when a source swap changes the texture projection', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     expect(h.mocks.writeBuffer).toHaveBeenCalledTimes(1)
 
     // The first setSource after a camera sets texProjKind; a later one with the
@@ -499,7 +499,7 @@ describe('setSource and render', () => {
 
   it('uploads a still source once and draws through the texture pipeline', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     const element = {}
     h.backend.setSource(imageSource(4, 4, 1, element))
 
@@ -530,7 +530,7 @@ describe('setSource and render', () => {
 
   it('does not redraw an unchanged frame', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(4, 4, 1))
     h.backend.render()
     h.backend.render()
@@ -540,11 +540,11 @@ describe('setSource and render', () => {
 
   it('redraws on a camera change without re-uploading the pixels', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(4, 4, 1))
     h.backend.render()
 
-    h.backend.setCamera({ povLatitude: 20, povLongitude: 40 }, LINEAR)
+    h.backend.setCamera({ povLatitude: 20, povLongitude: 40 }, LINEAR, 1)
     h.backend.render()
 
     expect(h.mocks.submit).toHaveBeenCalledTimes(2)
@@ -555,7 +555,7 @@ describe('setSource and render', () => {
 
   it('redraws, but does not re-copy, when the element changes at the same version', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     const a = {}
     const b = {}
     h.backend.setSource(imageSource(4, 4, 1, a))
@@ -570,7 +570,7 @@ describe('setSource and render', () => {
 
   it('re-uploads on a version bump, reusing the texture and bind group at the same size', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(4, 4, 1))
     h.backend.render()
 
@@ -584,7 +584,7 @@ describe('setSource and render', () => {
 
   it('reallocates the texture and the bind group when the source size changes', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(4, 4, 1))
     h.backend.render()
 
@@ -606,7 +606,7 @@ describe('setSource and render', () => {
 
   it('draws through the external pipeline for video, every frame', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(videoSource(4, 4, 1))
 
     h.backend.render()
@@ -629,7 +629,7 @@ describe('setSource and render', () => {
 
   it('skips frames whose source metadata has not loaded, either dimension', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(0, 4, 1))
     h.backend.render()
     h.backend.setSource(imageSource(4, 0, 1))
@@ -645,7 +645,7 @@ describe('setSource and render', () => {
 
   it('destroys the texture when the source is cleared, and re-uploads when one returns', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(4, 4, 1))
     h.backend.render()
 
@@ -664,7 +664,7 @@ describe('setSource and render', () => {
 
   it('renders to the canvas swapchain when no target is given', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(4, 4, 1))
     h.backend.render()
     expect(h.mocks.getCurrentTexture).toHaveBeenCalledTimes(1)
@@ -672,7 +672,7 @@ describe('setSource and render', () => {
 
   it('rethrows a synchronous failure inside the frame and still drains the scope', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(videoSource(4, 4, 1))
     // The spec-realistic throw between push and submit: the external-texture
     // import raises SecurityError for non-origin-clean cross-origin media.
@@ -692,7 +692,7 @@ describe('setSource and render', () => {
 
   it('leaves no unhandled rejection when the pop itself fails on a lost device', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(4, 4, 1))
     // The render's own pop rejects (a lost device rejects popErrorScope);
     // swallowing it inside the drain is the contract.
@@ -730,7 +730,7 @@ describe('resize', () => {
 
   it('repaints after a resize even when camera and source are unchanged', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(4, 4, 1))
     h.backend.render()
     // Unchanged inputs: the second render early-outs and nothing new draws.
@@ -751,7 +751,7 @@ describe('resize', () => {
 describe('dispose', () => {
   it('destroys the source texture, the uniform buffer and the device, once', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(4, 4, 1))
     h.backend.render()
 
@@ -767,7 +767,7 @@ describe('dispose', () => {
 
   it('stops rendering after disposal', async () => {
     const h = await makeBackend()
-    h.backend.setCamera(CAMERA, LINEAR)
+    h.backend.setCamera(CAMERA, LINEAR, 1)
     h.backend.setSource(imageSource(4, 4, 1))
     h.backend.render()
     h.backend.dispose()
@@ -785,7 +785,7 @@ describe('render validation errors', () => {
     const gpu = vi.spyOn(channels, 'gpu')
     try {
       const h = await makeBackend()
-      h.backend.setCamera(CAMERA, LINEAR)
+      h.backend.setCamera(CAMERA, LINEAR, 1)
       h.backend.setSource(imageSource(4, 4, 1))
       // The render's own pop resolves an error; create()'s three pops already
       // ran with the default null.

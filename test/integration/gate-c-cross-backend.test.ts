@@ -174,6 +174,62 @@ describe('gate C: WebGPU vs WebGL2', () => {
       expect(diff.max, `${kind} at the pole`).toBeLessThan(64)
     }
   })
+
+  it('agrees across backends and the reference on rectangular viewports (aspect-fit 5.4)', async () => {
+    // The rectangular ortho box travels through invClip, which the shaders
+    // consume without knowing anything changed -- this leg proves both
+    // backends build the box from the SAME resolved extent. Posed (lat 30),
+    // so the latitude terms are non-trivial, exactly like the square arbiter
+    // legs above.
+    const s: State = { povLatitude: 30, povLongitude: 45, fov: (75 * Math.PI) / 180, zoom: 1 }
+    // The four non-linear kinds only: linear keeps its own projection.aspect
+    // as the aspect authority (maintained by the viewer from the container),
+    // so its behaviour at rectangular offscreen sizes is that record's
+    // contract, not this card's.
+    const KINDS = ['cylindrical', 'planet', 'pannini', 'mercator'] as const
+    for (const shape of [
+      { width: 256, height: 144, label: '16:9' },
+      { width: 144, height: 256, label: '9:16' }
+    ]) {
+      for (const kind of KINDS) {
+        const diff = await renderBothBackends(state(s), projectionFor(kind, s), shape)
+        expect(
+          diff.max,
+          `${kind} ${shape.label}: worst channel ${diff.max} at (${diff.x}, ${diff.y}): ` +
+            `webgpu ${JSON.stringify(diff.a)} vs webgl2 ${JSON.stringify(diff.b)}`
+        ).toBeLessThanOrEqual(2)
+      }
+      // The arbiter at the same shapes: cylindrical <= 3; planet <= 4 and
+      // mercator <= 3 (whose square legs above carry the four-requirement
+      // rationale; the chains are unchanged by the box's shape). Pannini is
+      // new as an arbitration leg, pinned by the same four requirements:
+      // - measured: webgpu 1 / webgl2 1 at 16:9 and webgpu 1 / webgl2 1 at
+      //   9:16, probe runs of this file on this machine's GPU (2026-10-07);
+      // - derived: the per-fragment chain is two atans, a sqrt and a
+      //   division over the 4x4 extent -- no Mobius complex division, which
+      //   is planet's extra cost and the reason planet sits one step higher
+      //   at 4, so pannini lands in the cylindrical/mercator class;
+      // - bounded: 3, with power-of-two escalation (the smallest power of
+      //   two strictly above twice the larger measured value) reserved for a
+      //   probe that exceeds it -- CI's SwiftShader is the likely first;
+      // - headroom: measured 1 leaves 3x today, the same budget argument as
+      //   the planet leg.
+      // Never fabricate a 'measured' line (the protocol the planet leg
+      // records above).
+      const rCyl = await compareWithReference(state(s), projectionFor('cylindrical', s), shape)
+      expect(rCyl.webgpu, `cylindrical ${shape.label}`).toBeLessThanOrEqual(3)
+      expect(rCyl.webgl2, `cylindrical ${shape.label}`).toBeLessThanOrEqual(3)
+      const rPlanet = await compareWithReference(state(s), projectionFor('planet', s), shape)
+      expect(rPlanet.webgpu, `planet ${shape.label}`).toBeLessThanOrEqual(4)
+      expect(rPlanet.webgl2, `planet ${shape.label}`).toBeLessThanOrEqual(4)
+      const rMerc = await compareWithReference(state(s), projectionFor('mercator', s), shape)
+      expect(rMerc.webgpu, `mercator ${shape.label}`).toBeLessThanOrEqual(3)
+      expect(rMerc.webgl2, `mercator ${shape.label}`).toBeLessThanOrEqual(3)
+      const rPannini = await compareWithReference(state(s), projectionFor('pannini', s), shape)
+      expect(rPannini.webgpu, `pannini ${shape.label}`).toBeLessThanOrEqual(3)
+      expect(rPannini.webgl2, `pannini ${shape.label}`).toBeLessThanOrEqual(3)
+    }
+  })
 })
 
 describe('gate C: mercator state sweep (spec section 5)', () => {

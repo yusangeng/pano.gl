@@ -31,9 +31,16 @@ export interface CameraState {
  * itself (1x1 for cylindrical and mercator, 4x4 for planet and pannini).
  * Promoting it to a parameter is what lets the geometry subsystem disappear.
  *
- * The pair is ordered `[width, height]`. Every extent in use is square, so the
- * order is presently unobservable -- written down here before a non-square
- * extent turns an unstated assumption into a silent transposition.
+ * The pair is ordered `[width, height]`. `extent[0]` is the horizontal
+ * calibration (the zoom-1 anchor: cylindrical/mercator 360 degrees, pannini
+ * 180, planet the globe). `extent[1]` is read ONLY under `fit: 'extent'`;
+ * under the default `fit: 'container'` the height is derived from the
+ * container's aspect so the centre pixel stays square (see `resolveExtent`
+ * in `src/core/extent.ts` -- the single source of that derivation).
+ *
+ * `fit` is runtime-lenient: any value other than the literal `'extent'`
+ * reads as `'container'`, mirroring the unknown-kind handling. It is a
+ * literal union, so no finiteness assertion exists for it.
  *
  * The `kind` literals are deliberately re-spelled rather than derived from
  * `ProjectionKind`: that type is the set of legal values, this union is which
@@ -43,9 +50,24 @@ export interface CameraState {
  */
 export type Projection =
   | { readonly kind: 'linear'; readonly fov: number; readonly aspect: number }
-  | { readonly kind: 'cylindrical'; readonly zoom: number; readonly extent: readonly [number, number] }
-  | { readonly kind: 'planet'; readonly zoom: number; readonly extent: readonly [number, number] }
-  | { readonly kind: 'pannini'; readonly zoom: number; readonly extent: readonly [number, number] }
+  | {
+    readonly kind: 'cylindrical'
+    readonly zoom: number
+    readonly extent: readonly [number, number]
+    readonly fit?: 'container' | 'extent'
+  }
+  | {
+    readonly kind: 'planet'
+    readonly zoom: number
+    readonly extent: readonly [number, number]
+    readonly fit?: 'container' | 'extent'
+  }
+  | {
+    readonly kind: 'pannini'
+    readonly zoom: number
+    readonly extent: readonly [number, number]
+    readonly fit?: 'container' | 'extent'
+  }
   /**
    * The conformal cylinder (2026-09-29 mercator-camera spec): uniform scale
    * everywhere, poles at infinity. Same zoom anchor as cylindrical -- full
@@ -53,7 +75,12 @@ export type Projection =
    * axis maps to latitude through the Gudermannian, so the vertical field
    * spans gd(+-pi) = +-85.051129 degrees (the EPSG:3857 cutoff) at zoom 1.
    */
-  | { readonly kind: 'mercator'; readonly zoom: number; readonly extent: readonly [number, number] }
+  | {
+    readonly kind: 'mercator'
+    readonly zoom: number
+    readonly extent: readonly [number, number]
+    readonly fit?: 'container' | 'extent'
+  }
 
 /**
  * Everything the renderer needs to know about the pixels it is sampling.

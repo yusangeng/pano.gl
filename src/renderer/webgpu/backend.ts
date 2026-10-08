@@ -339,7 +339,7 @@ export class WebGPUBackend implements Backend {
     }
   }
 
-  setCamera (state: CameraState, projection: Projection): void {
+  setCamera (state: CameraState, projection: Projection, aspect: number): void {
     this.#state = state
     this.#projection = projection
 
@@ -347,7 +347,7 @@ export class WebGPUBackend implements Backend {
     // place the two backends genuinely differ, and the matrix builder takes it
     // as a parameter precisely so neither has to know about the other.
     const clip = mat4.create()
-    buildCameraTransform(state, projection, 'zero-to-one', clip)
+    buildCameraTransform(state, projection, 'zero-to-one', clip, aspect)
 
     mat4.copy(this.#clip, clip)
     // The fragment stage inverts it. `invert` returns null when the matrix is

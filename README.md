@@ -93,10 +93,19 @@ each kind carries its own parameters:
 | `kind` | Parameters | Fields |
 |---|---|---|
 | `'linear'` | `fov` (radians, clamped to 15°–110°), `aspect` | The classic perspective camera; `aspect` is maintained by the viewer from the container's size. |
-| `'cylindrical'` | `zoom` (0.01–1), `extent` (1×1) | Full 360° horizontally, vertical lines stay vertical. |
-| `'planet'` | `zoom` (0.01–1), `extent` (4×4) | The "little planet" look — the ground wraps into a sphere. |
-| `'pannini'` | `zoom` (0.01–1), `extent` (4×4) | Pannini projection — very wide fields of view with verticals kept straight. |
-| `'mercator'` | `zoom` (0.01–1), `extent` (1×1) | Conformal cylinder — uniform scale everywhere, poles at infinity. |
+| `'cylindrical'` | `zoom` (0.01–1), `extent` (1×1), `fit` ('container') | Full 360° horizontally, vertical lines stay vertical. |
+| `'planet'` | `zoom` (0.01–1), `extent` (4×4), `fit` ('container') | The "little planet" look — the ground wraps into a sphere. |
+| `'pannini'` | `zoom` (0.01–1), `extent` (4×4), `fit` ('container') | Pannini projection — very wide fields of view with verticals kept straight. |
+| `'mercator'` | `zoom` (0.01–1), `extent` (1×1), `fit` ('container') | Conformal cylinder — uniform scale everywhere, poles at infinity. |
+
+For the four non-linear kinds, `zoom` (with `extent[0]`) controls the
+horizontal span only; the vertical framing follows the container's shape so
+the picture is never stretched — at the screen centre, one pixel covers the
+same panorama angle in both directions. `fit: 'extent'` opts out: the
+`extent` pair is then taken literally as `[width, height]` (anamorphic
+lenses, locked framing, or reproducing the square behaviour of v0.2.2
+through v1.1.0). Under the default `fit: 'container'`, `extent[1]` is
+ignored.
 
 `camera.pose` sets the starting orientation, `{ povLatitude, povLongitude }` in
 degrees. At runtime, `viewer.cameraOptions` swaps the projection **and keeps
@@ -169,6 +178,8 @@ wide without side-stretch, `planet` for the little-planet effect, `pannini`
 when you want an ultrawide field with verticals still straight.
 `mercator` when every latitude must share one scale — the map look, poles
 pushed to infinity.
+On the non-linear cameras the container's shape is honoured automatically;
+reach for `fit: 'extent'` only when you need a locked manual frame.
 
 ## Development
 

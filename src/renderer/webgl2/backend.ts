@@ -217,13 +217,13 @@ export class WebGL2Backend implements Backend {
     }
   }
 
-  setCamera (state: CameraState, projection: Projection): void {
+  setCamera (state: CameraState, projection: Projection, aspect: number): void {
     const gl = this.#gl
 
     // 'minus-one-to-one' -- WebGL2's ndc z is [-1, 1]. The WebGPU backend passes
     // 'zero-to-one'. This one argument is the entire depth-convention difference
     // between the two backends.
-    buildCameraTransform(state, projection, 'minus-one-to-one', this.#clip)
+    buildCameraTransform(state, projection, 'minus-one-to-one', this.#clip, aspect)
     mat4.invert(this.#invClip, this.#clip)
 
     gl.useProgram(this.#program)

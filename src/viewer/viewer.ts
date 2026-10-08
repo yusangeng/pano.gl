@@ -6,6 +6,7 @@
  */
 
 import { Disposable, EventEmitter, type EventMap, type WildcardListener } from '../core/events'
+import { resolveExtent } from '../core/extent'
 import { channels } from '../diagnostics'
 import type { Projection } from '../core/types'
 import type { Backend, Capabilities, DeviceLost } from '../renderer/backend'
@@ -144,12 +145,15 @@ export class Viewer extends Disposable {
       const projection = this.#camera.projection
       if (projection.kind === 'mercator') {
         // Content-follows-hand in the metre metric (mercator-camera spec
-        // section 4): the event still speaks degrees -- the APPLIED delta,
-        // which is what a clamped pan actually moved. `lng` needs no such
-        // correction: longitude only wraps (lossless mod 360), so the
-        // requested turn IS the applied one -- a wrapped pose-difference
-        // (288, not -72) would break delta-summing consumers.
-        const d = this.#input.dragToMercatorPan(deltaX, deltaY, surface, projection.zoom)
+        // section 4): one screen height of drag is 2pi*zoom*extent_y metres
+        // on the RESOLVED paper, so the drag scales with the framing the
+        // viewer actually shows. The event still speaks degrees -- the
+        // APPLIED delta, which is what a clamped pan actually moved. `lng`
+        // needs no such correction: longitude only wraps (lossless mod 360),
+        // so the requested turn IS the applied one -- a wrapped
+        // pose-difference (288, not -72) would break delta-summing consumers.
+        const extentY = resolveExtent(projection, this.#camera.surfaceAspect)[1]
+        const d = this.#input.dragToMercatorPan(deltaX, deltaY, surface, projection.zoom, extentY)
         if (d.meters === 0 && d.lng === 0) return
         const before = this.#camera.state.povLatitude
         this.#camera.panMercator(d.meters, d.lng)
@@ -372,7 +376,7 @@ export class Viewer extends Disposable {
     } else {
       this.#backend.setSource(null)
     }
-    this.#backend.setCamera(this.#camera.state, this.#camera.projection)
+    this.#backend.setCamera(this.#camera.state, this.#camera.projection, this.#camera.surfaceAspect)
     this.#backend.render()
     // After the draw, not before: `version` has to describe the frame just drawn
     // while the backend is reading it. A video advances its version here, which

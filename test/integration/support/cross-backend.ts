@@ -17,6 +17,7 @@ import { renderOffscreen, maxChannelDiff } from './gpu'
 import type { RenderRequest, RenderResult } from './gpu'
 import { mat4 } from 'gl-matrix'
 import { buildCameraTransform } from '../../../src/core/matrix'
+import { resolveExtent } from '../../../src/core/extent'
 import { cameraProjectionCode, textureProjectionCode } from '../../../src/core/constants'
 import { compileShader, linkProgram } from '../../../src/renderer/webgl2/context'
 import { PANORAMA_GLSL_FRAGMENT, PANORAMA_GLSL_VERTEX } from '../../../src/renderer/webgl2/shaders'
@@ -115,8 +116,15 @@ export async function renderOffscreenGLSL (request: RenderRequest): Promise<Rend
   // 'minus-one-to-one', where the WebGPU half passes 'zero-to-one'. This one
   // argument is the whole depth-convention difference between the backends; if
   // both halves were given the same one here, gate C would fail and the failure
-  // would have nothing to do with the projection formulas.
-  buildCameraTransform(camera, projection, 'minus-one-to-one', clip)
+  // would have nothing to do with the projection formulas. The aspect is the
+  // request's own width/height, the same value the WebGPU half's setCamera
+  // receives -- the two legs must frame the surface identically or the
+  // comparison measures the framing, not the formulas.
+  // Consequence for coverage: because this harness builds the matrix
+  // directly, gate B/C's webgl2 legs never execute
+  // WebGL2Backend.setCamera's aspect forwarding -- its only pixel-level net
+  // is the no-webgpu project's run of the aspect-fit story.
+  buildCameraTransform(camera, projection, 'minus-one-to-one', clip, width / height)
   mat4.invert(invClip, clip)
 
   gl.uniformMatrix4fv(gl.getUniformLocation(program, 'u_invClip'), false, invClip)
@@ -164,10 +172,10 @@ export async function renderOffscreenGLSL (request: RenderRequest): Promise<Rend
   gl.deleteProgram(program)
 
   // Release the context now rather than at GC time: one is created per call
-  // and the suite runs ~22 of them, past Chrome's ~16-active-context LRU
-  // threshold -- exactly the accumulation defect L5's dispose fix exists to
-  // prevent (see WebGL2Backend.dispose). The WebGPU half already disposes
-  // its backend per call.
+  // and the suite runs dozens of renderOffscreenGLSL calls, past Chrome's
+  // ~16-active-context LRU threshold -- exactly the accumulation defect
+  // L5's dispose fix exists to prevent (see WebGL2Backend.dispose). The
+  // WebGPU half already disposes its backend per call.
   gl.getExtension('WEBGL_lose_context')?.loseContext()
 
   return { width, height, rgba: topDown }
@@ -239,9 +247,17 @@ export async function referenceImage (request: RenderRequest): Promise<RenderRes
   const sourceData = ctx.getImageData(0, 0, GATE_C_SIZE, GATE_C_SIZE).data
 
   // Only the linear projection is scale-invariant, and for it the extent is
-  // unread. The other four carry theirs in the projection itself -- which is
-  // what let the geometry subsystem disappear.
-  const extent = projection.kind === 'linear' ? ([2, 2] as const) : projection.extent
+  // unread. The other four resolve theirs against the render target's shape
+  // (resolveExtent) -- the same value the matrix cascade frames the ortho box
+  // with, so the arbiter judges the resolved framing rather than a tuple the
+  // shaders never see raw. That derivation keeps its own arbiters: the
+  // screen-centre equidistance property in test/unit/reference.test.ts
+  // (bypasses resolveExtent by design), the independently derived literals
+  // in extent.test.ts and matrix.test.ts, and gate A's captured v0.2.2
+  // pixels at the fit: 'extent' pin -- each an opinion formed outside it.
+  const extent = projection.kind === 'linear'
+    ? ([2, 2] as const)
+    : resolveExtent(projection, width / height)
   const rgba = new Uint8Array(width * height * 4)
 
   for (let y = 0; y < height; y++) {
@@ -308,15 +324,25 @@ function diagnose (a: ArrayLike<number>, b: ArrayLike<number>, width: number): G
   return { max: maxChannelDiff(a, b), ...locate(a, b, width) }
 }
 
-/** The request all three paths are given. Identical, including the source pixels. */
-export async function gateRequest (camera: CameraState, projection: Projection): Promise<RenderRequest> {
+/**
+ * The request all three paths are given. Identical, including the source pixels.
+ *
+ * The render target defaults to the gate C square; `shape` renders at a
+ * rectangular container instead. The source stays GATE_C_SIZE whatever the
+ * target: these gates compare projections, not source rescaling.
+ */
+export async function gateRequest (
+  camera: CameraState,
+  projection: Projection,
+  shape: { width: number, height: number } = { width: GATE_C_SIZE, height: GATE_C_SIZE }
+): Promise<RenderRequest> {
   // One source per call, handed to all three paths. Two sources with "the same"
   // pattern is how a comparison ends up measuring the difference between two
   // generators.
   const { bitmap, size } = await gateSource()
   return {
-    width: GATE_C_SIZE,
-    height: GATE_C_SIZE,
+    width: shape.width,
+    height: shape.height,
     camera,
     projection,
     source: bitmap,
@@ -328,16 +354,22 @@ export async function gateRequest (camera: CameraState, projection: Projection):
 /**
  * Renders one camera state through both shaders and returns the worst channel
  * difference between them.
+ *
+ * The render target defaults to the gate C square; `shape` renders at a
+ * rectangular container instead.
  */
 export async function renderBothBackends (
   camera: CameraState,
-  projection: Projection
+  projection: Projection,
+  shape: { width: number, height: number } = { width: GATE_C_SIZE, height: GATE_C_SIZE }
 ): Promise<GateCDiff> {
-  const request = await gateRequest(camera, projection)
+  const request = await gateRequest(camera, projection, shape)
   const webgpu = await renderOffscreen(request)
   const webgl2 = await renderOffscreenGLSL(request)
   request.source.close()
-  return diagnose(webgpu.rgba, webgl2.rgba, GATE_C_SIZE)
+  // shape.width, not GATE_C_SIZE: the located (x, y) is only meaningful
+  // against the row width of the images that were actually rendered.
+  return diagnose(webgpu.rgba, webgl2.rgba, shape.width)
 }
 
 /**
@@ -347,12 +379,17 @@ export async function renderBothBackends (
  * differ, running this says which of them is wrong. It is also the only thing
  * that can catch a mistake present in BOTH transcriptions -- the one failure
  * mode the A/B comparison is blind to by construction.
+ *
+ * The render target defaults to the gate C square; `shape` renders at a
+ * rectangular container instead, and the reference resolves the extent against
+ * that shape's own aspect.
  */
 export async function compareWithReference (
   camera: CameraState,
-  projection: Projection
+  projection: Projection,
+  shape: { width: number, height: number } = { width: GATE_C_SIZE, height: GATE_C_SIZE }
 ): Promise<{ webgpu: number, webgl2: number }> {
-  const request = await gateRequest(camera, projection)
+  const request = await gateRequest(camera, projection, shape)
   const reference = await referenceImage(request)
   const webgpu = await renderOffscreen(request)
   const webgl2 = await renderOffscreenGLSL(request)

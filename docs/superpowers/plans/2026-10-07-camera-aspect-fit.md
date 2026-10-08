@@ -25,7 +25,7 @@ Spec §2.2, §3.1, §2.4.
 - Create: `src/core/extent.ts`
 - Test: `test/unit/extent.test.ts` (new)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test/unit/extent.test.ts`:
 
@@ -95,12 +95,12 @@ describe('resolveExtent', () => {
 })
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npx vitest run --project unit test/unit/extent.test.ts`
 Expected: FAIL — `Cannot find module '../../src/core/extent'` (or the equivalent resolution error).
 
-- [ ] **Step 3: Add the `fit` field to the four non-linear union members**
+- [x] **Step 3: Add the `fit` field to the four non-linear union members**
 
 In `src/core/types.ts`, replace the extent paragraph of the `Projection` doc comment (currently lines 34-36, `The pair is ordered \`[width, height]\`. Every extent in use is square, ...`) together with the four member lines, so the union reads:
 
@@ -168,7 +168,7 @@ export type Projection =
 
 (Keep the mercator member's existing doc comment attached as shown; only the field lines change.)
 
-- [ ] **Step 4: Implement `resolveExtent`**
+- [x] **Step 4: Implement `resolveExtent`**
 
 Create `src/core/extent.ts`:
 
@@ -211,12 +211,12 @@ export function resolveExtent (
 }
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `npx vitest run --project unit test/unit/extent.test.ts`
 Expected: PASS (4 tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/core/types.ts src/core/extent.ts test/unit/extent.test.ts
@@ -233,7 +233,7 @@ Spec §3.2. The controller stores the container's W/H for the non-linear kinds; 
 - Modify: `src/viewer/camera-controller.ts`
 - Test: `test/unit/camera-controller.test.ts:509-576`
 
-- [ ] **Step 1: Rewrite the affected tests first**
+- [x] **Step 1: Rewrite the affected tests first**
 
 In `test/unit/camera-controller.test.ts`:
 
@@ -289,12 +289,12 @@ In `test/unit/camera-controller.test.ts`:
   })
 ```
 
-- [ ] **Step 2: Run to verify the new tests fail**
+- [x] **Step 2: Run to verify the new tests fail**
 
 Run: `npx vitest run --project unit test/unit/camera-controller.test.ts`
 Expected: FAIL — `c.surfaceAspect is not a function` on the new tests.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/viewer/camera-controller.ts`:
 
@@ -338,12 +338,12 @@ In `src/viewer/camera-controller.ts`:
 
 (The assert stays above the kind branch — the existing `rejects a non-positive aspect` test pins that order for both kinds, and it must keep passing unchanged.)
 
-- [ ] **Step 4: Run to verify green**
+- [x] **Step 4: Run to verify green**
 
 Run: `npx vitest run --project unit test/unit/camera-controller.test.ts`
 Expected: PASS — the whole file, including the untouched `rejects a non-positive aspect`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer/camera-controller.ts test/unit/camera-controller.test.ts
@@ -360,7 +360,7 @@ Spec §3.3 (reference row), §5.2. Square extents are bit-identical to the old `
 - Modify: `src/core/reference.ts` (`ndcToSurface` + module header)
 - Test: `test/unit/reference.test.ts` (ndcToSurface describe)
 
-- [ ] **Step 1: Rewrite the asymmetric ndcToSurface test first**
+- [x] **Step 1: Rewrite the asymmetric ndcToSurface test first**
 
 In `test/unit/reference.test.ts`, find the `describe('ndcToSurface')` block and the test `uses max(extent) / 2 on both axes for an asymmetric extent` (`ndcToSurface(0.5, -0.5, [2, 6])` → `[1, -1.5, 1.5]`). Replace it with:
 
@@ -382,12 +382,12 @@ In `test/unit/reference.test.ts`, find the `describe('ndcToSurface')` block and 
 
 Also update the comment in the `the %s projection does NOT ignore magnitude` test that says `max(extent) / 2` (around line 79): change that phrase to `its own half of the extent, per axis`. Comment-only change.
 
-- [ ] **Step 2: Run to verify red**
+- [x] **Step 2: Run to verify red**
 
 Run: `npx vitest run --project unit test/unit/reference.test.ts`
 Expected: FAIL — the new per-axis test (old implementation returns `[1, -1.5, 1.5]` for the first case).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/core/reference.ts`, replace `ndcToSurface`'s body and doc comment so the function reads (keep the exported name and the `[number, number, number]` return shape it has today):
 
@@ -410,7 +410,7 @@ export function ndcToSurface (
 
 (If the current signature's parameter or return annotations differ cosmetically, keep the current ones — only the scaling logic and the doc change.)
 
-- [ ] **Step 4: Add the fourth adjudicated departure to the module header**
+- [x] **Step 4: Add the fourth adjudicated departure to the module header**
 
 In the same file's module header, after the planet-branch-points departure (2026-09-28) and before the mercator exemption note, insert:
 
@@ -425,12 +425,12 @@ In the same file's module header, after the planet-branch-points departure (2026
  *   square tuple, which is how gate A keeps watching the v0.2.2 pixels.
 ```
 
-- [ ] **Step 5: Run to verify green**
+- [x] **Step 5: Run to verify green**
 
 Run: `npx vitest run --project unit test/unit/reference.test.ts`
 Expected: PASS — the whole file.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/core/reference.ts test/unit/reference.test.ts
@@ -452,7 +452,7 @@ The recipe below was verified numerically before this plan was written: worst de
 **Files:**
 - Test: `test/unit/reference.test.ts` (new describe at the end)
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Append to `test/unit/reference.test.ts`:
 
@@ -562,12 +562,12 @@ describe('screen-centre equidistance (aspect fit, I2)', () => {
 })
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `npx vitest run --project unit test/unit/reference.test.ts`
 Expected: PASS (all 8 cases). If any case fails by O(1), the rate constant or the weight is wrong — STOP and report; do not loosen the tolerance. If it fails by ~1e-7..1e-5, report that too (it would contradict the pre-verified 4.3e-11 and means the transcription here drifted).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/unit/reference.test.ts
@@ -596,7 +596,7 @@ One commit changes the signature everywhere, because a defaulted parameter would
 - Modify: `test/unit/matrix-baseline.test.ts`
 - Modify: `test/integration/gate-a-pixels.test.ts:89-92`
 
-- [ ] **Step 1: Write the new matrix tests first**
+- [x] **Step 1: Write the new matrix tests first**
 
 In `test/unit/matrix.test.ts`:
 
@@ -705,12 +705,12 @@ and inside the loop the projection literal becomes `{ kind: camera, zoom: 1, ext
 
 (d) `test/unit/matrix-baseline.test.ts`: every non-linear projection literal `{ kind: camera, zoom: 1, extent: LEGACY_EXTENT[camera] }` gains `fit: 'extent'` (I6: the captured baselines must keep comparing bit-for-bit), and every `buildCameraTransform({ povLatitude, povLongitude }, projection, 'minus-one-to-one', mat4.create())` call gains a final `, 1`.
 
-- [ ] **Step 2: Run to verify red**
+- [x] **Step 2: Run to verify red**
 
 Run: `npx vitest run --project unit test/unit/matrix.test.ts`
 Expected: FAIL on `sizes the box per axis...` and `derives the container-fit height...` (today's builder ignores the aspect argument and collapses to max/2). The I6 test may already pass (the current code ignores aspect entirely) — that one is a pin, not a red.
 
-- [ ] **Step 3: Implement `matrix.ts`**
+- [x] **Step 3: Implement `matrix.ts`**
 
 In `src/core/matrix.ts`:
 
@@ -755,7 +755,7 @@ export function buildProjection (
 
 (c) `buildCameraTransform` gains the same trailing `aspect: number` parameter and passes it to `buildProjection`.
 
-- [ ] **Step 4: Cascade the signature**
+- [x] **Step 4: Cascade the signature**
 
 (a) `src/renderer/backend.ts` — the interface method becomes:
 
@@ -799,7 +799,7 @@ with `import { resolveExtent } from '../../src/core/extent'` added. (The linear 
     : { kind: camera, zoom: 1, extent: LEGACY_EXTENT[camera], fit: 'extent' }
 ```
 
-- [ ] **Step 5: Run unit green, then the gates**
+- [x] **Step 5: Run unit green, then the gates**
 
 Run: `npx vitest run --project unit`
 Expected: PASS — all unit files.
@@ -809,7 +809,7 @@ Expected: PASS — gate A bit-stable through `fit: 'extent'`; gate C green becau
 
 If gate A fails: the `fit: 'extent'` pin did not land everywhere it must (check the second `camerasOf()`-style construction if the file has more than one), or I6 broke — do not touch tolerance.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/core/matrix.ts src/renderer/backend.ts src/renderer/webgpu/backend.ts src/renderer/webgl2/backend.ts src/viewer/viewer.ts test/integration/support/gpu.ts test/integration/support/cross-backend.ts test/integration/webgl2-smoke.test.ts test/unit/webgpu-backend.test.ts test/unit/matrix.test.ts test/unit/matrix-baseline.test.ts test/integration/gate-a-pixels.test.ts
@@ -830,7 +830,7 @@ Spec §4 (the classifyDragMercator row and the viewer pan row). Today's hardcode
 - Test: `test/integration/ptz.test.ts:205-215`
 - Test: `test/integration/mercator-drag.test.ts`
 
-- [ ] **Step 1: Write the failing unit tests first**
+- [x] **Step 1: Write the failing unit tests first**
 
 In `test/unit/gestures.test.ts`, inside the `classifyDragMercator` describe (surface `{ width: 400, height: 200 }`):
 
@@ -855,12 +855,12 @@ In `test/unit/gestures.test.ts`, inside the `classifyDragMercator` describe (sur
 
 (Adapt the call shape to the file's actual helper spelling — if the describe builds `delta`/`surface` once, reuse them.)
 
-- [ ] **Step 2: Run to verify red**
+- [x] **Step 2: Run to verify red**
 
 Run: `npx vitest run --project unit test/unit/gestures.test.ts`
 Expected: FAIL — `classifyDragMercator` takes no `extentY` (TypeError, wrong arity at runtime under esbuild).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 (a) `src/interaction/gestures.ts` — `classifyDragMercator` gains the parameter and the factor (keep the zero-size guard exactly as it is):
 
@@ -904,7 +904,7 @@ export function classifyDragMercator (
 
 (Preserve the branch's existing comment text where it overlaps — the intent is: only the `extentY` resolution and the extra argument are new.) Add `import { resolveExtent } from '../core/extent'` at the top.
 
-- [ ] **Step 4: Update the twin and the end-to-end literals**
+- [x] **Step 4: Update the twin and the end-to-end literals**
 
 (a) `test/integration/ptz.test.ts` (~line 208): `input.dragToMercatorPan(100, -50, { width: 1000, height: 500 }, 0.5)` gains `, 1` — its literals (`lng` −36, `meters` 0.3141592653589793) are unchanged at extentY 1.
 
@@ -917,7 +917,7 @@ export function classifyDragMercator (
 
 Each updated comment keeps the "derived independently" phrasing already in the file.
 
-- [ ] **Step 5: Run green**
+- [x] **Step 5: Run green**
 
 Run: `npx vitest run --project unit test/unit/gestures.test.ts`
 Expected: PASS.
@@ -925,7 +925,7 @@ Expected: PASS.
 Run: `npx vitest run --project integration test/integration/mercator-drag.test.ts --project no-webgpu test/integration/mercator-drag.test.ts`
 Expected: PASS in both projects (the no-webgpu run proves the WebGL2 leg of the same story).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/interaction/gestures.ts src/interaction/input-controller.ts src/viewer/viewer.ts test/unit/gestures.test.ts test/integration/ptz.test.ts test/integration/mercator-drag.test.ts
@@ -941,7 +941,7 @@ Spec §5.4 (gate B row): 1:1 / 16:9 / 9:16 × four cameras, screen edges against
 **Files:**
 - Modify: `test/integration/gate-b-projection.test.ts`
 
-- [ ] **Step 1: Add the test**
+- [x] **Step 1: Add the test**
 
 Append a new test to the file's top-level describe (it imports `compareWithReference` from `./support/cross-backend`; check the file's existing imports and add `import { compareWithReference } from './support/cross-backend'` if absent):
 
@@ -988,12 +988,12 @@ and thread `shape.width`/`shape.height` into the render-request objects it build
 
 Check the file for the exact helper names (`CAMERAS`, `LEGACY_EXTENT` — gate B already declares both) and adapt the spelling; the contract is: three shapes × four cameras, both backends against the reference, tolerance 2, projections carry NO `fit` (the container default is the behaviour under test).
 
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
 
 Run: `npx vitest run --project integration test/integration/gate-b-projection.test.ts`
 Expected: PASS. A failure above tolerance on one camera at one shape = a framing bug the unit property test could not see (it tests the reference, not the render path through the matrix) — investigate, do not loosen.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/integration/gate-b-projection.test.ts test/integration/support/cross-backend.ts
@@ -1010,7 +1010,7 @@ Spec §5.4 (gate C row): at least square + 16:9 + 9:16, three-way agreement.
 - Modify: `test/integration/gate-c-cross-backend.test.ts`
 - Modify: `test/integration/support/cross-backend.ts` (if the shape parameter was not added in Task 7)
 
-- [ ] **Step 1: Add the test**
+- [x] **Step 1: Add the test**
 
 Append to the main describe (the four non-linear kinds only, spelt explicitly — linear keeps its own `projection.aspect` authority, and its behaviour at rectangular offscreen sizes is not this card's contract):
 
@@ -1061,12 +1061,12 @@ Append to the main describe (the four non-linear kinds only, spelt explicitly �
 
 If a pannini leg measures above 3: record the measured pair in the comment and pin the smallest power of two strictly above twice the larger measured value — the protocol the planet leg documents — and say so in the commit message.
 
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
 
 Run: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/integration/gate-c-cross-backend.test.ts test/integration/support/cross-backend.ts
@@ -1083,7 +1083,7 @@ Spec §5.4 (aspect-fit.test.ts row). Public surface only: `FramelessImageViewer`
 - Create: `test/integration/aspect-fit.test.ts`
 - Modify: `vitest.config.ts` (no-webgpu include — the mercator CRITICAL lesson: a story file not whitelisted there has ZERO executing tests in CI)
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Create `test/integration/aspect-fit.test.ts`:
 
@@ -1197,7 +1197,7 @@ describe('aspect fit (user story)', () => {
 
 Two cautions the executor must verify on first run: (1) `project`'s `v` is unflipped in the reference convention — cross-backend's referenceImage samples with `1 - v`, mirrored above; if the first run shows a systematic v-mirror (worst ≈ 200+ on HALF the samples and ≈0 on the rest), the flip convention in this file is wrong, not the renderer — fix the sampling line and note it in the commit. (2) The canvas drawing buffer may be dpr-scaled; `readCanvas` downscales to 160x90 regardless, and the ndc grid is taken in readback coordinates, so dpr cancels — but the ASPECT fed to `resolveExtent` must be the container's css aspect (640/360), which is what the viewer itself used.
 
-- [ ] **Step 2: Whitelist the story in the no-webgpu project**
+- [x] **Step 2: Whitelist the story in the no-webgpu project**
 
 In `vitest.config.ts`, the no-webgpu `include` (the whitelist whose third line currently reads `'test/integration/(viewer-events|dispose-order|mercator-drag).test.ts'`) — extend that third line to:
 
@@ -1207,7 +1207,7 @@ In `vitest.config.ts`, the no-webgpu `include` (the whitelist whose third line c
 
 (Only `aspect-fit` is added here. The sibling card `rotate-applied-delta` adds its own name to this same alternation in its own commit — if it has already landed, the line will already carry `|rotate-applied-delta` and you keep it; never remove another card's name from the whitelist.)
 
-- [ ] **Step 3: Run both projects**
+- [x] **Step 3: Run both projects**
 
 Run: `npx vitest run --project integration test/integration/aspect-fit.test.ts`
 Expected: PASS (2 tests).
@@ -1215,7 +1215,7 @@ Expected: PASS (2 tests).
 Run: `npx vitest run --project no-webgpu`
 Expected: the file is collected and its 2 tests PASS on WebGL2 with a null adapter (that is the point of the whitelist).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/aspect-fit.test.ts vitest.config.ts
@@ -1232,7 +1232,7 @@ Spec §6, §5.2. `scripts/check-readme-options.mjs` only checks the constructor-
 - Modify: `README.md:93-99` (camera table), `README.md:167-171` (rule of thumb)
 - Modify: `CLAUDE.md` (the arbiter paragraph)
 
-- [ ] **Step 1: README camera table**
+- [x] **Step 1: README camera table**
 
 The four non-linear rows' Parameters column gains `fit`; the Fields column keeps its text. New rows:
 
@@ -1258,7 +1258,7 @@ lenses, locked framing, or reproducing the pre-1.0 square behaviour), with
 `extent[1]` ignored under the default `fit: 'container'`.
 ```
 
-- [ ] **Step 2: README rule of thumb**
+- [x] **Step 2: README rule of thumb**
 
 Append one sentence to the rule-of-thumb paragraph (after "`mercator` when every latitude must share one scale — the map look, poles pushed to infinity."):
 
@@ -1267,7 +1267,7 @@ On the non-linear cameras the container's shape is honoured automatically;
 reach for `fit: 'extent'` only when you need a locked manual frame.
 ```
 
-- [ ] **Step 3: CLAUDE.md — three departures become four**
+- [x] **Step 3: CLAUDE.md — three departures become four**
 
 In the arbiter paragraph, change `with three adjudicated exceptions` to `with four adjudicated exceptions`, and after the planet branch-points clause (`... instead of the faithful \`atan(0/0)\` NaN.`) insert:
 
@@ -1277,7 +1277,7 @@ In the arbiter paragraph, change `with three adjudicated exceptions` to `with fo
 
 (Keep the following mercator-exemption sentence intact.)
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run: `npm run typecheck`
 Expected: 0 errors, `check-readme-options` green.
@@ -1296,7 +1296,7 @@ Spec §6: today's five 800×450 shots all carry the 1.78×/3.53× vertical stret
 **Files:**
 - Modify: `demo/shots/linear.png`, `cylindrical.png`, `planet.png`, `pannini.png`, `mercator.png`
 
-- [ ] **Step 1: Write the capture script**
+- [x] **Step 1: Write the capture script**
 
 Create `.vibe/shoot-gallery.mjs` (`.vibe` is gitignored; the worktree will not have it yet — creating the directory is fine):
 
@@ -1334,7 +1334,7 @@ try {
 }
 ```
 
-- [ ] **Step 2: Start the demo server and run it**
+- [x] **Step 2: Start the demo server and run it**
 
 ```bash
 npm run start -- --port 5175 --strictPort &
@@ -1346,14 +1346,14 @@ kill %1
 
 Expected output: five `kind -> demo/shots/kind.png (0 page errors)` lines.
 
-- [ ] **Step 3: Verify the artifacts**
+- [x] **Step 3: Verify the artifacts**
 
 Run: `git diff --stat -- demo/shots/ && file demo/shots/*.png`
 Expected: all five modified; each PNG 800×450 (the `file` output or `sips -g pixelWidth -g pixelHeight demo/shots/*.png`). Sanity: each file roughly in the existing siblings' size class (700–900 KB; a blank or black frame is tens of KB — that is the failure signal).
 
 Visual sanity (the point of the re-shoot): in `cylindrical.png` the horizon band sits mid-frame with no vertical smear; in `mercator.png` the pole rows are NOT stretched off-frame. If a `/browse` session with GPU is unavailable, the size/diff checks plus the story tests carry the verification — record which route was taken.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add demo/shots/
@@ -1366,7 +1366,7 @@ git commit -m "docs: gallery re-shot at 800x450 under the container-fit default 
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: The full chain, in this order**
+- [x] **Step 1: The full chain, in this order**
 
 ```bash
 npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
@@ -1374,16 +1374,16 @@ npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run
 
 Expected, in order: gen-shaders idempotent (working tree unchanged — `git status` clean afterwards); build succeeds; `npm test` all green (unit, integration, no-webgpu — including the new aspect-fit.test.ts in both GPU and no-webgpu projects); typecheck 0 errors across the three programs + check-readme-options; lint zero warnings; coverage branch ≥ 90% (the enforced threshold — record the number).
 
-- [ ] **Step 2: The zero-touch audit**
+- [x] **Step 2: The zero-touch audit**
 
 Run: `git diff --name-only master...HEAD -- src/renderer/shaders/generated.ts src/renderer/webgpu/shaders/panorama.wgsl src/renderer/webgl2/shaders/panorama.glsl src/core/projection-kinds.json src/index.ts`
 Expected: EMPTY (spec §3.4 — the shaders, the constants pipeline and the public surface are untouched; `generated.ts` must show no diff because `gen:shaders` is idempotent and nothing it reads changed).
 
-- [ ] **Step 3: Self-review against the spec**
+- [x] **Step 3: Self-review against the spec**
 
 Walk spec §8's file-anchor table and confirm every row is either changed by a task above or explicitly zero-touch. Check §2.3's invariants each have a pin: I1 (width untouched — extent.test + matrix derivation test), I2 (Task 4), I3 (resolveExtent never reads zoom — structural + the property test's zoom loop), I4 (extent.test mercator A=1 → [1,1]), I5 (property test spans 9:16 aspect; mercator's asymptote — no NaN assertions regress in reference.test), I6 (matrix I6 bit-identity + gate A green without re-shooting). Fix gaps inline before reporting done.
 
-- [ ] **Step 4: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
+- [x] **Step 4: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
 
 ---
 
