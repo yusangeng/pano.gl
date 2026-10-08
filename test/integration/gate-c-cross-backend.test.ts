@@ -230,6 +230,43 @@ describe('gate C: WebGPU vs WebGL2', () => {
       expect(rPannini.webgl2, `pannini ${shape.label}`).toBeLessThanOrEqual(3)
     }
   })
+
+  it('arbitrates the lat!=0 x zoom!=1 corner for all four non-linear cameras', async () => {
+    // The zoom-1-invisible shared error class (mercator-camera review,
+    // leftover risk #4): backend-vs-backend agreement cannot see an error
+    // both shaders share, and the zoom-1 legs cannot see a zoom-multiplied
+    // latitude term. This leg sits at lat 30 / zoom 0.5 with the float64
+    // reference as the tiebreaker, both backends against it.
+    //
+    // Tolerances, per the four requirements:
+    // - measured: webgpu 1 / webgl2 1 on every kind (cylindrical, planet,
+    //   pannini, mercator), probe run of this file on this machine's GPU
+    //   (2026-10-08); the pin is not a guess;
+    // - derived: zoom scales the sample window without adding a link to any
+    //   per-fragment chain, so each kind keeps the class its square zoom-1
+    //   leg documents -- cylindrical and mercator (pins <= 3) and pannini
+    //   (two atans, a sqrt and a division over the 4x4 extent, no Mobius
+    //   complex division, the cylindrical/mercator class per the aspect-fit
+    //   leg), while planet's Mobius complex division plus the second atan
+    //   keep it one step higher;
+    // - bounded: planet 4, the others 3, matching the square legs' pins;
+    //   power-of-two escalation (the smallest power of two strictly above
+    //   twice the larger measured value) only if a measured value exceeds;
+    // - headroom: measured 1 against 3/4 leaves 3x today, the same budget
+    //   argument as the planet leg -- CI's SwiftShader is the likely first
+    //   to press on it.
+    //
+    // Pannini's first zoom!=1 arbitration: the square and aspect-fit legs
+    // (2026-10-07) arbitrate it at zoom 1 only, where a zoom-multiplied
+    // error vanishes -- this leg closes that corner for it too.
+    const s: State = { povLatitude: 30, povLongitude: 45, fov: (75 * Math.PI) / 180, zoom: 0.5 }
+    for (const kind of ['cylindrical', 'planet', 'pannini', 'mercator'] as const) {
+      const r = await compareWithReference(state(s), projectionFor(kind, s))
+      const tolerance = kind === 'planet' ? 4 : 3
+      expect(r.webgpu, `${kind} lat30 zoom0.5 webgpu vs reference`).toBeLessThanOrEqual(tolerance)
+      expect(r.webgl2, `${kind} lat30 zoom0.5 webgl2 vs reference`).toBeLessThanOrEqual(tolerance)
+    }
+  })
 })
 
 describe('gate C: mercator state sweep (spec section 5)', () => {
