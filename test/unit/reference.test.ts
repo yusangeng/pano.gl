@@ -1032,3 +1032,66 @@ describe('screen-centre equidistance (aspect fit, I2)', () => {
     }
   })
 })
+
+/*
+ * The zoom-1-invisible shared error class (mercator-camera review, leftover
+ * risk #4): if both shaders carry the SAME latitude-term x zoom error, gate
+ * C's backend-vs-backend legs stay green (they agree with each other) and
+ * the zoom-1 arbiter legs stay green (zoom 1 hides a zoom-multiplied error).
+ * These float64 exact pins at lat 30 x zoom 0.5 are the second opinion that
+ * error class cannot survive. PINS, not TDD red-green: they are expected to
+ * pass on first run; a failure is a discovery -- stop and report, do not
+ * adjust anything to force green.
+ */
+describe('exact output pins at lat 30 x zoom 0.5 (zoom-1-invisible gap)', () => {
+  const POSE = { povLatitude: 30, povLongitude: 0 }
+
+  interface PinRow {
+    label: string
+    projection: Projection
+    u: number
+    v: number
+  }
+
+  /*
+   * Literals derived independently (scratch WGSL transcription), with the
+   * hand re-derivations recorded per row: theta = 0.3*2pi*0.5 -> u 0.15 on
+   * the 2pi-theta cameras; cylindrical phi = atan(0.1) + pi/2 - pi/6;
+   * mercator m = 0.2*0.5*2pi - atanh(sin 30deg), phi = asin(tanh(m)) + pi/2;
+   * pannini u = 2*atan(0.075)/2pi, phi = atan(0.1/sqrt(1.0225)) + pi/2 - pi/6.
+   * Planet is the Mobius half-map -- the scratch value stands as the
+   * independent source for it.
+   */
+  const ROWS: PinRow[] = [
+    {
+      label: 'cylindrical',
+      projection: { kind: 'cylindrical', zoom: 0.5, extent: [1, 1] },
+      u: 0.15,
+      v: 0.3650588507638869
+    },
+    {
+      label: 'planet',
+      projection: { kind: 'planet', zoom: 0.5, extent: [4, 4] },
+      u: 0.6222514566525765,
+      v: 0.1373366170697792
+    },
+    {
+      label: 'pannini',
+      projection: { kind: 'pannini', zoom: 0.5, extent: [4, 4] },
+      u: 0.0238286296045501,
+      v: 0.3647101326787614
+    },
+    {
+      label: 'mercator',
+      projection: { kind: 'mercator', zoom: 0.5, extent: [1, 1] },
+      u: 0.15,
+      v: 0.5251242956493019
+    }
+  ]
+
+  it.each(ROWS)('$label pins u and v for surface point (1, 0.2, 0.3)', ({ projection, u, v }) => {
+    const r = project(1, 0.2, 0.3, POSE, projection)
+    expect(r.u).toBeCloseTo(u, 12)
+    expect(r.v).toBeCloseTo(v, 12)
+  })
+})
