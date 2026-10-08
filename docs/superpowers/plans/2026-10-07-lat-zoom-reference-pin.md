@@ -23,7 +23,7 @@
 **Files:**
 - Test: `test/unit/reference.test.ts` (new describe at the end of the file)
 
-- [ ] **Step 1: Write the pins**
+- [x] **Step 1: Write the pins**
 
 Append to `test/unit/reference.test.ts` (after the last existing describe):
 
@@ -94,12 +94,12 @@ describe('exact output pins at lat 30 x zoom 0.5 (zoom-1-invisible gap)', () => 
 
 (`Projection` and `project` are the file's existing imports — the whole file is about them. `project`'s zoom comes from the projection record, exactly as every other test in the file uses it.)
 
-- [ ] **Step 2: Run them**
+- [x] **Step 2: Run them**
 
 Run: `npx vitest run --project unit test/unit/reference.test.ts`
 Expected: PASS — the whole file, including the 4 new pins. A pin failing by O(1) means a latitude-term or zoom error in that camera's reference path — STOP and report (that is this card's entire reason to exist, found live). A failure of a few ulps (past `toBeCloseTo`'s 12 digits) means the transcription here drifted — re-derive by hand from the formulas in the comment, and only then amend the literal with the corrected value and a note in the commit.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/unit/reference.test.ts
