@@ -4,7 +4,7 @@ scope: [test/**]
 verify: npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
 layer: domain
 deps: [camera-aspect-fit]
-state: open
+state: reported
 createdAt: 2026-10-07T06:36:50.427Z
 ---
 # 任务：lat≠0×zoom≠1 reference pins（zoom-1 盲区闭环）
