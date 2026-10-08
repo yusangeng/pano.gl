@@ -77,4 +77,17 @@ createdAt: 2026-10-07T06:36:50.427Z
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+（superloop-verify 验收，2026-10-08。审查 SOP 四步：结构化 review → plan 红线核对 → 门禁证据复核 → 最重发现亲验。）
+
+**结构化 review**：对 `master...feature` 最终 diff 直接全审（含 515ba16 整改提交——该提交晚于全部子代理复审，其最终形态由协调侧亲自审读）。测试专用 diff，SQL/竞态/信任边界类不适用；实际风险面（错字面量钉死错行为、伪造 measured、公差过松）逐一过：字面量与 plan 逐字节一致；measured 行有 515ba16 commit body 内贴存的 fresh probe 四行实测（webgpu=1/webgl2=1 × 4 kind，2026-10-08）可查；公差 planet 4/其余 3 与文件既有 zoom-1 腿同协议且留 3× 余量。**CRITICAL 0**。
+
+**plan 红线核对**：T1/T2 代码块与分支逐字面对照——8 个字面量逐位一致，偏离均为 plan 明文授权项（helper 复用、measure-first、probe 取值法）；T3 全链绿（执行侧 ×1、task-finish 闸6 ×1，本次验收期又 ×1）；diff 中 plan 文件的 18 行改动经逐行核验为**纯 9 处 checkbox 勾选**（SDD 设计内动作，闸2 自动放行），无正文改写——完成报告「plan 原文未回改」的说法成立。
+
+**门禁证据复核**：scope [test/**] 命中（闸2 过）；6/6 commit 带 `task-lat-zoom-reference-pin:` 前缀；自审两节有循环收敛过程且各级清零。例外条款逐条裁决：**F3 接受**（如实记录、不回写 plan 是正确的反 force-green 姿态）；**F4 接受为已记录风险**（协调侧突变演练见下——单点对 lat×zoom 错误类已是充分捕手；残余为纯理论性）；**F5/F6 接受**（内部脚本注释 / 历史提交消息叙述，无代码影响）；**F1 残余接受**（协调侧独立重推将暴露面收窄到「shader+reference+字面量三方同错」，仓库级仲裁极限已台账化）；**SDD Minor #1 接受**（措辞级，SDD 已裁定）。覆盖陈述在卡且具体。
+
+**最重发现亲验**（不盲信子代理与 worker）：
+1. 8 个 pin 字面量由协调侧从 **WGSL 着色器原文**（panorama.wgsl，独立于 reference.ts 与测试注释）自行转写重算——**16 位全一致**；
+2. 突变演练：worktree 内将 `reference.ts:148` 圆柱纬度项改为 `- lat * zoom`（本卡目标错误类），55 个单元测试中**恰好 1 个失败**——新 cylindrical pin，v 偏差 0.08333… = 预测值 1/12，zoom-1 的既有纬度测试全部照绿（盲区现场演示）；还原后 porcelain 空、diff 0 行、55/55 复绿，还原已证；
+3. gate leg 仲裁在本机真实 GPU 三次全绿（41/41），measured 行有 commit body 贴存证据。
+
+**结论：approve**。风险 #4 的闭环（lat≠0×zoom≠1 reference pin）交付完整：unit pin 拦 reference 侧、gate leg 拦 shader 双侧同错，两半都有协调侧独立复核。遗留项均为已裁决记录，无打回事由。
