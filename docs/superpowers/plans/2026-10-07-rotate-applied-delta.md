@@ -262,7 +262,7 @@ git commit -m "feat: rotate reports the applied delta on every camera, unifying 
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: The full chain**
+- [x] **Step 1: The full chain**
 
 ```bash
 npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
@@ -270,12 +270,12 @@ npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run
 
 Expected: all green in order — gen-shaders idempotent, build succeeds, `npm test` green (unit untouched, integration + no-webgpu both collect the new story file), typecheck 0 errors across the three programs (README check included), lint clean, coverage branch ≥ 90% (record the number).
 
-- [ ] **Step 2: Diff audit**
+- [x] **Step 2: Diff audit**
 
 Run: `git diff --name-only master...HEAD`
 Expected: exactly four files — `test/integration/rotate-applied-delta.test.ts`, `vitest.config.ts`, `src/viewer/viewer.ts`, `README.md`. Anything else means scope creep; remove it.
 
-- [ ] **Step 3: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
+- [x] **Step 3: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
 
 ---
 
