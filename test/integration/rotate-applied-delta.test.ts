@@ -12,8 +12,10 @@ import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
  * to report the REQUESTED delta, which overshoots the clamped pose near the
  * poles -- a consumer summing the events drifts away from the pose exactly
  * where the camera stops moving. Mercator already reports applied (pinned in
- * mercator-drag.test.ts); this file pins the same contract for one of the
- * old four, through the public surface the way a user sees it.
+ * mercator-drag.test.ts); this file pins the same contract for the old four
+ * -- cylindrical on every leg, planet once to guard against a future
+ * per-kind split of the shared emit branch -- through the public surface
+ * the way a user sees it.
  *
  * Why the pole legs can use toBe: `drag` delivers exactly one move, so the
  * event sum IS the single difference pose_after - pose_before -- all-integer
@@ -46,6 +48,43 @@ describe('rotate reports the applied delta on the old-four cameras', () => {
 
       // deltaY -100 of height 200: requested lat = -(-100/200)*180 = +90,
       // which would land at 179; the clamp stops the pose at 90.
+      await drag(canvasOf(container), { from: { x: 200, y: 150 }, to: { x: 200, y: 50 } })
+      await nextFrames(2)
+
+      expect(viewer.cameraOptions.pose?.povLatitude).toBe(90)
+      expect(rotations.reduce((s, r) => s + r.lat, 0)).toBe(1)
+    } finally {
+      viewer.dispose()
+      container.remove()
+    }
+  })
+
+  it('planet clamps identically: applied 1 from lat 89', async (ctx) => {
+    await skipIfPresentedCanvasBroken(ctx)
+    // The emit site is one branch shared by the old four kinds, and the
+    // drag-to-degrees conversion reads only the surface -- never the
+    // projection's extent -- so planet is not a different formula here.
+    // This leg exists so a future per-kind split of that branch (someone
+    // special-casing the 4x4 extent) cannot silently drop the applied-delta
+    // contract for a kind no other leg mounts. linear and pannini remain
+    // unpinned by the same argument: they differ from cylindrical only in
+    // the projection formula, which this path never reads.
+    const container = makeContainer(400, 200)
+    const viewer = await FramelessImageViewer.create({
+      container,
+      src: '/fixtures/panorama.png',
+      camera: {
+        projection: { kind: 'planet', zoom: 1, extent: [4, 4] },
+        pose: { povLatitude: 89 }
+      }
+    })
+    try {
+      await nextFrames(3)
+      const rotations: Array<{ lat: number, lng: number }> = []
+      viewer.on('rotate', (r) => { rotations.push(r) })
+
+      // Same drag as the cylindrical north-pole leg: requested +90, the
+      // clamp stops the pose at 90, applied 1.
       await drag(canvasOf(container), { from: { x: 200, y: 150 }, to: { x: 200, y: 50 } })
       await nextFrames(2)
 

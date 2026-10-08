@@ -29,13 +29,25 @@ export interface ViewerEvents extends EventMap {
    * also the requested turn, unwrapped so delta-summing consumers keep
    * working (`-72`, not `288`); `lat` clamps at the poles (`povLatitude`
    * is +-90), so near them the applied delta is smaller in magnitude than
-   * the requested one. Applied deltas telescope, so summing `lat` lands on
-   * the pose difference to float64 rounding -- no systematic drift, and no
-   * overshoot where the camera stops moving. A move the clamp swallows
-   * entirely still fires, with `lat: 0`: something was asked, the pose
-   * just could not follow.
+   * the requested one. Within one drag the applied deltas telescope, so
+   * summing that drag's `lat` fields lands on its pose difference to
+   * float64 rounding -- no systematic drift, and no overshoot where the
+   * camera stops moving. These events describe gestures only: `rotate()`
+   * and a `cameraOptions` pose write move the camera without emitting, so
+   * a running total kept across programmatic moves desyncs from the pose.
+   * A move the clamp swallows entirely still fires, with `lat: 0`:
+   * something was asked, the pose just could not follow. (On `mercator`
+   * the pole is an asymptote rather than a clamp: dragging never reaches
+   * exactly +-90, but a camera already there -- mounted so, or switched to
+   * after another kind pinned it -- is vertically immovable by drag;
+   * `rotate()` still moves it.)
    */
   rotate: { lat: number, lng: number }
+  /**
+   * After wheel or pinch. The REQUESTED step, not an applied one: the
+   * camera clamps its zoom parameter, so an event past a limit can report
+   * a nonzero delta that did not move the camera.
+   */
   zoom: { delta: number }
   'device-lost': DeviceLost
   'media-load': { target: Viewer }
