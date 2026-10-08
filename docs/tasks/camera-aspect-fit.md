@@ -3,7 +3,7 @@ plan: docs/superpowers/plans/2026-10-07-camera-aspect-fit.md
 scope: [src/core/**, src/renderer/**, src/interaction/**, src/viewer/**, demo/shots/**, README.md, CLAUDE.md, test/**, vitest.config.ts]
 verify: npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
 layer: domain
-state: reported
+state: merged
 createdAt: 2026-10-07T06:36:45.420Z
 ---
 # 任务：非线性相机容器宽高比自适应（aspect fit）
