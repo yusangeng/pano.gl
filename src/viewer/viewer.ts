@@ -38,10 +38,11 @@ export interface ViewerEvents extends EventMap {
    * a running total kept across programmatic moves desyncs from the pose.
    * A move the clamp swallows entirely still fires, with `lat: 0`:
    * something was asked, the pose just could not follow. (On `mercator`
-   * the pole is an asymptote rather than a clamp: dragging never reaches
-   * exactly +-90, but a camera already there -- mounted so, or switched to
-   * after another kind pinned it -- is vertically immovable by drag;
-   * `rotate()` still moves it.)
+   * the pole is an asymptote rather than a clamp: dragging never crosses
+   * +-90 -- float64 saturation can still land a pose exactly ON it -- and
+   * a camera already there -- mounted so, switched to after another kind
+   * pinned it, or dragged onto it by that saturation -- is vertically
+   * immovable by drag; `rotate()` still moves it.)
    */
   rotate: { lat: number, lng: number }
   /**
