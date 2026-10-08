@@ -1366,7 +1366,7 @@ git commit -m "docs: gallery re-shot at 800x450 under the container-fit default 
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: The full chain, in this order**
+- [x] **Step 1: The full chain, in this order**
 
 ```bash
 npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
@@ -1374,16 +1374,16 @@ npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run
 
 Expected, in order: gen-shaders idempotent (working tree unchanged — `git status` clean afterwards); build succeeds; `npm test` all green (unit, integration, no-webgpu — including the new aspect-fit.test.ts in both GPU and no-webgpu projects); typecheck 0 errors across the three programs + check-readme-options; lint zero warnings; coverage branch ≥ 90% (the enforced threshold — record the number).
 
-- [ ] **Step 2: The zero-touch audit**
+- [x] **Step 2: The zero-touch audit**
 
 Run: `git diff --name-only master...HEAD -- src/renderer/shaders/generated.ts src/renderer/webgpu/shaders/panorama.wgsl src/renderer/webgl2/shaders/panorama.glsl src/core/projection-kinds.json src/index.ts`
 Expected: EMPTY (spec §3.4 — the shaders, the constants pipeline and the public surface are untouched; `generated.ts` must show no diff because `gen:shaders` is idempotent and nothing it reads changed).
 
-- [ ] **Step 3: Self-review against the spec**
+- [x] **Step 3: Self-review against the spec**
 
 Walk spec §8's file-anchor table and confirm every row is either changed by a task above or explicitly zero-touch. Check §2.3's invariants each have a pin: I1 (width untouched — extent.test + matrix derivation test), I2 (Task 4), I3 (resolveExtent never reads zoom — structural + the property test's zoom loop), I4 (extent.test mercator A=1 → [1,1]), I5 (property test spans 9:16 aspect; mercator's asymptote — no NaN assertions regress in reference.test), I6 (matrix I6 bit-identity + gate A green without re-shooting). Fix gaps inline before reporting done.
 
-- [ ] **Step 4: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
+- [x] **Step 4: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
 
 ---
 
