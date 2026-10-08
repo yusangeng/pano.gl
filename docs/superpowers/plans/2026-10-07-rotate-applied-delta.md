@@ -182,7 +182,7 @@ git commit -m "test: rotate applied-delta story -- red on the pole-clamp legs (r
 - Modify: `src/viewer/viewer.ts:26-34` (ViewerEvents.rotate TSDoc)
 - Modify: `README.md:119` (events table rotate row)
 
-- [ ] **Step 1: The emit site**
+- [x] **Step 1: The emit site**
 
 In `src/viewer/viewer.ts`, the `'pan'` handler's old-four branch currently reads:
 
@@ -210,7 +210,7 @@ Replace it with:
 
 (The mercator branch above it — `dragToMercatorPan` / `panMercator` — is NOT touched: it already emits applied, and `mercator-drag.test.ts` pins that.)
 
-- [ ] **Step 2: The TSDoc**
+- [x] **Step 2: The TSDoc**
 
 In the same file, the `ViewerEvents.rotate` entry currently reads:
 
@@ -224,7 +224,7 @@ Replace with:
   After a drag. Both fields are the APPLIED deltas -- the pose differences the drag actually produced. `lng` never clamps, so it is also the requested turn, unwrapped so delta-summing consumers keep working (`-72`, not `288`); `lat` clamps at the poles (`povLatitude` is +-90), so near them the applied delta is smaller than the requested one. Summing events therefore always lands on the pose.
 ```
 
-- [ ] **Step 3: The README row**
+- [x] **Step 3: The README row**
 
 In `README.md`'s events table, the rotate row currently reads:
 
@@ -238,7 +238,7 @@ Replace with:
 | `rotate` | `{ lat, lng }` | After a drag. Both fields are applied deltas (what the drag actually moved). `lng` never clamps, unwrapped (`-72`, not `288`); `lat` clamps at the poles (`povLatitude` is ±90), so near them it is smaller than the requested move. |
 ```
 
-- [ ] **Step 4: Run green, then the regression sweep**
+- [x] **Step 4: Run green, then the regression sweep**
 
 Run: `npx vitest run --project integration test/integration/rotate-applied-delta.test.ts --project no-webgpu test/integration/rotate-applied-delta.test.ts`
 Expected: PASS — all 3 legs, both projects.
@@ -249,7 +249,7 @@ Expected: PASS — the applied-emit sibling is untouched.
 Run: `npx vitest run --project integration --project no-webgpu`
 Expected: PASS across both projects. Recon already established that no existing test pins an old-four requested-lat payload (`'rotate'` appears in tests only at mercator-drag (applied values, unchanged), viewer-events (type shape only) and user-story-photo (call counts only)) — so any failure here is a NEW interaction, not a stale pin: investigate it, do not delete it.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer/viewer.ts README.md
