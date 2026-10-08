@@ -22,7 +22,7 @@
 - Create: `test/integration/rotate-applied-delta.test.ts`
 - Modify: `vitest.config.ts:239` (no-webgpu include — the mercator CRITICAL lesson: a story file not whitelisted there has ZERO executing tests in CI)
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Create `test/integration/rotate-applied-delta.test.ts`:
 
@@ -142,7 +142,7 @@ describe('rotate reports the applied delta on the old-four cameras', () => {
 
 (If `makeContainer`/`canvasOf`/`drag`/`nextFrames` spell or import differently, mirror `test/integration/mercator-drag.test.ts`'s imports exactly — that file is the idiom source and this one copies its mount/drag/collect shape deliberately.)
 
-- [ ] **Step 2: Whitelist the file for the no-webgpu project**
+- [x] **Step 2: Whitelist the file for the no-webgpu project**
 
 In `vitest.config.ts`, the no-webgpu `include` (line ~239) currently ends:
 
@@ -158,7 +158,7 @@ Change it to:
 
 (If the sibling card `camera-aspect-fit` has already appended `|aspect-fit` to this alternation, keep it — add only your own name to the group.)
 
-- [ ] **Step 3: Run to verify red**
+- [x] **Step 3: Run to verify red**
 
 Run: `npx vitest run --project integration test/integration/rotate-applied-delta.test.ts`
 Expected: FAIL — the two pole legs report the REQUESTED delta today (event sums of 90 and 45 where 1 and 0.1 are pinned). The control leg (36 from 30) passes already; that is expected and fine.
@@ -166,7 +166,7 @@ Expected: FAIL — the two pole legs report the REQUESTED delta today (event sum
 Run: `npx vitest run --project no-webgpu test/integration/rotate-applied-delta.test.ts`
 Expected: same shape — the file is collected (3 tests found), the two pole legs fail, the control passes. Collection is the point of the whitelist.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/rotate-applied-delta.test.ts vitest.config.ts
