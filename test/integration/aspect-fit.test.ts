@@ -62,13 +62,18 @@ function periodicSource (): PeriodicSource {
   ctx.putImageData(image, 0, 0)
   const data = Array.from(image.data)
   // Nearest-neighbour fetch with REPEAT on u and CLAMP on v -- deliberately
-  // not bilinear: the comparison samples away from texel edges, and a simple
-  // fetch keeps this file's reference independent from cross-backend.ts.
+  // not bilinear: a simple fetch keeps this file's reference independent
+  // from cross-backend.ts. The grid does NOT steer away from texel edges;
+  // a sample landing midway between texels simply disagrees with the GPU's
+  // bilinear by up to the ~23 floor TOLERANCE sits above (see its comment).
   // The shipped image samplers REPEAT on BOTH axes, so this fetch agrees
   // with the GPU only while the sampled v stays inside [0, 1) -- which
-  // every leg here guarantees by pose: at lat 0 the phi range stays
-  // strictly interior. A future posed leg must switch this fetch to REPEAT
-  // on v, or it will pin edge rows the GPU wraps and disagree everywhere.
+  // every leg here guarantees by pose: at lat 0 the sampled phi range is
+  // interior except at planet's exact screen centre, where v_ref = 0 (the
+  // canonical branch point); the 160x90 readback grid steps by 8 from 4,
+  // so no sample ever lands on the (79.5, 44.5) centre. A future posed leg
+  // must switch this fetch to REPEAT on v, or it will pin edge rows the GPU
+  // wraps and disagree everywhere.
   const pixels = (u: number, v: number): [number, number, number] => {
     const uu = ((u % 1) + 1) % 1
     const vv = Math.min(0.99999, Math.max(0, v))
@@ -167,6 +172,11 @@ describe('aspect fit (user story)', () => {
         // Loose on purpose: the readback downscales 640x360 -> 160x90 and
         // the fetch is nearest-neighbour, so a few channels of filtering
         // disagreement are expected. A stretch lands at O(100).
+        // Mirror of the swap leg's kill scope (mutation drill 2026-10-07):
+        // a mutant that skips the aspect store on the NON-LINEAR branch --
+        // the render resolving 1:1 while the reference resolves 16:9 -- is
+        // killed HERE and stays green on the swap leg; the two legs cover
+        // each other's blind side.
         expect(
           w.worst,
           `${camera} after 16:9 reshape: worst channel ${w.worst} at (${w.px}, ${w.py}): ` +
