@@ -1059,8 +1059,14 @@ describe('exact output pins at lat 30 x zoom 0.5 (zoom-1-invisible gap)', () => 
    * the 2pi-theta cameras; cylindrical phi = atan(0.1) + pi/2 - pi/6;
    * mercator m = 0.2*0.5*2pi - atanh(sin 30deg), phi = asin(tanh(m)) + pi/2;
    * pannini u = 2*atan(0.075)/2pi, phi = atan(0.1/sqrt(1.0225)) + pi/2 - pi/6.
-   * Planet is the Mobius half-map -- the scratch value stands as the
-   * independent source for it.
+   * Planet: w = -0.15 + 0.1i (the zoom-scaled zz + i*yy), tilt half-angle
+   * 15 deg; w' = (ct*w - i*st) / (-i*st*w + ct) gives zn + i*yn, then
+   * m = 1 + zn^2 + yn^2, p = 2zn/m, q = 2yn/m, r = (m - 2)/m, theta =
+   * pi + atan(p/q) (the q<0 fixup branch), phi = atan(r/sqrt(p^2+q^2))
+   * + pi/2. Both this complex form and the component expansion behind it
+   * reproduce the two literals to all 16 digits (verified 2026-10-08), so
+   * the few-ulp recovery path -- re-derive from these formulas -- is
+   * executable for planet too, not only via the scratch transcription.
    */
   const ROWS: PinRow[] = [
     {

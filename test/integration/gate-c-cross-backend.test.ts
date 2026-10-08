@@ -54,6 +54,11 @@ const projectionFor = (kind: Kind, s: State): Projection =>
 
 const CAMERAS: readonly Kind[] = ['linear', 'cylindrical', 'planet', 'pannini', 'mercator']
 
+// The non-linear kinds as one shared set: the arbiter loops below (aspect
+// fit, lat x zoom) iterate it, so a newly added kind cannot be silently
+// skipped by one of them while the other picks it up.
+const NON_LINEAR_KINDS: readonly Kind[] = ['cylindrical', 'planet', 'pannini', 'mercator']
+
 // fov is in RADIANS (Projection.fov; see src/viewer/camera-controller.ts). The
 // plan originally wrote 75/60/90 here as degrees, which built a mirrored ~22
 // degree camera; the values below are the intended angles converted.
@@ -182,16 +187,15 @@ describe('gate C: WebGPU vs WebGL2', () => {
     // so the latitude terms are non-trivial, exactly like the square arbiter
     // legs above.
     const s: State = { povLatitude: 30, povLongitude: 45, fov: (75 * Math.PI) / 180, zoom: 1 }
-    // The four non-linear kinds only: linear keeps its own projection.aspect
-    // as the aspect authority (maintained by the viewer from the container),
-    // so its behaviour at rectangular offscreen sizes is that record's
-    // contract, not this card's.
-    const KINDS = ['cylindrical', 'planet', 'pannini', 'mercator'] as const
+    // The four non-linear kinds only (NON_LINEAR_KINDS above): linear keeps
+    // its own projection.aspect as the aspect authority (maintained by the
+    // viewer from the container), so its behaviour at rectangular offscreen
+    // sizes is that record's contract, not this card's.
     for (const shape of [
       { width: 256, height: 144, label: '16:9' },
       { width: 144, height: 256, label: '9:16' }
     ]) {
-      for (const kind of KINDS) {
+      for (const kind of NON_LINEAR_KINDS) {
         const diff = await renderBothBackends(state(s), projectionFor(kind, s), shape)
         expect(
           diff.max,
@@ -249,18 +253,22 @@ describe('gate C: WebGPU vs WebGL2', () => {
     //   complex division, the cylindrical/mercator class per the aspect-fit
     //   leg), while planet's Mobius complex division plus the second atan
     //   keep it one step higher;
-    // - bounded: planet 4, the others 3, matching the square legs' pins;
+    // - bounded: planet 4, the others 3 -- cylindrical, planet and mercator
+    //   match the square legs' pins above; pannini matches the aspect-fit
+    //   leg's pin, its only prior arbitration in this file (gate B's
+    //   three-shape leg arbitrates it too, zoom 1, square included);
     //   power-of-two escalation (the smallest power of two strictly above
     //   twice the larger measured value) only if a measured value exceeds;
     // - headroom: measured 1 against 3/4 leaves 3x today, the same budget
     //   argument as the planet leg -- CI's SwiftShader is the likely first
     //   to press on it.
     //
-    // Pannini's first zoom!=1 arbitration: the square and aspect-fit legs
-    // (2026-10-07) arbitrate it at zoom 1 only, where a zoom-multiplied
-    // error vanishes -- this leg closes that corner for it too.
+    // Pannini's first zoom!=1 arbitration: its only prior arbitration in
+    // this file is the aspect-fit leg (2026-10-07), which runs at zoom 1,
+    // where a zoom-multiplied error vanishes -- this leg closes that corner
+    // for it too.
     const s: State = { povLatitude: 30, povLongitude: 45, fov: (75 * Math.PI) / 180, zoom: 0.5 }
-    for (const kind of ['cylindrical', 'planet', 'pannini', 'mercator'] as const) {
+    for (const kind of NON_LINEAR_KINDS) {
       const r = await compareWithReference(state(s), projectionFor(kind, s))
       const tolerance = kind === 'planet' ? 4 : 3
       expect(r.webgpu, `${kind} lat30 zoom0.5 webgpu vs reference`).toBeLessThanOrEqual(tolerance)
