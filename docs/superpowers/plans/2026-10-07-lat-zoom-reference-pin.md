@@ -115,7 +115,7 @@ The unit pins watch the reference; these legs watch the pixels. Both backends ag
 **Files:**
 - Test: `test/integration/gate-c-cross-backend.test.ts` (new test in the main describe, after the existing arbiter legs)
 
-- [ ] **Step 1: Add the legs**
+- [x] **Step 1: Add the legs**
 
 Append to the main describe (adapt the import of `Projection` to whatever the file already does — it builds projections throughout):
 
@@ -152,12 +152,12 @@ Append to the main describe (adapt the import of `Projection` to whatever the fi
 
 (`State`, `state` and `compareWithReference` are the file's existing helpers, used exactly as the square arbiter legs above use them. No `fit` on the projections: at the default square offscreen size the container fit degenerates to the square paper for mercator/pannini/planet and to [1, 2π] for cylindrical — both backends and the reference resolve the same extent, which is what agreement means here. The mercator sweep legs above already follow this no-fit pattern.)
 
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
 
 Run: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`
 Expected: PASS. If the pannini leg measures above 3: record the measured pair in the comment and pin the smallest power of two strictly above twice the larger measured value — the protocol the planet leg documents — and say so in the commit message. If any leg fails far above its tolerance (frame-wide, not a chain), that is the shared-error class found live at the pixel level — STOP and report.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/integration/gate-c-cross-backend.test.ts
