@@ -170,7 +170,7 @@ git commit -m "test: gate C arbiter legs at lat 30 x zoom 0.5, pannini joins arb
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: The full chain**
+- [x] **Step 1: The full chain**
 
 ```bash
 npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
@@ -178,12 +178,12 @@ npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run
 
 Expected: all green in order — gen-shaders idempotent (tree unchanged), build succeeds, `npm test` green across unit / integration / no-webgpu with the new pins and legs collected, typecheck 0 errors across the three programs, lint clean, coverage branch ≥ 90% (record the number; a test-only card moves it barely).
 
-- [ ] **Step 2: Diff audit**
+- [x] **Step 2: Diff audit**
 
 Run: `git diff --name-only master...HEAD`
 Expected: exactly two files — `test/unit/reference.test.ts`, `test/integration/gate-c-cross-backend.test.ts`. Anything else in the diff means scope creep; remove it.
 
-- [ ] **Step 3: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
+- [x] **Step 3: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
 
 ---
 
