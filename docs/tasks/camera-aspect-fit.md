@@ -86,4 +86,38 @@ effective-testing 评估（独立 reviewer，mutation-drill 语义）：**kill-p
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve**（superloop-verify 自动验收路径，2026-10-08；审查后即合）。
+
+按 CONTRACT「审查 SOP」四步全审 `feature/camera-aspect-fit`（26 commits，diff ≈1491 行）：
+
+### 1. 结构化 review（gstack /review 全流程）
+
+四专家子代理（testing / maintainability / performance / adversarial）+ red team 复审（DIFF>200 触发）+ 最重发现逐条 `git show` 亲验。**CRITICAL 0、WARNING 0、INFORMATIONAL 7**，逐条裁决如下（编号即发现号）：
+
+- **A1 [adversarial F1] fit:'extent' 退化盒可达性**（extent[1]=0 → 零高 ortho 盒 → 奇异矩阵；WebGPU throw 走 diagnostics trace → 永久空画布；WebGL2 invert 无守卫 → 静默垃圾渲染；master 上同 tuple 因 max/2 塌缩可正常渲染）。adversarial 建议"合并前必修"，**不采纳**，理由：(a) 实现忠实于已裁决 spec——§1.4"手动模式用户自负其值"、§2.2 明令 resolveExtent"无钳制无特判"；(b) 退化类先于本卡存在（master 上 extent [0,0] → max/2=0 → 同一奇异路径、同一 WebGL2 无守卫、同一 throw-to-trace 路由），本卡 diff 未触碰这些行，只是在新显式 opt-in 后扩大可达性；(c) 所有文档化路径零影响（gate A/B/C + reference + story 全绿，gate A 位保真经三方独立复核）；(d) 先例：rotate-applied-delta 卡 red-team #1 公式半同样因超 plan 约束记遗留风险走后续卡。red team 专项攻击本裁决未能构造出任何有效输入回归，裁决成立。**记为头号后续卡候选**（见第 4 节）。
+- **A2 [adversarial F3] resolveExtent 输出无验证**（1e300 → f32 矩阵溢出）：与 A1 同族（无效输入硬化），spec 的"渐近优雅"声明覆盖公式层、不覆盖 f32 矩阵层——文档措辞收窄并入后续卡。
+- **A3 [adversarial F2 + maint#1] 注释/文档压缩精度**：setAspect 新注释"swapped in later 仍从真实形状解析"对 linear 侧是压缩表述（次句已如实限定 linear 只读 record 上的 aspect）；types.ts"extent[1] is read ONLY under fit:'extent'"与 assertProjectionFinite 的无条件 assertFinite(extent[1]) 严格矛盾（亲验 camera-controller.ts:63-64）。均记入后续卡文档收窄项；验证本身是正确行为，不得弱化。
+- **A4 [testing#1] linear 分支忽略 aspect 参数的契约无鉴别性测试**（mutant 交换 projection.aspect↔aspect 可存活全套测试网——亲验：matrix.test 线性腿恒 1/1，webgpu-backend.test 只断言标量 uniform）。该路径是 spec §3.4 零触碰区（行为=master），真实暴露面≈0（viewer 恒同步两者相等）。记为后续补钉候选（一条 unit 腿即可）。
+- **A5 [testing#2] swap 覆盖单向**（非线性→linear 镜像方向：换入 linear 的 aspect 字面值滞留到下次 resize——亲验 snapshotProjection 逐字存储 + camera-switch 故事只钉 kind/pose/像素有变化）。**先于本卡存在**且 spec §7 明令"linear 零改动"为本卡非目标。记为后续裁决项（产品语义：setProjection 是否从 surfaceAspect 同步 linear aspect，或文档收窄；demo 已自行绕过，证明缝隙真实）。
+- **A6 [testing#3+4] 测试硬化小项**：extent.test 缺 ±Infinity 拒收腿；aspect-fit.test TOLERANCE=24 探针值只记了硬件腿、未记 no-webgpu（SwiftShader）腿。均 INFO 级记录项。
+- **A7 [maint#2+#3] 测试基建去重**（cross-backend shape 默认值三处拼写、gate-b mercator 三元两处）：与卡上已裁决 defer 的 rec (a)/(d) 同族，维持 defer。
+
+red team 另报告：速率常数独立重推全对（cylindrical 2π / 其余 1，含 mercator sech 物理度量各向同性与 planet 保角性的逐相机度量选择）；两 shader 片元重建与 CPU ndcToSurface 在同一 resolved tuple 下逐点一致（矩形 ortho 手算 V⁻¹P⁻¹ 无符号/半 extent 误差）；wrong-green 猎杀空手（性质测试有反空洞金丝雀、错误速率落在 ~1.7e-4 ≫ 1e-9 容差）；gate A 位保真再证（fit:'extent' 不读 aspect，ortho 参数即 master 的字面值）。
+
+### 2. plan 红线核对（存在性已核，行为性声明标"未实测"）
+
+T1–T12 逐项对 diff 核对通过：resolveExtent/extent.test（T1）、#surfaceAspect+setAspect（T2，含审查修复 cfb6e46/b45a104 强化）、ndcToSurface 逐轴+第四条裁决注记（T3）、等距性质测试手写速率常数绕过 resolveExtent（T4，亲验 grep：全文无 resolveExtent 调用于该 describe）、矩形 ortho+签名级联+gate A 钉（T5，级联 grep 无遗漏调用点）、mercator 拖拽三组字面量+ptz 伴腿+中程 resize 腿（T6）、gate B 三形状（T7）、gate C 矩形+pannini 仲裁腿带实测记录（T8）、故事双项目+白名单（T9，含超 plan 字面的 swap 腿——经裁决采纳）、README/CLAUDE.md 三改四（T10，finalfix 版本跨距修正落位）、画廊五图重拍（T11，二进制产物）、验证链（T12）。54/54 checkbox 属实。**未实测（留保护⑥）**：全链绿、npm test 计数、覆盖率 98.49%、画廊 0 page errors、gen:shaders 幂等。**已亲测**：零触碰审计为空（generated.ts/wgsl/glsl/projection-kinds.json/src/index.ts/fixtures 零 diff）。
+
+### 3. 门禁证据复核
+
+scope 白名单 37/37 文件全中（plan/任务卡自动放行）；26/26 提交带 `task-camera-aspect-fit:` 前缀（脚本级复核）；自审记录两节质量合格（CR 双阶段+终审+efftest kill-power 有具名失败测试背书、变异 drill 有 kill+restore 记录；例外条款逐条有裁决：deferred (a)-(f) 与 reject-as-adjudicated (c) 理由均成立，接受）；覆盖陈述完整且与亲验一致。**勘误一处（不阻断）**：完成报告写"链上 16 个提交"，实测 26 个（含 4 个 chore/收尾提交）——报告数字失实，无功能影响。
+
+### 4. 后续卡候选（交维护者裁决立项，非本卡义务）
+
+1. **验证硬化**（A1/A2/A4）：边界 extent 正性校验（至少 fit:'extent' 下 extent[1]，建议连同默认 fit 下 extent[0]≤0——red team 指出后者是 master 曾可渲染、可达性最广的分支侧退化）+ WebGL2Backend.setCamera 补 invert-null 守卫镜像 WebGPU + linear-ignore-aspect 单测钉。
+2. **文档收窄**（A3/A5）：types.ts/README/setAspect 注释的"read ONLY / maintained by the viewer"限定到非线性侧或取景语义；A5 的产品语义裁决（setProjection 是否同步 linear aspect）可并入。
+3. A6 两条测试硬化小项可搭车。
+
+### 5. 发版提醒（用户拍板）
+
+spec §1.3 的取景变化是生产可见增量：cylindrical 在方形容器垂直视野从 ~53° 变 ~144.1°、16:9 下从 ~53° 变 ~121°（其余三台仅离方形后变化）；既有 cylindrical 用户的像素在升级后改变，`fit:'extent'`+方形元组是文档化逃生口。建议随下次 release 写入变更说明（与 rotate-applied-delta 卡的 semver 议题一并裁决）。
