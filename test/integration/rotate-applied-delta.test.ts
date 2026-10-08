@@ -19,10 +19,11 @@ import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
  * exactly one move, so the event sum IS the single difference
  * pose_after - pose_before -- all-integer float64 on those two legs.
  * Applied deltas do telescope, but a chunked sum only stays within an
- * ulp of pose_final - pose_initial, it is not exactly it. The control
- * and lng legs use toBeCloseTo because away from the clamp the payload
- * is the requested float itself (0.2 is not binary-exact), which can
- * differ from the single-shot product by an ulp.
+ * ulp of pose_final - pose_initial, it is not exactly it. The other
+ * three legs use toBeCloseTo: the deep-overshoot applied difference
+ * (90 - 89.9) and the requested floats away from the clamp (0.2 is
+ * not binary-exact) can each differ from the single-shot product by
+ * an ulp.
  */
 
 describe('rotate reports the applied delta on the old-four cameras', () => {

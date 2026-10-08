@@ -28,8 +28,9 @@ export interface ViewerEvents extends EventMap {
    * differences the drag actually produced. `lng` never clamps, so it is
    * also the requested turn, unwrapped so delta-summing consumers keep
    * working (`-72`, not `288`); `lat` clamps at the poles (`povLatitude`
-   * is +-90), so near them the applied delta is smaller than the requested
-   * one. Summing events therefore always lands on the pose.
+   * is +-90), so near them the applied delta is smaller in magnitude than
+   * the requested one. Summing the `lat` fields therefore always lands on
+   * the pose.
    */
   rotate: { lat: number, lng: number }
   zoom: { delta: number }
