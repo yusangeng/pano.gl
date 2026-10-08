@@ -219,6 +219,15 @@ export default defineConfig({
            * gesture path on WebGL2, which is what the no-webgpu world
            * actually runs.
            *
+           * `rotate-applied-delta` is here for the same two reasons: its
+           * assertions are all pose-and-event (no pixel readback, no
+           * adapter), and on a CI runner the `integration` project's copy
+           * skips wholesale under the presented-canvas gate -- without this
+           * line the applied-delta contract would have zero executing
+           * tests there. Its `dragThrough` leg dispatches synthetic pointer
+           * events, which need no browser input pipeline and so run
+           * identically here.
+           *
            * Still a whitelist, not `test/integration/**`. The gates and the
            * backend smoke tests all assert a real adapter and would fail here
            * for a reason that has nothing to do with their subject; a blacklist

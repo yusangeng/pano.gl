@@ -29,8 +29,11 @@ export interface ViewerEvents extends EventMap {
    * also the requested turn, unwrapped so delta-summing consumers keep
    * working (`-72`, not `288`); `lat` clamps at the poles (`povLatitude`
    * is +-90), so near them the applied delta is smaller in magnitude than
-   * the requested one. Summing the `lat` fields therefore always lands on
-   * the pose.
+   * the requested one. Applied deltas telescope, so summing `lat` lands on
+   * the pose difference to float64 rounding -- no systematic drift, and no
+   * overshoot where the camera stops moving. A move the clamp swallows
+   * entirely still fires, with `lat: 0`: something was asked, the pose
+   * just could not follow.
    */
   rotate: { lat: number, lng: number }
   zoom: { delta: number }
@@ -163,7 +166,11 @@ export class Viewer extends Disposable {
       // pose difference the drag actually produced -- because rotate() clamps
       // latitude to +-90 near the poles, and a consumer summing the events
       // must land on the pose, not overshoot it. `lng` never clamps, so the
-      // requested turn IS the applied one and stays as-is.
+      // requested turn IS the applied one and stays as-is. A move the clamp
+      // swallows entirely emits `lat: 0` rather than nothing: the guard above
+      // filters taps (nothing was asked), not clamp-pinned moves (something
+      // was asked, the pose could not follow) -- and event cardinality is
+      // itself consumer-visible.
       const before = this.#camera.state.povLatitude
       this.#camera.rotate(d.lat, d.lng)
       this.events.emit('rotate', { lat: this.#camera.state.povLatitude - before, lng: d.lng })
