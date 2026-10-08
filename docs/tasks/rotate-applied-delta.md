@@ -76,4 +76,39 @@ plan 三步全部完成（emit 语义 → 文档 → 测试），verify 六项�
 
 ## 审查意见
 
-（协调者填：逐条编号；通过则写 approve）
+**结论：approve**（superloop-verify 自动验收路径，2026-10-08；审查后即合。唯一冲突文件的合并处置见 A1 与交接说明）。
+
+按 CONTRACT「审查 SOP」四步全审 `feature/rotate-applied-delta`（12 commits，base 03c5eb5）：
+
+### 1. 结构化 review（gstack /review 全流程）
+
+两专家子代理（rot-testing / rot-adversarial）+ red team 复审（攻击临时裁决 P1–P5 + 四项独立复核）+ 最重发现逐条亲验。**CRITICAL 0**；WARNING 级 6 项 + INFO 杂项 1 组，逐条裁决（编号即裁决号）：
+
+- **A1 [adversarial#1=testing#1；P1] vitest.config.ts 合并冲突**——`git merge-tree --write-tree` 亲验：唯一冲突文件（README.md、src/viewer/viewer.ts 自动合并）。两侧对 base 均为纯新增：master 加 aspect-fit 段落并改写 intro，branch 在同一插入点加 rotate 段落。**并集解**（零语义张力）：保留两段 + master 的 intro + `(viewer-events|dispose-order|mercator-drag|aspect-fit|rotate-applied-delta)`。裁决：合并时机事项、非分支缺陷，不阻断 approve；task-merge 保护④停手后按并集交用户在执行 worktree 解（`-X ours/theirs` 否决——会静默丢一张卡的 CI 白名单条目，正是那段注释存在要防的事故；master 上手造 merge commit 否决——绕门禁）。red-team 独立复核确认唯一冲突性与并集机械性。
+- **A2 [adversarial#2；P2] "Both fields are the APPLIED deltas" 的 lng 缝隙**：跨 wrap 缝（288 vs −72）时 pose-diff 与 requested 取值不同；TSDoc 与 README 两表面均有紧邻括注点名该例。文档精度后续卡（aspect-fit A3 先例）。
+- **A3 [adversarial#3；P3] "dragging never reaches exactly ±90" 为假（本卡新写的绝对断言被数值证伪）**：red-team 独立复算证实——branch base 从 89.9° 一记 −500px 合并 move 恰落 **exactly 90**（float64 tanh 饱和）；合并后（extentY 0.5）阈值翻倍仍可达（~770px from 89.9，或 2000px from 85）；且该 TSDoc 自己的到达路线清单漏了"拖拽自钉"这条本卡使其可达的路。**裁决：非阻断**（先例 aspect-fit A3；句子操作内容其余为真——渐近线非 clamp、钉死相机拖不动、rotate() 可救；行为半 panMercator 本卡未触碰、master 同状），**但修复不走泛化 backlog，具名落点二选一**：(a) 用户批署 A1 并集解的同一 sitting 顺手一词之改（"reaches exactly"→"crosses"，asin(tanh(·))<π/2 严格成立使其为真；viewer.ts 自动合并不受冲突影响）；或 (b) 合并后 master 侧立即一条 doc commit 并记入发版清单。卡勘误半：遗留风险#2 引用 151-163 实为 panMercator 体（rotate() 在 134-139，实质结论不受影响），路线清单不全。
+- **A4 [adversarial#4；P4] telescoping 无条件措辞**：受害场景需消费者自己的代码在单拖拽两 move 之间程序移动；库无自动 pan（亲验：'rotate' emit 点恰两处、公共 rotate() 不发事件）。desync 警告两句之隔。措辞收窄（"absent interleaved programmatic moves"）入文档精度后续卡。
+- **A5 [testing#2 + red-team P5/A；非今日 wrong-green，未来回归面] 测试硬化缺口，一腿三杀**：(i) lng 幅值 clamp mutant 存活（无 >72° 转向腿）；(ii) ±180 normalizer mutant 同样存活（−72 在一切合理范围内、竖直腿 −0 和值不变）；(iii) zoom-scaled applied lat mutant 存活（8 腿全 mount zoom 1、viewer.ts 被单元覆盖率设计性排除、既有套件只断言计数/类型/另一分支）。**一腿闭三**：400px 宽拖 300px → lng 恰 −270（0.75 二进制精确）+ pose wrap 恰 90，mount 在 zoom 0.5 跑（classifyDrag 不读 zoom，字面量不变）。记后续卡。
+- **A6 [adversarial#5] semver/发版**：rotate.lat 是 1.0 后首个公共面行为反转；adversarial 判 strictly major、卡建议 minor 由维护者裁——**用户拍板项**（与 camera-aspect-fit 的 cylindrical 取景变化并列）。不采纳 adversarial「合并前在库内留档 release 决定」为 blocker：只有用户能做的决定不当合并门槛，卡已记录义务。无 CHANGELOG（从无到有也是决定）。
+- **A7 [INFO 杂项]**：(a) lng 逐事件 −0 未文档化（先在行为；测试文件头注有）；(b) linear/pannini 无专属腿（共享 emit 行论证成立，emit 行拆分时风险自担——记入后续卡备注）；(c) README rotate 行较 TSDoc 薄（缺 lat:0 基数规则与程序移动不发事件警告）；(d) **red-team 新发现**：zoom 事件 TSDoc「clamps its zoom parameter」对 linear 失准（linear clamp 的是 FOV 15°–110°，zoom() 方法自己的 TSDoc 三段之下写着）；(e) plan「clean merge either order」对 vitest.config.ts 为假（卡风险#4 已如实记录，plan 未回改）。
+
+red-team 独立复核另证：8 腿全部字面量 node 独立重推 bit-honest（0.5/0.25/0.125 二进制精确；−72 与 wrap 288 恰确，非碰巧）；7 类额外 mutant 被杀（field swap、Math.round、&&→||、双基线、emit-before-rotate、wrapped-pose-diff；"requested−overshoot" 与 applied 代数等价、不构成 mutant）；plan 保真逐项确认（白名单条件指令恰执行——base 03c5eb5 无 `|aspect-fit`，亲验）。
+
+### 2. plan 红线核对（存在性已核，行为性声明标"未实测"）
+
+T1 红→白名单：plan 3 腿 → 实际 8 腿（超 plan 字面，卡内逐腿披露来源：CR 加腿与变异证明需求）；白名单只加自家名字。T2：emit site 对 diff 逐字核（plan 块 + CR 增补注释句）；TSDoc/README 携带全部裁决演化（F1 telescoping 收窄、F3 zoom 补文档、red-team 括注）。T3 验证链："恰好 4 文件" 被 7 文件现实取代——gestures.ts（dragThrough 测试基建）与 plan/卡为披露偏离，接受。12/12 checkbox 属实。**未实测（留保护⑥）**：全链绿、346+241 计数、98.45% 分支覆盖。**已亲验**：'rotate' emit 点恰两处（viewer.ts:172 mercator、:188 旧四款）；公共 rotate() 与 cameraOptions pose 写入不发事件；lat clamp 只在 camera-controller #apply（134-139）；classifyDrag 无 lng clamp；panMercator branch=master 逐字节一致。
+
+### 3. 门禁证据复核
+
+12/12 提交带 `task-rotate-applied-delta:` 前缀；7/7 diff 文件在 scope 白名单内（gestures.ts 为披露的测试基建偏离，接受）；主/分支卡「完成报告」「自审记录」两节同步一致；CR 具名整改提交逐一 `git show` 核实（3f35d13、866b50a、0dca9d8、da62fb7）；自审记录合格（两变异证明均有具名失败测试 + restore 验证记录；例外条款 = 遗留风险 #1/#2/#3 逐条有理由，接受）。**勘误两处（不阻断）**：遗留风险#2 的行号引用错（见 A3）；其路线清单不全。完成报告无计数类声明，无数字失实。
+
+### 4. 后续卡候选（交维护者裁决立项，非本卡义务）
+
+1. **文档精度 pass**（A2/A4/A7c/A7d，含 A3 若走 (b) 落点）：lng 缝措辞、telescoping 限定、README rotate 行补全、zoom TSDoc 的 linear-FOV 精度。
+2. **测试硬化一腿**（A5）：>180° lng 腿（−270/pose 90）在 zoom 0.5 mount。
+3. **mercator 极点去钉**（A3 行为半）：前提比本卡记录更强——合并后 exactly-90 仍可达（red-team 复算），建议腿含 drag 饱和路线。
+4. **发版准备**（A6）：semver 裁决 + CHANGELOG 决定 + README 束大小重测（36.9 已陈旧，实际 gzip ~37.1）。
+
+### 5. 发版提醒（用户拍板）
+
+rotate.lat 语义（旧四款 requested→applied）与 camera-aspect-fit 的 cylindrical 取景变化同属下次 release 必须写明的变更；major/minor 由用户裁决。发版清单应含 A3 的 (b) 落点（若未走 (a)）。
