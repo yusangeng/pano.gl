@@ -120,6 +120,10 @@ export async function renderOffscreenGLSL (request: RenderRequest): Promise<Rend
   // request's own width/height, the same value the WebGPU half's setCamera
   // receives -- the two legs must frame the surface identically or the
   // comparison measures the framing, not the formulas.
+  // Consequence for coverage: because this harness builds the matrix
+  // directly, gate B/C's webgl2 legs never execute
+  // WebGL2Backend.setCamera's aspect forwarding -- its only pixel-level net
+  // is the no-webgpu project's run of the aspect-fit story.
   buildCameraTransform(camera, projection, 'minus-one-to-one', clip, width / height)
   mat4.invert(invClip, clip)
 

@@ -103,8 +103,9 @@ horizontal span only; the vertical framing follows the container's shape so
 the picture is never stretched — at the screen centre, one pixel covers the
 same panorama angle in both directions. `fit: 'extent'` opts out: the
 `extent` pair is then taken literally as `[width, height]` (anamorphic
-lenses, locked framing, or reproducing the pre-1.0 square behaviour). Under
-the default `fit: 'container'`, `extent[1]` is ignored.
+lenses, locked framing, or reproducing the square behaviour of v0.2.2
+through v1.1.0). Under the default `fit: 'container'`, `extent[1]` is
+ignored.
 
 `camera.pose` sets the starting orientation, `{ povLatitude, povLongitude }` in
 degrees. At runtime, `viewer.cameraOptions` swaps the projection **and keeps

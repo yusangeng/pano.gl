@@ -428,6 +428,11 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     // meridian the roll follows, |lat| how far -- the pole being the default
     // centre, either drag direction can only leave it.
     for (const [latDeg, lngDeg] of [[30, 90], [-45, 350], [90, 180], [-90, 0], [60, 0]] as const) {
+      // The raw tuple, not a resolveExtent product: ndcToSurface's contract
+      // is the RESOLVED extent, and planet's [4, 4] is also
+      // resolveExtent(planet, 1) -- rate 1 -- so the tuple stands in for the
+      // resolved value. A future widening of these sweeps to cylindrical
+      // must resolve first ([1, 1] at aspect 1 resolves to [1, 2pi]).
       const centre = ndcToSurface(0, 0, projection.extent)
       const uv = project(centre[0], centre[1], centre[2], { povLatitude: latDeg, povLongitude: lngDeg }, projection)
       expect(uv.v, `v at lat=${latDeg}`).toBeCloseTo((Math.abs(latDeg) * Math.PI / 180) / Math.PI, 12)
@@ -590,7 +595,9 @@ describe('planet tilt (the steerable centre, 2026-09-28 spec)', () => {
     // The lat = 0 sweeps elsewhere in this file, extended to the tilts whose
     // pole is on-screen. Two grid points land exactly on the pole ((0, 0.5)
     // at lat = -90, (0, -0.5) at lat = +90) and stay finite by the same
-    // last-ulp luck -- they are part of the pin, not skipped.
+    // last-ulp luck -- they are part of the pin, not skipped. The extent
+    // passed below is the raw tuple, standing in for the resolved value
+    // only because planet's [4, 4] is also resolveExtent(planet, 1).
     for (const latDeg of [-90, -60, 60, 90]) {
       for (let ndcY = -1; ndcY <= 1.0001; ndcY += 0.125) {
         for (let ndcX = -1; ndcX <= 1.0001; ndcX += 0.125) {
