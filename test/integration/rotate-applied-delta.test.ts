@@ -15,13 +15,14 @@ import { skipIfPresentedCanvasBroken } from './support/presented-canvas'
  * mercator-drag.test.ts); this file pins the same contract for one of the
  * old four, through the public surface the way a user sees it.
  *
- * Why the pole legs can use toBe: the drag helper delivers exactly one
- * move, so the event sum IS the single difference pose_after - pose_before
- * -- all-integer float64 on these legs. Applied deltas do telescope, but a
- * chunked sum only stays within an ulp of pose_final - pose_initial, it is
- * not exactly it. The control and lng legs use toBeCloseTo because away
- * from the clamp the payload is the requested float itself (0.2 is not
- * binary-exact), which can differ from the single-shot product by an ulp.
+ * Why the two +-1 pole legs can use toBe: the drag helper delivers
+ * exactly one move, so the event sum IS the single difference
+ * pose_after - pose_before -- all-integer float64 on those two legs.
+ * Applied deltas do telescope, but a chunked sum only stays within an
+ * ulp of pose_final - pose_initial, it is not exactly it. The control
+ * and lng legs use toBeCloseTo because away from the clamp the payload
+ * is the requested float itself (0.2 is not binary-exact), which can
+ * differ from the single-shot product by an ulp.
  */
 
 describe('rotate reports the applied delta on the old-four cameras', () => {

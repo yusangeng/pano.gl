@@ -24,12 +24,12 @@ import type { CameraOptions } from './types'
  */
 export interface ViewerEvents extends EventMap {
   /**
-   * After a drag. `lng` is the requested turn on every camera, unwrapped so
-   * delta-summing consumers keep working (`-72`, not `288`). `lat` is
-   * kind-dependent: `mercator` reports the APPLIED delta -- the pose
-   * difference its metre-metric pan actually produced -- while the other
-   * cameras report the REQUESTED linear delta, which can overshoot the
-   * clamped pose near the poles.
+   * After a drag. Both fields are the APPLIED deltas -- the pose
+   * differences the drag actually produced. `lng` never clamps, so it is
+   * also the requested turn, unwrapped so delta-summing consumers keep
+   * working (`-72`, not `288`); `lat` clamps at the poles (`povLatitude`
+   * is +-90), so near them the applied delta is smaller than the requested
+   * one. Summing events therefore always lands on the pose.
    */
   rotate: { lat: number, lng: number }
   zoom: { delta: number }
@@ -158,8 +158,14 @@ export class Viewer extends Disposable {
       }
       const d = this.#input.dragToRotation(deltaX, deltaY, surface)
       if (d.lat === 0 && d.lng === 0) return
+      // Mirrors the mercator branch above: `lat` is the APPLIED delta -- the
+      // pose difference the drag actually produced -- because rotate() clamps
+      // latitude to +-90 near the poles, and a consumer summing the events
+      // must land on the pose, not overshoot it. `lng` never clamps, so the
+      // requested turn IS the applied one and stays as-is.
+      const before = this.#camera.state.povLatitude
       this.#camera.rotate(d.lat, d.lng)
-      this.events.emit('rotate', { lat: d.lat, lng: d.lng })
+      this.events.emit('rotate', { lat: this.#camera.state.povLatitude - before, lng: d.lng })
     })
     this.#input.on('zoom', ({ delta }) => {
       this.#camera.zoom(delta)
