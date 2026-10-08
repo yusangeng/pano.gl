@@ -245,7 +245,7 @@ export default defineConfig({
           include: [
             'test/integration/fallback/**/*.test.ts',
             'test/integration/user-story-(photo|video|camera-switch|media-failure).test.ts',
-            'test/integration/(viewer-events|dispose-order|mercator-drag|aspect-fit).test.ts'
+            'test/integration/(viewer-events|dispose-order|mercator-drag|aspect-fit|rotate-applied-delta).test.ts'
           ],
           browser: {
             enabled: true,
