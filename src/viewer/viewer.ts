@@ -25,14 +25,31 @@ import type { CameraOptions } from './types'
  */
 export interface ViewerEvents extends EventMap {
   /**
-   * After a drag. `lng` is the requested turn on every camera, unwrapped so
-   * delta-summing consumers keep working (`-72`, not `288`). `lat` is
-   * kind-dependent: `mercator` reports the APPLIED delta -- the pose
-   * difference its metre-metric pan actually produced -- while the other
-   * cameras report the REQUESTED linear delta, which can overshoot the
-   * clamped pose near the poles.
+   * After a drag. Both fields are the APPLIED deltas -- the pose
+   * differences the drag actually produced. `lng` never clamps, so it is
+   * also the requested turn, unwrapped so delta-summing consumers keep
+   * working (`-72`, not `288`); `lat` clamps at the poles (`povLatitude`
+   * is +-90), so near them the applied delta is smaller in magnitude than
+   * the requested one. Within one drag the applied deltas telescope, so
+   * summing that drag's `lat` fields lands on its pose difference to
+   * float64 rounding -- no systematic drift, and no overshoot where the
+   * camera stops moving. These events describe gestures only: `rotate()`
+   * and a `cameraOptions` pose write move the camera without emitting, so
+   * a running total kept across programmatic moves desyncs from the pose.
+   * A move the clamp swallows entirely still fires, with `lat: 0`:
+   * something was asked, the pose just could not follow. (On `mercator`
+   * the pole is an asymptote rather than a clamp: dragging never crosses
+   * +-90 -- float64 saturation can still land a pose exactly ON it -- and
+   * a camera already there -- mounted so, switched to after another kind
+   * pinned it, or dragged onto it by that saturation -- is vertically
+   * immovable by drag; `rotate()` still moves it.)
    */
   rotate: { lat: number, lng: number }
+  /**
+   * After wheel or pinch. The REQUESTED step, not an applied one: the
+   * camera clamps its zoom parameter, so an event past a limit can report
+   * a nonzero delta that did not move the camera.
+   */
   zoom: { delta: number }
   'device-lost': DeviceLost
   'media-load': { target: Viewer }
@@ -162,8 +179,18 @@ export class Viewer extends Disposable {
       }
       const d = this.#input.dragToRotation(deltaX, deltaY, surface)
       if (d.lat === 0 && d.lng === 0) return
+      // Mirrors the mercator branch above: `lat` is the APPLIED delta -- the
+      // pose difference the drag actually produced -- because rotate() clamps
+      // latitude to +-90 near the poles, and a consumer summing the events
+      // must land on the pose, not overshoot it. `lng` never clamps, so the
+      // requested turn IS the applied one and stays as-is. A move the clamp
+      // swallows entirely emits `lat: 0` rather than nothing: the guard above
+      // filters taps (nothing was asked), not clamp-pinned moves (something
+      // was asked, the pose could not follow) -- and event cardinality is
+      // itself consumer-visible.
+      const before = this.#camera.state.povLatitude
       this.#camera.rotate(d.lat, d.lng)
-      this.events.emit('rotate', { lat: d.lat, lng: d.lng })
+      this.events.emit('rotate', { lat: this.#camera.state.povLatitude - before, lng: d.lng })
     })
     this.#input.on('zoom', ({ delta }) => {
       this.#camera.zoom(delta)

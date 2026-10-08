@@ -22,7 +22,7 @@
 - Create: `test/integration/rotate-applied-delta.test.ts`
 - Modify: `vitest.config.ts:239` (no-webgpu include — the mercator CRITICAL lesson: a story file not whitelisted there has ZERO executing tests in CI)
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Create `test/integration/rotate-applied-delta.test.ts`:
 
@@ -142,7 +142,7 @@ describe('rotate reports the applied delta on the old-four cameras', () => {
 
 (If `makeContainer`/`canvasOf`/`drag`/`nextFrames` spell or import differently, mirror `test/integration/mercator-drag.test.ts`'s imports exactly — that file is the idiom source and this one copies its mount/drag/collect shape deliberately.)
 
-- [ ] **Step 2: Whitelist the file for the no-webgpu project**
+- [x] **Step 2: Whitelist the file for the no-webgpu project**
 
 In `vitest.config.ts`, the no-webgpu `include` (line ~239) currently ends:
 
@@ -158,7 +158,7 @@ Change it to:
 
 (If the sibling card `camera-aspect-fit` has already appended `|aspect-fit` to this alternation, keep it — add only your own name to the group.)
 
-- [ ] **Step 3: Run to verify red**
+- [x] **Step 3: Run to verify red**
 
 Run: `npx vitest run --project integration test/integration/rotate-applied-delta.test.ts`
 Expected: FAIL — the two pole legs report the REQUESTED delta today (event sums of 90 and 45 where 1 and 0.1 are pinned). The control leg (36 from 30) passes already; that is expected and fine.
@@ -166,7 +166,7 @@ Expected: FAIL — the two pole legs report the REQUESTED delta today (event sum
 Run: `npx vitest run --project no-webgpu test/integration/rotate-applied-delta.test.ts`
 Expected: same shape — the file is collected (3 tests found), the two pole legs fail, the control passes. Collection is the point of the whitelist.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/rotate-applied-delta.test.ts vitest.config.ts
@@ -182,7 +182,7 @@ git commit -m "test: rotate applied-delta story -- red on the pole-clamp legs (r
 - Modify: `src/viewer/viewer.ts:26-34` (ViewerEvents.rotate TSDoc)
 - Modify: `README.md:119` (events table rotate row)
 
-- [ ] **Step 1: The emit site**
+- [x] **Step 1: The emit site**
 
 In `src/viewer/viewer.ts`, the `'pan'` handler's old-four branch currently reads:
 
@@ -210,7 +210,7 @@ Replace it with:
 
 (The mercator branch above it — `dragToMercatorPan` / `panMercator` — is NOT touched: it already emits applied, and `mercator-drag.test.ts` pins that.)
 
-- [ ] **Step 2: The TSDoc**
+- [x] **Step 2: The TSDoc**
 
 In the same file, the `ViewerEvents.rotate` entry currently reads:
 
@@ -224,7 +224,7 @@ Replace with:
   After a drag. Both fields are the APPLIED deltas -- the pose differences the drag actually produced. `lng` never clamps, so it is also the requested turn, unwrapped so delta-summing consumers keep working (`-72`, not `288`); `lat` clamps at the poles (`povLatitude` is +-90), so near them the applied delta is smaller than the requested one. Summing events therefore always lands on the pose.
 ```
 
-- [ ] **Step 3: The README row**
+- [x] **Step 3: The README row**
 
 In `README.md`'s events table, the rotate row currently reads:
 
@@ -238,7 +238,7 @@ Replace with:
 | `rotate` | `{ lat, lng }` | After a drag. Both fields are applied deltas (what the drag actually moved). `lng` never clamps, unwrapped (`-72`, not `288`); `lat` clamps at the poles (`povLatitude` is ±90), so near them it is smaller than the requested move. |
 ```
 
-- [ ] **Step 4: Run green, then the regression sweep**
+- [x] **Step 4: Run green, then the regression sweep**
 
 Run: `npx vitest run --project integration test/integration/rotate-applied-delta.test.ts --project no-webgpu test/integration/rotate-applied-delta.test.ts`
 Expected: PASS — all 3 legs, both projects.
@@ -249,7 +249,7 @@ Expected: PASS — the applied-emit sibling is untouched.
 Run: `npx vitest run --project integration --project no-webgpu`
 Expected: PASS across both projects. Recon already established that no existing test pins an old-four requested-lat payload (`'rotate'` appears in tests only at mercator-drag (applied values, unchanged), viewer-events (type shape only) and user-story-photo (call counts only)) — so any failure here is a NEW interaction, not a stale pin: investigate it, do not delete it.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer/viewer.ts README.md
@@ -262,7 +262,7 @@ git commit -m "feat: rotate reports the applied delta on every camera, unifying 
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: The full chain**
+- [x] **Step 1: The full chain**
 
 ```bash
 npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
@@ -270,12 +270,12 @@ npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run
 
 Expected: all green in order — gen-shaders idempotent, build succeeds, `npm test` green (unit untouched, integration + no-webgpu both collect the new story file), typecheck 0 errors across the three programs (README check included), lint clean, coverage branch ≥ 90% (record the number).
 
-- [ ] **Step 2: Diff audit**
+- [x] **Step 2: Diff audit**
 
 Run: `git diff --name-only master...HEAD`
 Expected: exactly four files — `test/integration/rotate-applied-delta.test.ts`, `vitest.config.ts`, `src/viewer/viewer.ts`, `README.md`. Anything else means scope creep; remove it.
 
-- [ ] **Step 3: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
+- [x] **Step 3: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
 
 ---
 
