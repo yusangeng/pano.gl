@@ -1296,7 +1296,7 @@ Spec §6: today's five 800×450 shots all carry the 1.78×/3.53× vertical stret
 **Files:**
 - Modify: `demo/shots/linear.png`, `cylindrical.png`, `planet.png`, `pannini.png`, `mercator.png`
 
-- [ ] **Step 1: Write the capture script**
+- [x] **Step 1: Write the capture script**
 
 Create `.vibe/shoot-gallery.mjs` (`.vibe` is gitignored; the worktree will not have it yet — creating the directory is fine):
 
@@ -1334,7 +1334,7 @@ try {
 }
 ```
 
-- [ ] **Step 2: Start the demo server and run it**
+- [x] **Step 2: Start the demo server and run it**
 
 ```bash
 npm run start -- --port 5175 --strictPort &
@@ -1346,14 +1346,14 @@ kill %1
 
 Expected output: five `kind -> demo/shots/kind.png (0 page errors)` lines.
 
-- [ ] **Step 3: Verify the artifacts**
+- [x] **Step 3: Verify the artifacts**
 
 Run: `git diff --stat -- demo/shots/ && file demo/shots/*.png`
 Expected: all five modified; each PNG 800×450 (the `file` output or `sips -g pixelWidth -g pixelHeight demo/shots/*.png`). Sanity: each file roughly in the existing siblings' size class (700–900 KB; a blank or black frame is tens of KB — that is the failure signal).
 
 Visual sanity (the point of the re-shoot): in `cylindrical.png` the horizon band sits mid-frame with no vertical smear; in `mercator.png` the pole rows are NOT stretched off-frame. If a `/browse` session with GPU is unavailable, the size/diff checks plus the story tests carry the verification — record which route was taken.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add demo/shots/
