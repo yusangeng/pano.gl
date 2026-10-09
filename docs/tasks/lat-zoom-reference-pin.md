@@ -91,3 +91,5 @@ createdAt: 2026-10-07T06:36:50.427Z
 3. gate leg 仲裁在本机真实 GPU 三次全绿（41/41），measured 行有 commit body 贴存证据。
 
 **结论：approve**。风险 #4 的闭环（lat≠0×zoom≠1 reference pin）交付完整：unit pin 拦 reference 侧、gate leg 拦 shader 双侧同错，两半都有协调侧独立复核。遗留项均为已裁决记录，无打回事由。
+
+**勘误（2026-10-09，合并中止记录）**：首次 task-merge 在保护③（主分支预检 verify）中止——2026-10-08 晚全量套件 3 个集成失败（backend-preference ×2、user-story-camera-switch US3，均为空帧形状 `expected 0 > 0/2`），套件耗时 56-75s（正常约 13s）。排查：失败文件单跑 7/7、两文件合跑 17/17 全绿；主分支自上次绿检（rotate-applied-delta 合并后⑥）以来仅 docs 提交；2026-10-09 上午负载回落后全量 `npm test` 39 文件 / 251 passed + 1 skipped（13.72s，恢复正常速度）。裁定：**环境抖动**（整机高负载下浏览器模式渲染掉帧），非主分支缺陷、非分支缺陷。主分支无需代码改动已复绿，按环境路径重跑 task-merge；全程未在任务分支上新增提交。
