@@ -23,7 +23,7 @@
 **Files:**
 - Test: `test/unit/reference.test.ts` (new describe at the end of the file)
 
-- [ ] **Step 1: Write the pins**
+- [x] **Step 1: Write the pins**
 
 Append to `test/unit/reference.test.ts` (after the last existing describe):
 
@@ -94,12 +94,12 @@ describe('exact output pins at lat 30 x zoom 0.5 (zoom-1-invisible gap)', () => 
 
 (`Projection` and `project` are the file's existing imports — the whole file is about them. `project`'s zoom comes from the projection record, exactly as every other test in the file uses it.)
 
-- [ ] **Step 2: Run them**
+- [x] **Step 2: Run them**
 
 Run: `npx vitest run --project unit test/unit/reference.test.ts`
 Expected: PASS — the whole file, including the 4 new pins. A pin failing by O(1) means a latitude-term or zoom error in that camera's reference path — STOP and report (that is this card's entire reason to exist, found live). A failure of a few ulps (past `toBeCloseTo`'s 12 digits) means the transcription here drifted — re-derive by hand from the formulas in the comment, and only then amend the literal with the corrected value and a note in the commit.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/unit/reference.test.ts
@@ -115,7 +115,7 @@ The unit pins watch the reference; these legs watch the pixels. Both backends ag
 **Files:**
 - Test: `test/integration/gate-c-cross-backend.test.ts` (new test in the main describe, after the existing arbiter legs)
 
-- [ ] **Step 1: Add the legs**
+- [x] **Step 1: Add the legs**
 
 Append to the main describe (adapt the import of `Projection` to whatever the file already does — it builds projections throughout):
 
@@ -152,12 +152,12 @@ Append to the main describe (adapt the import of `Projection` to whatever the fi
 
 (`State`, `state` and `compareWithReference` are the file's existing helpers, used exactly as the square arbiter legs above use them. No `fit` on the projections: at the default square offscreen size the container fit degenerates to the square paper for mercator/pannini/planet and to [1, 2π] for cylindrical — both backends and the reference resolve the same extent, which is what agreement means here. The mercator sweep legs above already follow this no-fit pattern.)
 
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
 
 Run: `npx vitest run --project integration test/integration/gate-c-cross-backend.test.ts`
 Expected: PASS. If the pannini leg measures above 3: record the measured pair in the comment and pin the smallest power of two strictly above twice the larger measured value — the protocol the planet leg documents — and say so in the commit message. If any leg fails far above its tolerance (frame-wide, not a chain), that is the shared-error class found live at the pixel level — STOP and report.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/integration/gate-c-cross-backend.test.ts
@@ -170,7 +170,7 @@ git commit -m "test: gate C arbiter legs at lat 30 x zoom 0.5, pannini joins arb
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: The full chain**
+- [x] **Step 1: The full chain**
 
 ```bash
 npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run lint && npm run test:coverage
@@ -178,12 +178,12 @@ npm run gen:shaders && npm run build && npm test && npm run typecheck && npm run
 
 Expected: all green in order — gen-shaders idempotent (tree unchanged), build succeeds, `npm test` green across unit / integration / no-webgpu with the new pins and legs collected, typecheck 0 errors across the three programs, lint clean, coverage branch ≥ 90% (record the number; a test-only card moves it barely).
 
-- [ ] **Step 2: Diff audit**
+- [x] **Step 2: Diff audit**
 
 Run: `git diff --name-only master...HEAD`
 Expected: exactly two files — `test/unit/reference.test.ts`, `test/integration/gate-c-cross-backend.test.ts`. Anything else in the diff means scope creep; remove it.
 
-- [ ] **Step 3: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
+- [x] **Step 3: No commit** (verification only) — proceed to the card's reporting flow (task-finish).
 
 ---
 
